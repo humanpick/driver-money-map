@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import {
   Wallet,
@@ -27,8 +27,6 @@ import {
   ChevronRight,
   Smartphone,
   Fuel,
-  Camera,
-  Image as ImageIcon,
   AlertTriangle,
   MessageSquare,
   Check,
@@ -69,7 +67,6 @@ interface DrivingRecord {
   fuelAmount: number;
   extraExpenseAmount: number;
   tipAmount: number;
-  receiptImage?: string;
   isPaid: boolean;
   netAmount: number;
   totalClaimAmount: number;
@@ -118,15 +115,12 @@ export default function App() {
   const [pwdLoading, setPwdLoading] = useState(false);
   const [pwdMessage, setPwdMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // 운행 일지 수정 모달 상태 (입력용 콤마 문자열 필드 매핑)
+  // 운행 일지 수정 모달 상태
   const [editingRecord, setEditingRecord] = useState<DrivingRecord | null>(null);
   const [editGross, setEditGross] = useState('');
   const [editFuel, setEditFuel] = useState('');
   const [editExtra, setEditExtra] = useState('');
   const [editTip, setEditTip] = useState('');
-
-  // 영수증 사진 확대 모달 상태
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   // 청구 문자 전용 모달 및 3대 항목 선택 상태
   const [claimModalOpen, setClaimModalOpen] = useState(false);
@@ -142,9 +136,6 @@ export default function App() {
   // DB 연동 데이터 상태
   const [records, setRecords] = useState<DrivingRecord[]>([]);
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
-
-  // 파일 입력 ref
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 로컬 기기 저장 계좌
   const [accounts, setAccounts] = useState<BankAccount[]>(() => {
@@ -168,7 +159,7 @@ export default function App() {
     localStorage.setItem('jundriver_local_accounts', JSON.stringify(accounts));
   }, [accounts]);
 
-  // 운행 등록 폼 상태 (콤마 포맷터 문자열 지원)
+  // 운행 등록 폼 상태
   const [newDate, setNewDate] = useState('2026-11-09');
   const [newStartTime, setNewStartTime] = useState('');
   const [newEndTime, setNewEndTime] = useState('');
@@ -179,7 +170,6 @@ export default function App() {
   const [newFuel, setNewFuel] = useState('');
   const [newExtraExpense, setNewExtraExpense] = useState('');
   const [newTip, setNewTip] = useState('');
-  const [receiptImage, setReceiptImage] = useState<string>('');
 
   // 지출 입력 폼 상태
   const [expCategory, setExpCategory] = useState('대중교통');
@@ -241,7 +231,6 @@ export default function App() {
             fuelAmount: Number(r.fuel_amount),
             extraExpenseAmount: Number(r.extra_expense_amount),
             tipAmount: Number(r.tip_amount),
-            receiptImage: r.receipt_image || undefined,
             isPaid: Boolean(r.is_paid),
             netAmount: Number(r.net_amount),
             totalClaimAmount: Number(r.total_claim_amount),
@@ -375,15 +364,7 @@ export default function App() {
     setPwdLoading(false);
   };
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const imageUrl = URL.createObjectURL(file);
-      setReceiptImage(imageUrl);
-    }
-  };
-
-  // 운행 등록 핸들러 (cleanNumber 적용)
+  // 운행 등록 핸들러
   const handleAddRecord = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!session) {
@@ -415,7 +396,6 @@ export default function App() {
       fuel_amount: fuel,
       extra_expense_amount: extraExp,
       tip_amount: tip,
-      receipt_image: receiptImage || null,
       is_paid: false,
       net_amount: Math.round(net),
       total_claim_amount: Math.round(claimTotal),
@@ -441,7 +421,6 @@ export default function App() {
       fuelAmount: fuel,
       extraExpenseAmount: extraExp,
       tipAmount: tip,
-      receiptImage: receiptImage || undefined,
       isPaid: false,
       netAmount: Math.round(net),
       totalClaimAmount: Math.round(claimTotal),
@@ -454,7 +433,6 @@ export default function App() {
     setNewFuel('');
     setNewExtraExpense('');
     setNewTip('');
-    setReceiptImage('');
   };
 
   // 수정 모달 열기 핸들러
@@ -557,7 +535,7 @@ export default function App() {
     }
     if (withFuel && r.fuelAmount > 0) {
       total += r.fuelAmount;
-      itemsText += `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (영수증 첨부)\n`;
+      itemsText += `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원\n`;
     }
     if (withExtra && r.extraExpenseAmount > 0) {
       total += r.extraExpenseAmount;
@@ -608,7 +586,7 @@ ${itemsText}--------------------------------
     return Math.max(0, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
   };
 
-  // 경비 등록 핸들러 (cleanNumber 적용)
+  // 경비 등록 핸들러
   const handleAddExpense = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanAmt = cleanNumber(expAmount);
@@ -863,6 +841,7 @@ ${itemsText}--------------------------------
           )}
         </div>
 
+        {/* 약관 및 고지 모달 */}
         {showPrivacyModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn">
             <div className="w-full max-w-lg bg-[#0E1424] border border-slate-800 rounded-2xl p-6 shadow-2xl relative">
@@ -883,7 +862,7 @@ ${itemsText}--------------------------------
                   <h4 className="font-bold text-white mb-1">1. 수집하는 개인정보 항목 및 저장 방식</h4>
                   <p className="text-slate-400">
                     - <strong className="text-indigo-300">클라우드(서버) 저장 필수 항목:</strong> 로그인 이메일, <span className="text-white font-bold underline">휴대폰 번호(연락처)</span>, 암호화된 비밀번호, 탁송 운행 기록(일자, 시간, 출발지, 도착지, 탁송료, 대납 주유비, 대납 경비, 팁)<br />
-                    - <strong className="text-emerald-300">기기 로컬(단말기) 저장 항목:</strong> 기사 송금 계좌번호 및 영수증 사진은 외부 서버로 전송되지 않으며, 사용자 본인의 스마트폰/PC 웹 브라우저(localStorage)에만 안전하게 보관됩니다.
+                    - <strong className="text-emerald-300">기기 로컬(단말기) 저장 항목:</strong> 기사 송금 계좌번호는 외부 서버로 전송되지 않으며, 사용자 본인의 스마트폰/PC 웹 브라우저(localStorage)에만 안전하게 보관됩니다.
                   </p>
                 </div>
 
@@ -1140,7 +1119,7 @@ ${itemsText}--------------------------------
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* 등록 폼 (금액 실시간 콤마 적용) */}
+              {/* 등록 폼 */}
               <div className="bg-[#0E1424]/80 border border-slate-800/80 rounded-xl p-5">
                 <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
                   <PlusCircle className="w-4 h-4 text-indigo-400" />
@@ -1228,7 +1207,7 @@ ${itemsText}--------------------------------
                     </div>
                   </div>
 
-                  {/* 대납 주유비 & 대납 추가경비 (콤마 적용) */}
+                  {/* 대납 주유비 & 대납 추가경비 */}
                   <div className="p-3.5 rounded-xl bg-slate-900 border border-indigo-500/30 space-y-3">
                     <div>
                       <label className="text-xs font-bold text-indigo-300 flex items-center gap-1.5 mb-1">
@@ -1259,43 +1238,9 @@ ${itemsText}--------------------------------
                         className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-bold text-xs"
                       />
                     </div>
-
-                    <div className="pt-1">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        ref={fileInputRef}
-                        onChange={handleImageChange}
-                        className="hidden"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="w-full py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs text-slate-200 font-medium flex items-center justify-center gap-2 cursor-pointer transition-all"
-                      >
-                        <Camera className="w-3.5 h-3.5 text-indigo-400" />
-                        {receiptImage ? '영수증 첨부 완료 (변경)' : '스마트폰 갤러리에서 영수증 선택'}
-                      </button>
-                    </div>
-
-                    {receiptImage && (
-                      <div className="relative p-1 bg-slate-950 rounded-lg border border-slate-800 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <img src={receiptImage} alt="영수증" className="w-9 h-9 object-cover rounded" />
-                          <span className="text-[11px] text-emerald-400 font-semibold">영수증 등록됨</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setReceiptImage('')}
-                          className="text-slate-500 hover:text-rose-400 p-1"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    )}
                   </div>
 
-                  {/* 순수 수입용 팁 (콤마 적용) */}
+                  {/* 순수 수입용 팁 */}
                   <div>
                     <label className="block text-[11px] font-semibold text-emerald-400 mb-1 flex items-center gap-1">
                       <Coins className="w-3.5 h-3.5" />
@@ -1380,16 +1325,6 @@ ${itemsText}--------------------------------
                             </div>
 
                             <div className="flex items-center gap-2">
-                              {r.receiptImage && (
-                                <button
-                                  onClick={() => setPreviewImage(r.receiptImage || null)}
-                                  className="p-1.5 rounded-lg bg-slate-800 text-indigo-400 cursor-pointer"
-                                  title="영수증 보기"
-                                >
-                                  <ImageIcon className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-
                               <button
                                 onClick={() => handleOpenEditModal(r)}
                                 className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-indigo-300 hover:text-white transition-all cursor-pointer"
@@ -1478,16 +1413,6 @@ ${itemsText}--------------------------------
                       </div>
 
                       <div className="flex items-center gap-2 self-end md:self-auto">
-                        {r.receiptImage && (
-                          <button
-                            onClick={() => setPreviewImage(r.receiptImage || null)}
-                            className="p-2 rounded-lg bg-slate-800 text-indigo-400 hover:bg-slate-700 transition-all cursor-pointer"
-                            title="주유 영수증 사진 확인"
-                          >
-                            <ImageIcon className="w-4 h-4" />
-                          </button>
-                        )}
-
                         <button
                           onClick={() => openClaimMessageModal(r)}
                           className="px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md cursor-pointer transition-all"
@@ -1670,7 +1595,7 @@ ${itemsText}--------------------------------
         )}
       </main>
 
-      {/* 운행 일지 수정 팝업 모달 (수정 시에도 콤마 지원) */}
+      {/* 운행 일지 수정 팝업 모달 */}
       {editingRecord && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
           <div className="w-full max-w-md bg-[#0E1424] border border-slate-800 rounded-2xl p-6 shadow-2xl relative">
@@ -1909,26 +1834,6 @@ ${itemsText}--------------------------------
               >
                 <Copy className="w-3.5 h-3.5" /> 청구 문구 복사하기
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 영수증 원본 보기 모달 */}
-      {previewImage && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
-          <div className="relative max-w-lg w-full bg-slate-900 border border-slate-800 rounded-2xl p-4">
-            <button
-              onClick={() => setPreviewImage(null)}
-              className="absolute top-3 right-3 p-1.5 rounded-lg bg-black/60 text-white hover:bg-black/90 cursor-pointer"
-            >
-              <X className="w-5 h-5" />
-            </button>
-            <div className="text-xs font-bold text-slate-300 mb-3 flex items-center gap-2">
-              <Receipt className="w-4 h-4 text-indigo-400" /> 주유 영수증 사진 확인
-            </div>
-            <div className="max-h-[70vh] overflow-auto flex items-center justify-center">
-              <img src={previewImage} alt="영수증 원본" className="max-w-full h-auto rounded-lg" />
             </div>
           </div>
         </div>
