@@ -34,7 +34,8 @@ import {
   Check,
   Edit2,
   Coins,
-  Sparkles
+  Sparkles,
+  Phone
 } from 'lucide-react';
 
 // Supabase 클라이언트 초기화
@@ -81,6 +82,7 @@ export default function App() {
   // 인증 관련 상태
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState(''); // 휴대폰 번호 필수
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [agreePrivacy, setAgreePrivacy] = useState(false);
@@ -244,12 +246,18 @@ export default function App() {
     setAuthLoading(false);
   };
 
-  // 회원가입 핸들러
+  // 회원가입 핸들러 (휴대폰 번호 필수 검증 및 DB 저장)
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthLoading(true);
     setAuthError('');
     setAuthSuccess('');
+
+    if (!phone.trim()) {
+      setAuthError('휴대폰 번호를 입력해 주세요.');
+      setAuthLoading(false);
+      return;
+    }
 
     if (password.length < 6) {
       setAuthError('비밀번호는 최소 6자리 이상이어야 합니다.');
@@ -274,10 +282,11 @@ export default function App() {
       password,
       options: {
         data: {
+          phone: phone.trim(),
           privacy_policy_agreed: true,
           privacy_policy_agreed_at: new Date().toISOString(),
           beta_terms_agreed: true,
-          terms_version: 'v1.2_beta_notice',
+          terms_version: 'v1.3_phone_verified',
         },
       },
     });
@@ -404,9 +413,10 @@ export default function App() {
     setRecords(records.map(r => r.id === id ? { ...r, isPaid: !r.isPaid } : r));
   };
 
-  // 청구 문자 템플릿 실시간 동적 생성 함수
+  // 청구 문자 템플릿 실시간 동적 생성 함수 (기사 연락처 자동 포함)
   const buildClaimText = (r: DrivingRecord, withGross: boolean, withFuel: boolean, withExtra: boolean) => {
     const primaryAccount = accounts[0] || { bankName: '은행명', accountNumber: '계좌번호', holder: '예금주' };
+    const driverPhone = session?.user?.user_metadata?.phone || '';
     
     let total = 0;
     let itemsText = '';
@@ -429,7 +439,7 @@ export default function App() {
 * 운행구간: ${r.departure} ➔ ${r.destination}
 ${itemsText}--------------------------------
 * 총 청구금액: ${total.toLocaleString()}원
-* 입금계좌: ${primaryAccount.bankName} ${primaryAccount.accountNumber} (${primaryAccount.holder})
+* 입금계좌: ${primaryAccount.bankName} ${primaryAccount.accountNumber} (${primaryAccount.holder})${driverPhone ? `\n* 기사 연락처: ${driverPhone}` : ''}
 
 확인 후 빠른 입금 부탁드립니다. 감사합니다.`;
   };
@@ -522,7 +532,7 @@ ${itemsText}--------------------------------
   const filteredRecords = filterAllDates ? records : records.filter((r) => r.date === selectedDate);
   const filteredExpenses = filterAllDates ? expenses : expenses.filter((e) => e.date === selectedDate);
 
-  // 1. 미로그인 뷰
+  // 1. 미로그인 뷰 (연락처 필수 입력 포함)
   if (!session) {
     return (
       <div className="min-h-screen bg-[#070B14] text-slate-100 flex items-center justify-center p-4 font-sans relative selection:bg-indigo-500 selection:text-white">
@@ -602,16 +612,35 @@ ${itemsText}--------------------------------
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  placeholder="name@driver.com"
                   required
                   className="w-full px-3.5 py-2.5 rounded-lg bg-white text-slate-900 font-semibold text-sm"
                 />
               </div>
+
+              {/* 휴대폰 번호 필수 입력창 */}
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1 flex items-center gap-1">
+                  <Phone className="w-3.5 h-3.5 text-indigo-400" />
+                  휴대폰 번호 (연락처 필수)
+                </label>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="예: 010-1234-5678"
+                  required
+                  className="w-full px-3.5 py-2.5 rounded-lg bg-white text-slate-900 font-semibold text-sm border border-slate-200 focus:border-indigo-500 focus:outline-none"
+                />
+              </div>
+
               <div>
                 <label className="block text-[11px] font-semibold text-slate-300 mb-1">비밀번호 (6자리 이상)</label>
                 <input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  placeholder="비밀번호 설정"
                   required
                   className="w-full px-3.5 py-2.5 rounded-lg bg-white text-slate-900 font-semibold text-sm"
                 />
@@ -622,12 +651,13 @@ ${itemsText}--------------------------------
                   type="password"
                   value={passwordConfirm}
                   onChange={(e) => setPasswordConfirm(e.target.value)}
+                  placeholder="비밀번호 재입력"
                   required
                   className="w-full px-3.5 py-2.5 rounded-lg bg-white text-slate-900 font-semibold text-sm"
                 />
               </div>
 
-              {/* 개인정보 및 오픈베타 유료화 사전고지 동의 섹션 */}
+              {/* 약관 및 고지 동의 */}
               <div className="pt-2">
                 <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2.5">
                   <div className="flex items-start gap-2.5">
@@ -639,11 +669,14 @@ ${itemsText}--------------------------------
                       className="mt-0.5 w-4 h-4 rounded text-indigo-600 cursor-pointer"
                     />
                     <label htmlFor="privacyCheck" className="text-xs text-slate-200 font-medium cursor-pointer leading-relaxed">
-                      [필수] 개인정보 수집 및 <span className="text-amber-400 font-bold">오픈베타 이용·유료화 사전고지</span>에 동의합니다.
+                      [필수] 연락처·개인정보 수집 및 <span className="text-amber-400 font-bold">오픈베타 이용·유료화 사전고지</span>에 동의합니다.
                     </label>
                   </div>
                   
                   <div className="text-[11px] text-slate-400 pl-6 leading-normal space-y-0.5">
+                    <div className="text-indigo-300 flex items-center gap-1">
+                      <Phone className="w-3 h-3" /> 휴대폰 번호는 본인 확인 및 청구문자용으로 안전 보관
+                    </div>
                     <div className="text-emerald-400 flex items-center gap-1">
                       <Smartphone className="w-3 h-3" /> 송금 계좌는 서버 저장 없이 기기에만 보관
                     </div>
@@ -677,7 +710,7 @@ ${itemsText}--------------------------------
           )}
         </div>
 
-        {/* 개인정보 처리방침 및 오픈베타 유료화 고지 전문 팝업 모달 */}
+        {/* 개인정보 처리방침 및 고지 모달 */}
         {showPrivacyModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn">
             <div className="w-full max-w-lg bg-[#0E1424] border border-slate-800 rounded-2xl p-6 shadow-2xl relative">
@@ -697,15 +730,16 @@ ${itemsText}--------------------------------
                 <div>
                   <h4 className="font-bold text-white mb-1">1. 수집하는 개인정보 항목 및 저장 방식</h4>
                   <p className="text-slate-400">
-                    - <strong>클라우드(서버) 저장 항목:</strong> 로그인 이메일, 암호화된 비밀번호, 탁송 운행 기록(일자, 시간, 출발지, 도착지, 탁송료, 대납 주유비, 대납 경비, 팁)<br />
-                    - <strong>기기 로컬(단말기) 저장 항목:</strong> 기사 송금 계좌번호 및 영수증 사진은 외부 서버로 전송되지 않으며, 사용자 본인의 스마트폰/PC 웹 브라우저(localStorage)에만 안전하게 보관됩니다.
+                    - <strong className="text-indigo-300">클라우드(서버) 저장 필수 항목:</strong> 로그인 이메일, <span className="text-white font-bold underline">휴대폰 번호(연락처)</span>, 암호화된 비밀번호, 탁송 운행 기록(일자, 시간, 출발지, 도착지, 탁송료, 대납 주유비, 대납 경비, 팁)<br />
+                    - <strong className="text-emerald-300">기기 로컬(단말기) 저장 항목:</strong> 기사 송금 계좌번호 및 영수증 사진은 외부 서버로 전송되지 않으며, 사용자 본인의 스마트폰/PC 웹 브라우저(localStorage)에만 안전하게 보관됩니다.
                   </p>
                 </div>
 
                 <div>
                   <h4 className="font-bold text-white mb-1">2. 개인정보 수집 및 이용 목적</h4>
                   <p className="text-slate-400">
-                    - 기사 회원 식별 및 인증 유지<br />
+                    - 기사 회원 본인 식별 및 로그인 상태 유지<br />
+                    - 정산 청구문자 기사 연락처 자동 기재 및 중요 공지 발송<br />
                     - 운행 일지 및 수입·지출 데이터의 클라우드 영구 저장 및 기기 간 동기화
                   </p>
                 </div>
@@ -717,7 +751,6 @@ ${itemsText}--------------------------------
                   </p>
                 </div>
 
-                {/* 핵심 추가 조항: 오픈베타 및 유료 전환/회원 차등 사전고지 */}
                 <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
                   <h4 className="font-bold text-amber-300 mb-1 flex items-center gap-1.5">
                     <Sparkles className="w-3.5 h-3.5 text-amber-400" />
@@ -734,7 +767,7 @@ ${itemsText}--------------------------------
                 <div>
                   <h4 className="font-bold text-white mb-1">5. 동의를 거부할 권리</h4>
                   <p className="text-slate-400">
-                    귀하는 본 동의를 거부할 권리가 있습니다. 단, 본 조항은 클라우드 동기화 및 서비스 제공을 위한 필수 요건이므로 거부 시 가입이 제한됩니다.
+                    귀하는 본 동의를 거부할 권리가 있습니다. 단, 본 조항은 서비스 제공을 위한 필수 요건이므로 거부 시 가입이 제한됩니다.
                   </p>
                 </div>
               </div>
@@ -756,6 +789,8 @@ ${itemsText}--------------------------------
   }
 
   // 2. 메인 대시보드
+  const userPhone = session?.user?.user_metadata?.phone;
+
   return (
     <div className="min-h-screen bg-[#070B14] text-slate-100 font-sans pb-20 selection:bg-indigo-500 selection:text-white">
       {/* 상단 헤더 */}
@@ -777,7 +812,10 @@ ${itemsText}--------------------------------
               className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700/70 hover:border-indigo-500 transition-all text-xs text-slate-200 cursor-pointer"
             >
               <User className="w-3.5 h-3.5 text-indigo-400" />
-              <span className="font-medium max-w-[140px] truncate">{session.user.email}</span>
+              <div className="text-left max-w-[150px] truncate">
+                <span className="block truncate font-medium">{session.user.email}</span>
+                {userPhone && <span className="block text-[10px] text-slate-400 font-mono">{userPhone}</span>}
+              </div>
             </button>
 
             <button
@@ -1680,7 +1718,7 @@ ${itemsText}--------------------------------
             </div>
 
             <textarea
-              rows={9}
+              rows={10}
               value={claimMessageText}
               onChange={(e) => setClaimMessageText(e.target.value)}
               className="w-full p-3.5 rounded-xl bg-white text-slate-950 font-medium text-xs border border-slate-200 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 leading-relaxed font-mono"
