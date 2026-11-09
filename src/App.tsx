@@ -23,7 +23,8 @@ import {
   Car,
   Edit2,
   Filter,
-  RotateCcw
+  RotateCcw,
+  CalendarDays
 } from 'lucide-react';
 
 // Supabase 클라이언트 초기화
@@ -69,7 +70,7 @@ export default function App() {
   // 탭 상태
   const [activeTab, setActiveTab] = useState<'records' | 'expense' | 'wallet' | 'analytics'>('records');
 
-  // 날짜 필터 상태 (기본값: 오늘 날짜)
+  // 날짜 필터 상태 (기본: 오늘 날짜)
   const [selectedDate, setSelectedDate] = useState<string>('2026-11-09');
   const [filterAllDates, setFilterAllDates] = useState<boolean>(false);
 
@@ -151,7 +152,7 @@ export default function App() {
   const [accountNumber, setAccountNumber] = useState('');
   const [holder, setHolder] = useState('');
 
-  // Supabase 세션 감지
+  // 세션 감지
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -298,7 +299,19 @@ export default function App() {
     setHolder('');
   };
 
-  // 필터링된 운행 기록 및 지출 계산
+  // 현재 선택된 월(YYYY-MM) 문자열 도출
+  const currentMonthPrefix = selectedDate.substring(0, 7); // 예: '2026-11'
+
+  // 1. 월간(Monthly) 통계 계산
+  const monthlyRecords = records.filter((r) => r.date.startsWith(currentMonthPrefix));
+  const monthlyExpenses = expenses.filter((e) => e.date.startsWith(currentMonthPrefix));
+
+  const monthlyGross = monthlyRecords.reduce((acc, cur) => acc + cur.grossAmount, 0);
+  const monthlyNet = monthlyRecords.reduce((acc, cur) => acc + cur.netAmount, 0);
+  const monthlyExpense = monthlyExpenses.reduce((acc, cur) => acc + cur.amount, 0);
+  const monthlyProfit = monthlyNet - monthlyExpense;
+
+  // 2. 일별/선택기간(Filtered) 통계 계산
   const filteredRecords = filterAllDates
     ? records
     : records.filter((r) => r.date === selectedDate);
@@ -307,12 +320,12 @@ export default function App() {
     ? expenses
     : expenses.filter((e) => e.date === selectedDate);
 
-  const totalGross = filteredRecords.reduce((acc, cur) => acc + cur.grossAmount, 0);
-  const totalNet = filteredRecords.reduce((acc, cur) => acc + cur.netAmount, 0);
-  const totalExpense = filteredExpenses.reduce((acc, cur) => acc + cur.amount, 0);
-  const finalProfit = totalNet - totalExpense;
+  const dailyGross = filteredRecords.reduce((acc, cur) => acc + cur.grossAmount, 0);
+  const dailyNet = filteredRecords.reduce((acc, cur) => acc + cur.netAmount, 0);
+  const dailyExpense = filteredExpenses.reduce((acc, cur) => acc + cur.amount, 0);
+  const dailyProfit = dailyNet - dailyExpense;
 
-  // 1. 미로그인 시 화면
+  // 1. 미로그인 뷰
   if (!session) {
     return (
       <div className="min-h-screen bg-[#070B14] text-slate-100 flex items-center justify-center p-4 font-sans relative selection:bg-indigo-500 selection:text-white">
@@ -375,10 +388,10 @@ export default function App() {
     );
   }
 
-  // 2. 로그인 완료 메인 대시보드
+  // 2. 로그인 완료 대시보드
   return (
     <div className="min-h-screen bg-[#070B14] text-slate-100 font-sans pb-20 selection:bg-indigo-500 selection:text-white">
-      {/* 상단 통합 헤더 */}
+      {/* 상단 헤더 */}
       <header className="sticky top-0 z-30 bg-[#0E1424]/90 backdrop-blur-md border-b border-slate-800/80 px-4 lg:px-8 py-3">
         <div className="max-w-[1400px] mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -420,7 +433,52 @@ export default function App() {
       {/* 메인 본문 컨테이너 */}
       <main className="max-w-[1400px] mx-auto px-4 lg:px-8 pt-6 space-y-6">
         
-        {/* 일자별 조회 필터 바 */}
+        {/* 1. 최상단: 당월(Monthly) 전체 누적 합계 지표 바 */}
+        <section className="bg-gradient-to-r from-[#0E1424] via-[#121B30] to-[#0E1424] border border-indigo-500/30 rounded-2xl p-5 shadow-xl relative overflow-hidden">
+          <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-800/80">
+            <div className="flex items-center gap-2">
+              <CalendarDays className="w-4 h-4 text-indigo-400" />
+              <h2 className="text-xs font-bold text-slate-200 tracking-wide uppercase">
+                {currentMonthPrefix.replace('-', '년 ')}월 총 누적 결산 지표
+              </h2>
+            </div>
+            <span className="text-[11px] font-semibold text-indigo-400 bg-indigo-500/10 px-2.5 py-0.5 rounded-full border border-indigo-500/20">
+              월간 집계 ({monthlyRecords.length}회 운행)
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div>
+              <div className="text-[11px] text-slate-400 mb-0.5">당월 총 매출액</div>
+              <div className="text-xl lg:text-2xl font-extrabold text-white">
+                {monthlyGross.toLocaleString()}<span className="text-xs font-normal text-slate-400 ml-1">원</span>
+              </div>
+            </div>
+
+            <div>
+              <div className="text-[11px] text-slate-400 mb-0.5">당월 운행 수입 (순수익)</div>
+              <div className="text-xl lg:text-2xl font-extrabold text-indigo-300">
+                {monthlyNet.toLocaleString()}<span className="text-xs font-normal text-slate-400 ml-1">원</span>
+              </div>
+            </div>
+
+            <div>
+              <div className="text-[11px] text-slate-400 mb-0.5">당월 총 지출</div>
+              <div className="text-xl lg:text-2xl font-extrabold text-rose-400">
+                -{monthlyExpense.toLocaleString()}<span className="text-xs font-normal text-slate-400 ml-1">원</span>
+              </div>
+            </div>
+
+            <div>
+              <div className="text-[11px] text-slate-400 mb-0.5">당월 최종 실수령액</div>
+              <div className="text-xl lg:text-2xl font-extrabold text-emerald-400">
+                {monthlyProfit.toLocaleString()}<span className="text-xs font-normal text-slate-400 ml-1">원</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* 2. 일자별 조회 필터 바 */}
         <div className="bg-[#0E1424]/90 border border-slate-800/90 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
           <div className="flex items-center gap-2 text-white text-xs font-bold">
             <Filter className="w-4 h-4 text-indigo-400" />
@@ -454,50 +512,50 @@ export default function App() {
           </div>
         </div>
 
-        {/* 상단 4단 핵심 지표 바 (필터 연동) */}
+        {/* 3. 당일(선택 일자) 지표 바 */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
           <div className="bg-[#0E1424]/80 border border-slate-800/80 rounded-xl p-4">
             <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
-              <span>총 매출액</span>
+              <span>{filterAllDates ? '전체 총 매출' : '당일 매출액'}</span>
               <DollarSign className="w-4 h-4 text-sky-400" />
             </div>
-            <div className="text-xl lg:text-2xl font-bold text-white">
-              {totalGross.toLocaleString()}<span className="text-xs text-slate-400 font-normal ml-1">원</span>
+            <div className="text-lg lg:text-xl font-bold text-white">
+              {dailyGross.toLocaleString()}<span className="text-xs text-slate-400 font-normal ml-1">원</span>
             </div>
           </div>
 
           <div className="bg-[#0E1424]/80 border border-slate-800/80 rounded-xl p-4">
             <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
-              <span>운행 수입 (순수익)</span>
+              <span>{filterAllDates ? '전체 순수익' : '당일 운행 수입'}</span>
               <TrendingUp className="w-4 h-4 text-indigo-400" />
             </div>
-            <div className="text-xl lg:text-2xl font-bold text-indigo-300">
-              {totalNet.toLocaleString()}<span className="text-xs text-slate-400 font-normal ml-1">원</span>
+            <div className="text-lg lg:text-xl font-bold text-indigo-300">
+              {dailyNet.toLocaleString()}<span className="text-xs text-slate-400 font-normal ml-1">원</span>
             </div>
           </div>
 
           <div className="bg-[#0E1424]/80 border border-slate-800/80 rounded-xl p-4">
             <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
-              <span>총 지출 (교통/식대)</span>
+              <span>{filterAllDates ? '전체 지출' : '당일 지출'}</span>
               <Receipt className="w-4 h-4 text-rose-400" />
             </div>
-            <div className="text-xl lg:text-2xl font-bold text-rose-400">
-              -{totalExpense.toLocaleString()}<span className="text-xs text-slate-400 font-normal ml-1">원</span>
+            <div className="text-lg lg:text-xl font-bold text-rose-400">
+              -{dailyExpense.toLocaleString()}<span className="text-xs text-slate-400 font-normal ml-1">원</span>
             </div>
           </div>
 
           <div className="bg-[#0E1424]/80 border border-slate-800/80 rounded-xl p-4 border-emerald-500/30">
             <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
-              <span>최종 정산 실수령액</span>
+              <span>{filterAllDates ? '전체 실수령액' : '당일 실수령액'}</span>
               <Wallet className="w-4 h-4 text-emerald-400" />
             </div>
-            <div className="text-xl lg:text-2xl font-bold text-emerald-400">
-              {finalProfit.toLocaleString()}<span className="text-xs text-slate-400 font-normal ml-1">원</span>
+            <div className="text-lg lg:text-xl font-bold text-emerald-400">
+              {dailyProfit.toLocaleString()}<span className="text-xs text-slate-400 font-normal ml-1">원</span>
             </div>
           </div>
         </div>
 
-        {/* 탭 네비게이션 */}
+        {/* 4. 탭 네비게이션 */}
         <div className="flex gap-2 border-b border-slate-800 pb-2">
           <button
             onClick={() => setActiveTab('records')}
@@ -548,7 +606,7 @@ export default function App() {
         {/* TAB 1: 운행 일지 */}
         {activeTab === 'records' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* 좌측: 운행 기록 추가 폼 */}
+            {/* 운행 등록 폼 */}
             <div className="bg-[#0E1424]/80 border border-slate-800/80 rounded-xl p-5">
               <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
                 <PlusCircle className="w-4 h-4 text-indigo-400" />
@@ -654,7 +712,7 @@ export default function App() {
               </form>
             </div>
 
-            {/* 우측: 운행 일지 목록 */}
+            {/* 운행 일지 목록 */}
             <div className="lg:col-span-2 bg-[#0E1424]/80 border border-slate-800/80 rounded-xl p-5">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
@@ -953,13 +1011,13 @@ export default function App() {
               <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
                 <span className="text-xs text-slate-400">평균 건당 매출</span>
                 <div className="text-xl font-bold text-white mt-1">
-                  {filteredRecords.length > 0 ? Math.round(totalGross / filteredRecords.length).toLocaleString() : 0}원
+                  {filteredRecords.length > 0 ? Math.round(dailyGross / filteredRecords.length).toLocaleString() : 0}원
                 </div>
               </div>
               <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
                 <span className="text-xs text-slate-400">지출 대비 순수익률</span>
                 <div className="text-xl font-bold text-emerald-400 mt-1">
-                  {totalGross > 0 ? ((finalProfit / totalGross) * 100).toFixed(1) : 0}%
+                  {dailyGross > 0 ? ((dailyProfit / dailyGross) * 100).toFixed(1) : 0}%
                 </div>
               </div>
             </div>
