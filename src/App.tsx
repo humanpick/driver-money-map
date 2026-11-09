@@ -34,7 +34,10 @@ import {
   Coins,
   Sparkles,
   Phone,
-  RefreshCw
+  RefreshCw,
+  Gift,
+  Share2,
+  UserX
 } from 'lucide-react';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
@@ -93,7 +96,9 @@ export default function App() {
   // 인증 관련 상태
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
+  const [name, setName] = useState(''); // 이름(실명) 필수
+  const [phone, setPhone] = useState(''); // 휴대폰번호 필수
+  const [referrerId, setReferrerId] = useState(''); // 추천인 ID (선택)
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [agreePrivacy, setAgreePrivacy] = useState(false);
@@ -106,14 +111,16 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'records' | 'claims' | 'expense' | 'wallet'>('records');
 
   // 날짜 필터 상태
-  const [selectedDate, setSelectedDate] = useState<string>('2026-11-09');
+  const [selectedDate, setSelectedDate] = useState<string>('2026-11-10');
   const [filterAllDates, setFilterAllDates] = useState<boolean>(false);
 
-  // 계정 보안 모달
+  // 계정 보안 및 탈퇴 모달
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [pwdLoading, setPwdLoading] = useState(false);
   const [pwdMessage, setPwdMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [showWithdrawConfirm, setShowWithdrawConfirm] = useState(false);
+  const [withdrawLoading, setWithdrawLoading] = useState(false);
 
   // 운행 일지 수정 모달 상태
   const [editingRecord, setEditingRecord] = useState<DrivingRecord | null>(null);
@@ -159,8 +166,18 @@ export default function App() {
     localStorage.setItem('jundriver_local_accounts', JSON.stringify(accounts));
   }, [accounts]);
 
+  // URL에서 추천인 파라미터(?ref=...) 자동 추출
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const refParam = params.get('ref');
+    if (refParam) {
+      setReferrerId(refParam.trim());
+      setAuthMode('signup');
+    }
+  }, []);
+
   // 운행 등록 폼 상태
-  const [newDate, setNewDate] = useState('2026-11-09');
+  const [newDate, setNewDate] = useState('2026-11-10');
   const [newStartTime, setNewStartTime] = useState('');
   const [newEndTime, setNewEndTime] = useState('');
   const [newDeparture, setNewDeparture] = useState('');
@@ -184,6 +201,13 @@ export default function App() {
   // Supabase 세션 감지
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
+      // 탈퇴 유예 계정 차단 체크
+      if (session?.user?.user_metadata?.is_deleted) {
+        alert('탈퇴 신청된 계정입니다. (30일 유예 기간 후 완전 파기됩니다.)');
+        supabase.auth.signOut();
+        setSession(null);
+        return;
+      }
       setSession(session);
       if (session) {
         fetchUserData(session.user.id);
@@ -193,6 +217,11 @@ export default function App() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user?.user_metadata?.is_deleted) {
+        supabase.auth.signOut();
+        setSession(null);
+        return;
+      }
       setSession(session);
       if (session) {
         fetchUserData(session.user.id);
@@ -271,26 +300,38 @@ export default function App() {
     setAuthError('');
     setAuthSuccess('');
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
     if (error) {
       setAuthError('이메일 또는 비밀번호가 일치하지 않습니다.');
+    } else if (data.user?.user_metadata?.is_deleted) {
+      setAuthError('탈퇴 신청된 계정입니다. 30일 경과 후 데이터가 영구 파기됩니다.');
+      await supabase.auth.signOut();
     }
     setAuthLoading(false);
   };
 
-  // 회원가입 핸들러
+  // 회원가입 핸들러 (이름, 휴대폰, 추천인ID 포함)
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthLoading(true);
     setAuthError('');
     setAuthSuccess('');
 
-    if (!phone.trim()) {
-      setAuthError('휴대폰 번호를 입력해 주세요.');
+    const trimmedName = name.trim();
+    const cleanPhone = phone.replace(/[^0-9]/g, '');
+
+    if (!trimmedName) {
+      setAuthError('이름(실명)을 입력해 주세요.');
+      setAuthLoading(false);
+      return;
+    }
+
+    if (cleanPhone.length < 10) {
+      setAuthError('올바른 휴대폰 번호를 입력해 주세요.');
       setAuthLoading(false);
       return;
     }
@@ -313,16 +354,26 @@ export default function App() {
       return;
     }
 
+    // 본인 번호를 추천인으로 기재하는 것 방지
+    if (referrerId.trim() && referrerId.replace(/[^0-9]/g, '') === cleanPhone) {
+      setAuthError('본인 휴대폰 번호는 추천인으로 등록할 수 없습니다.');
+      setAuthLoading(false);
+      return;
+    }
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: {
+          name: trimmedName,
           phone: phone.trim(),
+          referral_code: cleanPhone, // 본인 휴대폰 번호가 고유 추천인 코드
+          referrer_id: referrerId.trim() || null,
           privacy_policy_agreed: true,
           privacy_policy_agreed_at: new Date().toISOString(),
           beta_terms_agreed: true,
-          terms_version: 'v1.3_phone_verified',
+          terms_version: 'v1.4_referral_system',
         },
       },
     });
@@ -331,7 +382,7 @@ export default function App() {
       setAuthError('가입 실패: ' + error.message);
     } else {
       if (data.session) {
-        setAuthSuccess('회원가입이 완료되었습니다.');
+        setAuthSuccess('회원가입이 완료되었습니다! (추천인 1개월 무료 혜택 예약됨)');
       } else {
         setAuthSuccess('가입 완료! 로그인해 주세요.');
         setAuthMode('login');
@@ -343,6 +394,7 @@ export default function App() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setShowProfileModal(false);
+    setShowWithdrawConfirm(false);
   };
 
   const handleChangePassword = async (e: React.FormEvent) => {
@@ -362,6 +414,35 @@ export default function App() {
       setNewPassword('');
     }
     setPwdLoading(false);
+  };
+
+  // 회원 탈퇴 핸들러 (30일 유예 소프트 삭제)
+  const handleWithdrawAccount = async () => {
+    setWithdrawLoading(true);
+    const now = new Date();
+    const purgeDate = new Date();
+    purgeDate.setDate(now.getDate() + 30); // 30일 뒤
+
+    const { error } = await supabase.auth.updateUser({
+      data: {
+        is_deleted: true,
+        deleted_at: now.toISOString(),
+        scheduled_purge_at: purgeDate.toISOString(),
+      },
+    });
+
+    if (error) {
+      alert('탈퇴 처리 실패: ' + error.message);
+      setWithdrawLoading(false);
+      return;
+    }
+
+    alert('회원 탈퇴가 접수되었습니다.\n개인정보보호 및 분쟁 방지 정책에 따라 30일의 유예 기간 후 모든 운행 기록과 계정이 영구 삭제됩니다.\n그동안 이용해 주셔서 감사합니다.');
+    await supabase.auth.signOut();
+    setSession(null);
+    setShowProfileModal(false);
+    setShowWithdrawConfirm(false);
+    setWithdrawLoading(false);
   };
 
   // 운행 등록 핸들러
@@ -405,7 +486,6 @@ export default function App() {
 
     if (error) {
       alert('DB 저장 오류 발생: ' + error.message);
-      console.error('Insert error:', error);
       return;
     }
 
@@ -525,6 +605,7 @@ export default function App() {
   const buildClaimText = (r: DrivingRecord, withGross: boolean, withFuel: boolean, withExtra: boolean) => {
     const primaryAccount = accounts[0] || { bankName: '은행명', accountNumber: '계좌번호', holder: '예금주' };
     const driverPhone = session?.user?.user_metadata?.phone || '';
+    const driverName = session?.user?.user_metadata?.name || '';
     
     let total = 0;
     let itemsText = '';
@@ -547,7 +628,7 @@ export default function App() {
 * 운행구간: ${r.departure} ➔ ${r.destination}
 ${itemsText}--------------------------------
 * 총 청구금액: ${total.toLocaleString()}원
-* 입금계좌: ${primaryAccount.bankName} ${primaryAccount.accountNumber} (${primaryAccount.holder})${driverPhone ? `\n* 기사 연락처: ${driverPhone}` : ''}
+* 입금계좌: ${primaryAccount.bankName} ${primaryAccount.accountNumber} (${primaryAccount.holder})${driverPhone ? `\n* 탁송기사: ${driverName} (${driverPhone})` : ''}
 
 확인 후 빠른 입금 부탁드립니다. 감사합니다.`;
   };
@@ -580,7 +661,7 @@ ${itemsText}--------------------------------
   };
 
   const getElapsedDays = (recordDate: string) => {
-    const today = new Date('2026-11-09');
+    const today = new Date('2026-11-10');
     const target = new Date(recordDate);
     const diffTime = today.getTime() - target.getTime();
     return Math.max(0, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
@@ -647,6 +728,15 @@ ${itemsText}--------------------------------
     setHolder('');
   };
 
+  // 내 초대 링크 복사 함수
+  const handleCopyInviteLink = () => {
+    const myPhone = session?.user?.user_metadata?.phone?.replace(/[^0-9]/g, '');
+    if (!myPhone) return;
+    const inviteUrl = `${window.location.origin}?ref=${myPhone}`;
+    navigator.clipboard.writeText(inviteUrl);
+    alert(`동료 기사 초대 링크가 복사되었습니다!\n\n${inviteUrl}\n\n이 링크로 동료 기사가 가입하면 두 분 모두 유료화 시 'Pro 1개월 무료 이용권'이 적립됩니다.`);
+  };
+
   // 미수금 통계
   const unpaidRecords = records.filter((r) => !r.isPaid);
   const totalUnpaidAmount = unpaidRecords.reduce((acc, cur) => acc + cur.totalClaimAmount, 0);
@@ -665,12 +755,12 @@ ${itemsText}--------------------------------
   const filteredRecords = filterAllDates ? records : records.filter((r) => r.date === selectedDate);
   const filteredExpenses = filterAllDates ? expenses : expenses.filter((e) => e.date === selectedDate);
 
-  // 1. 미로그인 뷰
+  // 1. 미로그인 뷰 (이름, 휴대폰, 추천인ID 포함)
   if (!session) {
     return (
       <div className="min-h-screen bg-[#070B14] text-slate-100 flex items-center justify-center p-4 font-sans relative selection:bg-indigo-500 selection:text-white">
         <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[380px] h-[380px] bg-indigo-500/10 rounded-full blur-[100px] pointer-events-none" />
-        <div className="w-full max-w-[420px] bg-[#0E1424]/90 border border-slate-800/80 rounded-2xl p-7 backdrop-blur-xl shadow-2xl relative z-10">
+        <div className="w-full max-w-[440px] bg-[#0E1424]/90 border border-slate-800/80 rounded-2xl p-7 backdrop-blur-xl shadow-2xl relative z-10">
           <div className="flex flex-col items-center mb-6">
             <div className="w-12 h-12 p-2.5 bg-slate-900 border border-slate-700/60 rounded-xl flex items-center justify-center shadow-inner mb-3">
               <Car className="w-6 h-6 text-indigo-400" />
@@ -738,60 +828,89 @@ ${itemsText}--------------------------------
               </button>
             </form>
           ) : (
-            <form onSubmit={handleSignUp} className="space-y-3.5">
+            <form onSubmit={handleSignUp} className="space-y-3">
               <div>
-                <label className="block text-[11px] font-semibold text-slate-300 mb-1">이메일 계정 (ID)</label>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1">이메일 계정 (로그인 ID)</label>
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="name@driver.com"
                   required
-                  className="w-full px-3.5 py-2.5 rounded-lg bg-white text-slate-900 font-semibold text-sm"
+                  className="w-full px-3.5 py-2 rounded-lg bg-white text-slate-900 font-semibold text-sm"
                 />
               </div>
 
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">이름 (실명)</label>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="홍길동"
+                    required
+                    className="w-full px-3.5 py-2 rounded-lg bg-white text-slate-900 font-semibold text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-indigo-300 mb-1 flex items-center gap-1">
+                    <Phone className="w-3 h-3 text-indigo-400" /> 휴대폰 번호
+                  </label>
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="010-1234-5678"
+                    required
+                    className="w-full px-3.5 py-2 rounded-lg bg-white text-slate-900 font-semibold text-sm"
+                  />
+                </div>
+              </div>
+
+              {/* 추천인 ID 입력칸 (선택) */}
               <div>
-                <label className="block text-[11px] font-semibold text-slate-300 mb-1 flex items-center gap-1">
-                  <Phone className="w-3.5 h-3.5 text-indigo-400" />
-                  휴대폰 번호 (연락처 필수)
+                <label className="block text-[11px] font-semibold text-amber-300 mb-1 flex items-center justify-between">
+                  <span className="flex items-center gap-1"><Gift className="w-3.5 h-3.5 text-amber-400" /> 추천인 ID / 휴대폰번호 (선택)</span>
+                  <span className="text-[10px] text-amber-400/80 font-normal">입력 시 1개월 무료권 제공</span>
                 </label>
                 <input
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="예: 010-1234-5678"
-                  required
-                  className="w-full px-3.5 py-2.5 rounded-lg bg-white text-slate-900 font-semibold text-sm border border-slate-200 focus:border-indigo-500 focus:outline-none"
+                  type="text"
+                  value={referrerId}
+                  onChange={(e) => setReferrerId(e.target.value)}
+                  placeholder="추천인 휴대폰 번호 입력 (없으면 공란)"
+                  className="w-full px-3.5 py-2 rounded-lg bg-white text-slate-900 font-semibold text-sm border border-amber-500/40 focus:border-amber-500 focus:outline-none"
                 />
               </div>
 
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-300 mb-1">비밀번호 (6자리 이상)</label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="비밀번호 설정"
-                  required
-                  className="w-full px-3.5 py-2.5 rounded-lg bg-white text-slate-900 font-semibold text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-300 mb-1">비밀번호 확인</label>
-                <input
-                  type="password"
-                  value={passwordConfirm}
-                  onChange={(e) => setPasswordConfirm(e.target.value)}
-                  placeholder="비밀번호 재입력"
-                  required
-                  className="w-full px-3.5 py-2.5 rounded-lg bg-white text-slate-900 font-semibold text-sm"
-                />
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">비밀번호</label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="6자리 이상"
+                    required
+                    className="w-full px-3.5 py-2 rounded-lg bg-white text-slate-900 font-semibold text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">비밀번호 확인</label>
+                  <input
+                    type="password"
+                    value={passwordConfirm}
+                    onChange={(e) => setPasswordConfirm(e.target.value)}
+                    placeholder="재입력"
+                    required
+                    className="w-full px-3.5 py-2 rounded-lg bg-white text-slate-900 font-semibold text-sm"
+                  />
+                </div>
               </div>
 
-              <div className="pt-2">
-                <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2.5">
-                  <div className="flex items-start gap-2.5">
+              <div className="pt-1">
+                <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
+                  <div className="flex items-start gap-2">
                     <input
                       type="checkbox"
                       id="privacyCheck"
@@ -799,20 +918,17 @@ ${itemsText}--------------------------------
                       onChange={(e) => setAgreePrivacy(e.target.checked)}
                       className="mt-0.5 w-4 h-4 rounded text-indigo-600 cursor-pointer"
                     />
-                    <label htmlFor="privacyCheck" className="text-xs text-slate-200 font-medium cursor-pointer leading-relaxed">
-                      [필수] 연락처·개인정보 수집 및 <span className="text-amber-400 font-bold">오픈베타 이용·유료화 사전고지</span>에 동의합니다.
+                    <label htmlFor="privacyCheck" className="text-xs text-slate-200 font-medium cursor-pointer leading-tight">
+                      [필수] 개인정보 수집 및 <span className="text-amber-400 font-bold">오픈베타·추천인 혜택·유료전환 고지</span> 동의
                     </label>
                   </div>
                   
-                  <div className="text-[11px] text-slate-400 pl-6 leading-normal space-y-0.5">
+                  <div className="text-[10px] text-slate-400 pl-6 leading-tight space-y-0.5">
                     <div className="text-indigo-300 flex items-center gap-1">
-                      <Phone className="w-3 h-3" /> 휴대폰 번호는 본인 확인 및 청구문자용으로 안전 보관
-                    </div>
-                    <div className="text-emerald-400 flex items-center gap-1">
-                      <Smartphone className="w-3 h-3" /> 송금 계좌는 서버 저장 없이 기기에만 보관
+                      <Phone className="w-2.5 h-2.5" /> 내 휴대폰번호는 본인 식별 및 자동 추천인 코드로 활용
                     </div>
                     <div className="text-amber-300/80 flex items-center gap-1">
-                      <Sparkles className="w-3 h-3" /> 베타 종료 후 유료 전환 가능 (동의 없는 자동결제 없음)
+                      <Sparkles className="w-2.5 h-2.5" /> 탈퇴 시 30일 유예 후 자동 영구 파기 (자동결제 없음)
                     </div>
                   </div>
 
@@ -820,22 +936,22 @@ ${itemsText}--------------------------------
                     <button 
                       type="button" 
                       onClick={() => setShowPrivacyModal(true)} 
-                      className="text-xs text-indigo-400 hover:text-indigo-300 underline font-semibold cursor-pointer inline-flex items-center gap-0.5"
+                      className="text-[11px] text-indigo-400 hover:text-indigo-300 underline font-semibold cursor-pointer inline-flex items-center gap-0.5"
                     >
-                      약관 및 유료화 고지 전문보기 <ChevronRight className="w-3.5 h-3.5" />
+                      약관 및 탈퇴·유료화 고지 전문보기 <ChevronRight className="w-3 h-3" />
                     </button>
                   </div>
                 </div>
               </div>
 
-              {authError && <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-400 text-xs">{authError}</div>}
+              {authError && <div className="p-2.5 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-400 text-xs">{authError}</div>}
 
               <button
                 type="submit"
                 disabled={authLoading}
-                className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm rounded-lg cursor-pointer"
+                className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm rounded-lg cursor-pointer"
               >
-                {authLoading ? '계정 생성 중...' : '동의하고 회원가입'}
+                {authLoading ? '계정 생성 중...' : '동의하고 무료 회원가입'}
               </button>
             </form>
           )}
@@ -859,46 +975,34 @@ ${itemsText}--------------------------------
 
               <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 text-xs text-slate-300 space-y-3.5 max-h-[380px] overflow-y-auto leading-relaxed">
                 <div>
-                  <h4 className="font-bold text-white mb-1">1. 수집하는 개인정보 항목 및 저장 방식</h4>
+                  <h4 className="font-bold text-white mb-1">1. 수집하는 개인정보 항목 및 목적</h4>
                   <p className="text-slate-400">
-                    - <strong className="text-indigo-300">클라우드(서버) 저장 필수 항목:</strong> 로그인 이메일, <span className="text-white font-bold underline">휴대폰 번호(연락처)</span>, 암호화된 비밀번호, 탁송 운행 기록(일자, 시간, 출발지, 도착지, 탁송료, 대납 주유비, 대납 경비, 팁)<br />
-                    - <strong className="text-emerald-300">기기 로컬(단말기) 저장 항목:</strong> 기사 송금 계좌번호는 외부 서버로 전송되지 않으며, 사용자 본인의 스마트폰/PC 웹 브라우저(localStorage)에만 안전하게 보관됩니다.
+                    - <strong>수집 항목:</strong> 로그인 이메일, 성명(이름), 휴대폰 번호, 추천인 ID, 암호화된 비밀번호, 운행 기록<br />
+                    - <strong>이용 목적:</strong> 본인 식별, 청구문자 기사 정보 자동 기재, 추천인 보상 혜택 부여 및 유료 멤버십 무료 이용권 지급
                   </p>
                 </div>
 
-                <div>
-                  <h4 className="font-bold text-white mb-1">2. 개인정보 수집 및 이용 목적</h4>
-                  <p className="text-slate-400">
-                    - 기사 회원 본인 식별 및 로그인 상태 유지<br />
-                    - 정산 청구문자 기사 연락처 자동 기재 및 중요 공지 발송<br />
-                    - 운행 일지 및 수입·지출 데이터의 클라우드 영구 저장 및 기기 간 동기화
-                  </p>
-                </div>
-
-                <div>
-                  <h4 className="font-bold text-white mb-1">3. 보유 및 이용 기간</h4>
-                  <p className="text-slate-400">
-                    - 회원 탈퇴 시 또는 서비스 종료 시까지 안전하게 보관되며, 사용자 탈퇴 요청 시 지체 없이 파기됩니다.
+                <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/30">
+                  <h4 className="font-bold text-rose-300 mb-1 flex items-center gap-1.5">
+                    <UserX className="w-3.5 h-3.5 text-rose-400" />
+                    2. 회원 탈퇴 및 데이터 자동 파기 정책 (30일 유예)
+                  </h4>
+                  <p className="text-slate-300 leading-relaxed text-[11px]">
+                    1) 회원은 앱 내 [계정 설정 ➔ 회원 탈퇴] 메뉴를 통해 언제든 탈퇴를 요청할 수 있습니다.<br />
+                    2) 부정 이용 방지(추천인 보상 어뷰징, 미수금 정산 분쟁 방지)를 위해 탈퇴 신청 즉시 계정은 비활성화되며, <strong>탈퇴 신청일로부터 30일간 보관 후 시스템에서 자동으로 영구 삭제(파기)</strong>됩니다.<br />
+                    3) 30일 유예 기간이 경과하면 복구가 불가능합니다.
                   </p>
                 </div>
 
                 <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
                   <h4 className="font-bold text-amber-300 mb-1 flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                    4. 오픈 베타 운영 및 향후 유료 멤버십 전환 고지
+                    <Gift className="w-3.5 h-3.5 text-amber-400" />
+                    3. 추천인 제도 및 유료 멤버십 전환 혜택
                   </h4>
                   <p className="text-slate-300 leading-relaxed text-[11px]">
-                    1) 본 서비스(JunDriver)는 현재 기능 안정화 및 고도화를 위한 <strong>오픈 베타 테스트(Open Beta)</strong> 기간으로 무료 운영됩니다.<br />
-                    2) 베타 테스트 기간이 종료되면 서비스의 전부 또는 일부 기능이 <strong>유료 회원제 및 구독 모델</strong>로 전환될 수 있습니다.<br />
-                    3) 베타 종료 후 <strong>사용자의 명시적 신청 없는 자동 결제는 일체 발생하지 않습니다.</strong> 유료 전환을 원하지 않으실 경우 언제든 자유롭게 탈퇴가 가능합니다.<br />
-                    4) 회사는 베타 기간 중 활동 실적, 피드백 기여도 등에 따라 회원을 선별하여 <strong>우수회원 등급 부여, 평생 무료/할인 혜택 등 차등 혜택</strong>을 제공할 수 있습니다.
-                  </p>
-                </div>
-
-                <div>
-                  <h4 className="font-bold text-white mb-1">5. 동의를 거부할 권리</h4>
-                  <p className="text-slate-400">
-                    귀하는 본 동의를 거부할 권리가 있습니다. 단, 본 조항은 서비스 제공을 위한 필수 요건이므로 거부 시 가입이 제한됩니다.
+                    1) 본 서비스(JunDriver)는 오픈 베타 기간 동안 전면 무료로 제공됩니다.<br />
+                    2) 추천인을 기재하고 가입한 회원 및 동료를 추천한 회원에게는 향후 유료 전환 시 <strong>'Pro 1개월 무료 이용권'</strong> 등 차등 혜택이 누적 지급됩니다.<br />
+                    3) 유료 전환 시 사용자의 명시적 신청 없는 자동 결제는 절대 발생하지 않습니다.
                   </p>
                 </div>
               </div>
@@ -920,7 +1024,9 @@ ${itemsText}--------------------------------
   }
 
   // 2. 메인 대시보드
+  const userName = session?.user?.user_metadata?.name || '기사';
   const userPhone = session?.user?.user_metadata?.phone;
+  const myReferralCode = session?.user?.user_metadata?.referral_code || userPhone?.replace(/[^0-9]/g, '');
 
   return (
     <div className="min-h-screen bg-[#070B14] text-slate-100 font-sans pb-20 selection:bg-indigo-500 selection:text-white">
@@ -937,14 +1043,24 @@ ${itemsText}--------------------------------
             </span>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
+            {/* 동료 기사 초대 버튼 */}
             <button
-              onClick={() => { setShowProfileModal(true); setPwdMessage(null); setNewPassword(''); }}
+              onClick={handleCopyInviteLink}
+              title="추천 링크 복사하고 1달 무료권 받기"
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 text-amber-300 font-bold text-xs transition-all cursor-pointer"
+            >
+              <Gift className="w-3.5 h-3.5 text-amber-400" />
+              <span>동료 초대 (1달 무료)</span>
+            </button>
+
+            <button
+              onClick={() => { setShowProfileModal(true); setPwdMessage(null); setNewPassword(''); setShowWithdrawConfirm(false); }}
               className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700/70 hover:border-indigo-500 transition-all text-xs text-slate-200 cursor-pointer"
             >
               <User className="w-3.5 h-3.5 text-indigo-400" />
               <div className="text-left max-w-[150px] truncate">
-                <span className="block truncate font-medium">{session.user.email}</span>
+                <span className="block truncate font-bold text-white">{userName}님</span>
                 {userPhone && <span className="block text-[10px] text-slate-400 font-mono">{userPhone}</span>}
               </div>
             </button>
@@ -1839,28 +1955,95 @@ ${itemsText}--------------------------------
         </div>
       )}
 
-      {/* 비밀번호 변경 모달 */}
+      {/* 계정 관리, 비밀번호 변경 및 회원 탈퇴 모달 */}
       {showProfileModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn">
           <div className="w-full max-w-sm bg-[#0E1424] border border-slate-800 rounded-2xl p-6 shadow-2xl relative">
             <button onClick={() => setShowProfileModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-1">
               <X className="w-5 h-5" />
             </button>
-            <h3 className="text-sm font-bold text-white mb-4">비밀번호 변경</h3>
-            <form onSubmit={handleChangePassword} className="space-y-3.5">
+            
+            <h3 className="text-sm font-bold text-white mb-1 flex items-center gap-2">
+              <User className="w-4 h-4 text-indigo-400" /> 계정 및 보안 설정
+            </h3>
+            <p className="text-xs text-slate-400 mb-4">{session.user.email}</p>
+
+            {/* 내 추천인 코드 및 초대 링크 카드 */}
+            <div className="p-3.5 bg-slate-900/90 rounded-xl border border-amber-500/30 mb-5 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-amber-300 flex items-center gap-1">
+                  <Gift className="w-3.5 h-3.5 text-amber-400" /> 내 추천인 ID
+                </span>
+                <span className="font-mono text-xs font-bold text-white">{myReferralCode}</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleCopyInviteLink}
+                className="w-full py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-bold text-[11px] rounded-lg flex items-center justify-center gap-1 cursor-pointer transition-all"
+              >
+                <Share2 className="w-3 h-3" /> 내 초대 링크 복사하기
+              </button>
+            </div>
+
+            {/* 비밀번호 변경 폼 */}
+            <form onSubmit={handleChangePassword} className="space-y-3 pb-5 border-b border-slate-800">
+              <label className="block text-[11px] font-semibold text-slate-300">비밀번호 변경</label>
               <input
                 type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="새 비밀번호 입력 (6자리 이상)"
+                placeholder="새 비밀번호 (6자리 이상)"
                 required
-                className="w-full px-3.5 py-2.5 rounded-lg bg-white text-slate-900 font-semibold text-sm"
+                className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
               />
-              {pwdMessage && <div className="p-3 text-xs rounded-lg bg-slate-800">{pwdMessage.text}</div>}
-              <button type="submit" disabled={pwdLoading} className="w-full py-2.5 bg-indigo-600 text-white font-bold text-xs rounded-lg">
-                {pwdLoading ? '변경 중...' : '변경 완료'}
+              {pwdMessage && <div className="p-2.5 text-xs rounded-lg bg-slate-800">{pwdMessage.text}</div>}
+              <button type="submit" disabled={pwdLoading} className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-lg cursor-pointer">
+                {pwdLoading ? '변경 중...' : '비밀번호 변경'}
               </button>
             </form>
+
+            {/* 회원 탈퇴 영역 */}
+            <div className="pt-4">
+              {!showWithdrawConfirm ? (
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-400">더 이상 서비스를 이용하지 않으시나요?</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowWithdrawConfirm(true)}
+                    className="text-rose-400 hover:text-rose-300 font-semibold underline cursor-pointer text-xs"
+                  >
+                    회원 탈퇴
+                  </button>
+                </div>
+              ) : (
+                <div className="p-3.5 rounded-xl bg-rose-950/30 border border-rose-500/40 space-y-2.5 animate-fadeIn">
+                  <div className="text-xs text-rose-300 font-bold flex items-center gap-1.5">
+                    <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                    정말 회원 탈퇴를 진행하시겠습니까?
+                  </div>
+                  <p className="text-[11px] text-slate-300 leading-relaxed">
+                    탈퇴 시 즉시 로그아웃되며, 개인정보보호 및 분쟁 방지 정책에 따라 <strong>30일 유예 후 운행 기록과 계정이 자동 영구 삭제</strong>됩니다.
+                  </p>
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowWithdrawConfirm(false)}
+                      className="flex-1 py-1.5 bg-slate-800 text-slate-300 text-xs font-semibold rounded-lg cursor-pointer"
+                    >
+                      취소
+                    </button>
+                    <button
+                      type="button"
+                      disabled={withdrawLoading}
+                      onClick={handleWithdrawAccount}
+                      className="flex-1 py-1.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-lg cursor-pointer shadow-md"
+                    >
+                      {withdrawLoading ? '탈퇴 처리 중...' : '30일 후 자동삭제 탈퇴'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
