@@ -35,8 +35,6 @@ import {
   Sparkles,
   Phone,
   RefreshCw,
-  Gift,
-  Share2,
   UserX
 } from 'lucide-react';
 
@@ -96,9 +94,8 @@ export default function App() {
   // 인증 관련 상태
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
-  const [name, setName] = useState(''); // 이름(실명) 필수
-  const [phone, setPhone] = useState(''); // 휴대폰번호 필수
-  const [referrerId, setReferrerId] = useState(''); // 추천인 ID (선택)
+  const [name, setName] = useState(''); // 이름(실명)
+  const [phone, setPhone] = useState(''); // 휴대폰번호
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [agreePrivacy, setAgreePrivacy] = useState(false);
@@ -166,16 +163,6 @@ export default function App() {
     localStorage.setItem('jundriver_local_accounts', JSON.stringify(accounts));
   }, [accounts]);
 
-  // URL에서 추천인 파라미터(?ref=...) 자동 추출
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const refParam = params.get('ref');
-    if (refParam) {
-      setReferrerId(refParam.trim());
-      setAuthMode('signup');
-    }
-  }, []);
-
   // 운행 등록 폼 상태
   const [newDate, setNewDate] = useState('2026-11-10');
   const [newStartTime, setNewStartTime] = useState('');
@@ -201,7 +188,6 @@ export default function App() {
   // Supabase 세션 감지
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      // 탈퇴 유예 계정 차단 체크
       if (session?.user?.user_metadata?.is_deleted) {
         alert('탈퇴 신청된 계정입니다. (30일 유예 기간 후 완전 파기됩니다.)');
         supabase.auth.signOut();
@@ -314,7 +300,7 @@ export default function App() {
     setAuthLoading(false);
   };
 
-  // 회원가입 핸들러 (이름, 휴대폰, 추천인ID 포함)
+  // 회원가입 핸들러 (이름, 휴대폰번호)
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthLoading(true);
@@ -354,13 +340,6 @@ export default function App() {
       return;
     }
 
-    // 본인 번호를 추천인으로 기재하는 것 방지
-    if (referrerId.trim() && referrerId.replace(/[^0-9]/g, '') === cleanPhone) {
-      setAuthError('본인 휴대폰 번호는 추천인으로 등록할 수 없습니다.');
-      setAuthLoading(false);
-      return;
-    }
-
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -368,12 +347,10 @@ export default function App() {
         data: {
           name: trimmedName,
           phone: phone.trim(),
-          referral_code: cleanPhone, // 본인 휴대폰 번호가 고유 추천인 코드
-          referrer_id: referrerId.trim() || null,
           privacy_policy_agreed: true,
           privacy_policy_agreed_at: new Date().toISOString(),
           beta_terms_agreed: true,
-          terms_version: 'v1.4_referral_system',
+          terms_version: 'v1.5_clean_auth',
         },
       },
     });
@@ -382,7 +359,7 @@ export default function App() {
       setAuthError('가입 실패: ' + error.message);
     } else {
       if (data.session) {
-        setAuthSuccess('회원가입이 완료되었습니다! (추천인 1개월 무료 혜택 예약됨)');
+        setAuthSuccess('회원가입이 완료되었습니다.');
       } else {
         setAuthSuccess('가입 완료! 로그인해 주세요.');
         setAuthMode('login');
@@ -728,15 +705,6 @@ ${itemsText}--------------------------------
     setHolder('');
   };
 
-  // 내 초대 링크 복사 함수
-  const handleCopyInviteLink = () => {
-    const myPhone = session?.user?.user_metadata?.phone?.replace(/[^0-9]/g, '');
-    if (!myPhone) return;
-    const inviteUrl = `${window.location.origin}?ref=${myPhone}`;
-    navigator.clipboard.writeText(inviteUrl);
-    alert(`동료 기사 초대 링크가 복사되었습니다!\n\n${inviteUrl}\n\n이 링크로 동료 기사가 가입하면 두 분 모두 유료화 시 'Pro 1개월 무료 이용권'이 적립됩니다.`);
-  };
-
   // 미수금 통계
   const unpaidRecords = records.filter((r) => !r.isPaid);
   const totalUnpaidAmount = unpaidRecords.reduce((acc, cur) => acc + cur.totalClaimAmount, 0);
@@ -755,12 +723,12 @@ ${itemsText}--------------------------------
   const filteredRecords = filterAllDates ? records : records.filter((r) => r.date === selectedDate);
   const filteredExpenses = filterAllDates ? expenses : expenses.filter((e) => e.date === selectedDate);
 
-  // 1. 미로그인 뷰 (이름, 휴대폰, 추천인ID 포함)
+  // 1. 미로그인 뷰
   if (!session) {
     return (
       <div className="min-h-screen bg-[#070B14] text-slate-100 flex items-center justify-center p-4 font-sans relative selection:bg-indigo-500 selection:text-white">
         <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[380px] h-[380px] bg-indigo-500/10 rounded-full blur-[100px] pointer-events-none" />
-        <div className="w-full max-w-[440px] bg-[#0E1424]/90 border border-slate-800/80 rounded-2xl p-7 backdrop-blur-xl shadow-2xl relative z-10">
+        <div className="w-full max-w-[420px] bg-[#0E1424]/90 border border-slate-800/80 rounded-2xl p-7 backdrop-blur-xl shadow-2xl relative z-10">
           <div className="flex flex-col items-center mb-6">
             <div className="w-12 h-12 p-2.5 bg-slate-900 border border-slate-700/60 rounded-xl flex items-center justify-center shadow-inner mb-3">
               <Car className="w-6 h-6 text-indigo-400" />
@@ -843,7 +811,7 @@ ${itemsText}--------------------------------
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">이름 (실명)</label>
+                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">이름 (성함)</label>
                   <input
                     type="text"
                     value={name}
@@ -866,21 +834,6 @@ ${itemsText}--------------------------------
                     className="w-full px-3.5 py-2 rounded-lg bg-white text-slate-900 font-semibold text-sm"
                   />
                 </div>
-              </div>
-
-              {/* 추천인 ID 입력칸 (선택) */}
-              <div>
-                <label className="block text-[11px] font-semibold text-amber-300 mb-1 flex items-center justify-between">
-                  <span className="flex items-center gap-1"><Gift className="w-3.5 h-3.5 text-amber-400" /> 추천인 ID / 휴대폰번호 (선택)</span>
-                  <span className="text-[10px] text-amber-400/80 font-normal">입력 시 1개월 무료권 제공</span>
-                </label>
-                <input
-                  type="text"
-                  value={referrerId}
-                  onChange={(e) => setReferrerId(e.target.value)}
-                  placeholder="추천인 휴대폰 번호 입력 (없으면 공란)"
-                  className="w-full px-3.5 py-2 rounded-lg bg-white text-slate-900 font-semibold text-sm border border-amber-500/40 focus:border-amber-500 focus:outline-none"
-                />
               </div>
 
               <div className="grid grid-cols-2 gap-2">
@@ -919,16 +872,19 @@ ${itemsText}--------------------------------
                       className="mt-0.5 w-4 h-4 rounded text-indigo-600 cursor-pointer"
                     />
                     <label htmlFor="privacyCheck" className="text-xs text-slate-200 font-medium cursor-pointer leading-tight">
-                      [필수] 개인정보 수집 및 <span className="text-amber-400 font-bold">오픈베타·추천인 혜택·유료전환 고지</span> 동의
+                      [필수] 개인정보 수집 및 <span className="text-amber-400 font-bold">오픈베타 이용·유료화 사전고지</span> 동의
                     </label>
                   </div>
                   
                   <div className="text-[10px] text-slate-400 pl-6 leading-tight space-y-0.5">
                     <div className="text-indigo-300 flex items-center gap-1">
-                      <Phone className="w-2.5 h-2.5" /> 내 휴대폰번호는 본인 식별 및 자동 추천인 코드로 활용
+                      <Phone className="w-2.5 h-2.5" /> 휴대폰번호는 본인 식별 및 청구문자용으로 안전 보관
+                    </div>
+                    <div className="text-emerald-400 flex items-center gap-1">
+                      <Smartphone className="w-2.5 h-2.5" /> 송금 계좌는 서버 저장 없이 기기에만 보관
                     </div>
                     <div className="text-amber-300/80 flex items-center gap-1">
-                      <Sparkles className="w-2.5 h-2.5" /> 탈퇴 시 30일 유예 후 자동 영구 파기 (자동결제 없음)
+                      <Sparkles className="w-2.5 h-2.5" /> 베타 종료 후 유료 전환 가능 (동의 없는 자동결제 없음)
                     </div>
                   </div>
 
@@ -977,8 +933,8 @@ ${itemsText}--------------------------------
                 <div>
                   <h4 className="font-bold text-white mb-1">1. 수집하는 개인정보 항목 및 목적</h4>
                   <p className="text-slate-400">
-                    - <strong>수집 항목:</strong> 로그인 이메일, 성명(이름), 휴대폰 번호, 추천인 ID, 암호화된 비밀번호, 운행 기록<br />
-                    - <strong>이용 목적:</strong> 본인 식별, 청구문자 기사 정보 자동 기재, 추천인 보상 혜택 부여 및 유료 멤버십 무료 이용권 지급
+                    - <strong>수집 항목:</strong> 로그인 이메일, 성명(이름), 휴대폰 번호, 암호화된 비밀번호, 탁송 운행 기록<br />
+                    - <strong>이용 목적:</strong> 본인 식별, 청구문자 기사 정보 자동 기재, 서비스 공지 발송
                   </p>
                 </div>
 
@@ -989,20 +945,20 @@ ${itemsText}--------------------------------
                   </h4>
                   <p className="text-slate-300 leading-relaxed text-[11px]">
                     1) 회원은 앱 내 [계정 설정 ➔ 회원 탈퇴] 메뉴를 통해 언제든 탈퇴를 요청할 수 있습니다.<br />
-                    2) 부정 이용 방지(추천인 보상 어뷰징, 미수금 정산 분쟁 방지)를 위해 탈퇴 신청 즉시 계정은 비활성화되며, <strong>탈퇴 신청일로부터 30일간 보관 후 시스템에서 자동으로 영구 삭제(파기)</strong>됩니다.<br />
+                    2) 부정 이용 방지 및 정산 분쟁 방지를 위해 탈퇴 신청 즉시 계정은 비활성화되며, <strong>탈퇴 신청일로부터 30일간 보관 후 시스템에서 자동으로 영구 삭제(파기)</strong>됩니다.<br />
                     3) 30일 유예 기간이 경과하면 복구가 불가능합니다.
                   </p>
                 </div>
 
                 <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
                   <h4 className="font-bold text-amber-300 mb-1 flex items-center gap-1.5">
-                    <Gift className="w-3.5 h-3.5 text-amber-400" />
-                    3. 추천인 제도 및 유료 멤버십 전환 혜택
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                    3. 오픈 베타 운영 및 향후 유료 멤버십 전환 고지
                   </h4>
                   <p className="text-slate-300 leading-relaxed text-[11px]">
-                    1) 본 서비스(JunDriver)는 오픈 베타 기간 동안 전면 무료로 제공됩니다.<br />
-                    2) 추천인을 기재하고 가입한 회원 및 동료를 추천한 회원에게는 향후 유료 전환 시 <strong>'Pro 1개월 무료 이용권'</strong> 등 차등 혜택이 누적 지급됩니다.<br />
-                    3) 유료 전환 시 사용자의 명시적 신청 없는 자동 결제는 절대 발생하지 않습니다.
+                    1) 본 서비스(JunDriver)는 현재 기능 안정화 및 고도화를 위한 오픈 베타 테스트 기간으로 무료 운영됩니다.<br />
+                    2) 베타 테스트 기간이 종료되면 서비스의 전부 또는 일부 기능이 유료 멤버십으로 전환될 수 있습니다.<br />
+                    3) 베타 종료 후 사용자의 명시적 신청 없는 자동 결제는 절대 발생하지 않습니다.
                   </p>
                 </div>
               </div>
@@ -1026,7 +982,6 @@ ${itemsText}--------------------------------
   // 2. 메인 대시보드
   const userName = session?.user?.user_metadata?.name || '기사';
   const userPhone = session?.user?.user_metadata?.phone;
-  const myReferralCode = session?.user?.user_metadata?.referral_code || userPhone?.replace(/[^0-9]/g, '');
 
   return (
     <div className="min-h-screen bg-[#070B14] text-slate-100 font-sans pb-20 selection:bg-indigo-500 selection:text-white">
@@ -1044,16 +999,6 @@ ${itemsText}--------------------------------
           </div>
 
           <div className="flex items-center gap-2">
-            {/* 동료 기사 초대 버튼 */}
-            <button
-              onClick={handleCopyInviteLink}
-              title="추천 링크 복사하고 1달 무료권 받기"
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 text-amber-300 font-bold text-xs transition-all cursor-pointer"
-            >
-              <Gift className="w-3.5 h-3.5 text-amber-400" />
-              <span>동료 초대 (1달 무료)</span>
-            </button>
-
             <button
               onClick={() => { setShowProfileModal(true); setPwdMessage(null); setNewPassword(''); setShowWithdrawConfirm(false); }}
               className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700/70 hover:border-indigo-500 transition-all text-xs text-slate-200 cursor-pointer"
@@ -1967,23 +1912,6 @@ ${itemsText}--------------------------------
               <User className="w-4 h-4 text-indigo-400" /> 계정 및 보안 설정
             </h3>
             <p className="text-xs text-slate-400 mb-4">{session.user.email}</p>
-
-            {/* 내 추천인 코드 및 초대 링크 카드 */}
-            <div className="p-3.5 bg-slate-900/90 rounded-xl border border-amber-500/30 mb-5 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-amber-300 flex items-center gap-1">
-                  <Gift className="w-3.5 h-3.5 text-amber-400" /> 내 추천인 ID
-                </span>
-                <span className="font-mono text-xs font-bold text-white">{myReferralCode}</span>
-              </div>
-              <button
-                type="button"
-                onClick={handleCopyInviteLink}
-                className="w-full py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-bold text-[11px] rounded-lg flex items-center justify-center gap-1 cursor-pointer transition-all"
-              >
-                <Share2 className="w-3 h-3" /> 내 초대 링크 복사하기
-              </button>
-            </div>
 
             {/* 비밀번호 변경 폼 */}
             <form onSubmit={handleChangePassword} className="space-y-3 pb-5 border-b border-slate-800">
