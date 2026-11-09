@@ -32,7 +32,8 @@ import {
   Camera,
   Image as ImageIcon,
   Send,
-  AlertTriangle
+  AlertTriangle,
+  MessageSquare
 } from 'lucide-react';
 
 // Supabase 클라이언트 초기화
@@ -51,10 +52,10 @@ interface DrivingRecord {
   feeRate: number;
   tipAmount: number;
   fuelAmount: number; // 선결제 주유비
-  receiptImage?: string; // 로컬 기기 영수증 이미지 URL
-  isPaid: boolean; // 입금 완료 여부
-  netAmount: number; // 순수입 (운행료 - 수수료 + 팁)
-  totalClaimAmount: number; // 총 청구액 (탁송료 + 주유비 + 팁)
+  receiptImage?: string; // 로컬 영수증 썸네일
+  isPaid: boolean; // 입금 여부
+  netAmount: number;
+  totalClaimAmount: number;
 }
 
 interface ExpenseRecord {
@@ -101,6 +102,10 @@ export default function App() {
 
   // 영수증 사진 확대 모달 상태
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+
+  // 청구 문자 편집 모달 상태
+  const [claimModalOpen, setClaimModalOpen] = useState(false);
+  const [claimMessageText, setClaimMessageText] = useState('');
 
   // 파일 입력 ref
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -346,25 +351,33 @@ export default function App() {
     setReceiptImage('');
   };
 
-  // 입금 완료/미입금 상태 토글
+  // 입금 상태 토글
   const togglePaidStatus = (id: string) => {
     setRecords(records.map(r => r.id === id ? { ...r, isPaid: !r.isPaid } : r));
   };
 
-  // 정산 독촉 문자 클립보드 복사
-  const handleCopyClaimMessage = (r: DrivingRecord) => {
+  // 청구 문자 모달 열기 (기본 문구 자동 구성)
+  const openClaimMessageModal = (r: DrivingRecord) => {
     const primaryAccount = accounts[0] || { bankName: '은행명', accountNumber: '계좌번호', holder: '예금주' };
-    const msg = `[JunDriver 탁송 정산 요청]
+    const defaultText = `[JunDriver 탁송 정산 요청]
 * 운행일자: ${r.date}
-* 구간: ${r.departure} ➔ ${r.destination}
-* 탁송료: ${r.grossAmount.toLocaleString()}원
-${r.fuelAmount > 0 ? `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (영수증 별첨)\n` : ''}${r.tipAmount > 0 ? `* 추가 운임/팁: ${r.tipAmount.toLocaleString()}원\n` : ''}-------------------------
-* 총 청구 입금액: ${r.totalClaimAmount.toLocaleString()}원
+* 운행구간: ${r.departure} ➔ ${r.destination}
+* 탁송운임: ${r.grossAmount.toLocaleString()}원
+${r.fuelAmount > 0 ? `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (영수증 별첨)\n` : ''}${r.tipAmount > 0 ? `* 추가운임/팁: ${r.tipAmount.toLocaleString()}원\n` : ''}--------------------------------
+* 총 청구금액: ${r.totalClaimAmount.toLocaleString()}원
 * 입금계좌: ${primaryAccount.bankName} ${primaryAccount.accountNumber} (${primaryAccount.holder})
-확인 후 빠른 입금 부탁드립니다.`;
 
-    navigator.clipboard.writeText(msg);
-    alert('정산 청구 문자가 클립보드에 복사되었습니다.\n문자나 카카오톡에 바로 붙여넣기 하세요!');
+확인 후 빠른 입금 부탁드립니다. 감사합니다.`;
+
+    setClaimMessageText(defaultText);
+    setClaimModalOpen(true);
+  };
+
+  // 수정한 문자 클립보드 복사
+  const handleCopyClaimMessage = () => {
+    navigator.clipboard.writeText(claimMessageText);
+    alert('수정된 정산 청구 문자가 복사되었습니다.\n문자나 카카오톡에 붙여넣기 하세요!');
+    setClaimModalOpen(false);
   };
 
   // 경과일 계산
@@ -407,7 +420,7 @@ ${r.fuelAmount > 0 ? `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (�
     setHolder('');
   };
 
-  // 미수금 통계 집계
+  // 미수금 통계
   const unpaidRecords = records.filter(r => !r.isPaid);
   const totalUnpaidAmount = unpaidRecords.reduce((acc, cur) => acc + cur.totalClaimAmount, 0);
   const totalUnpaidFuel = unpaidRecords.reduce((acc, cur) => acc + cur.fuelAmount, 0);
@@ -496,7 +509,7 @@ ${r.fuelAmount > 0 ? `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (�
               <button
                 type="submit"
                 disabled={authLoading}
-                className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm rounded-lg shadow-lg"
+                className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm rounded-lg shadow-lg cursor-pointer"
               >
                 {authLoading ? '로그인 중...' : '클라우드 로그인'}
               </button>
@@ -562,7 +575,7 @@ ${r.fuelAmount > 0 ? `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (�
               <button
                 type="submit"
                 disabled={authLoading}
-                className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm rounded-lg"
+                className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm rounded-lg cursor-pointer"
               >
                 {authLoading ? '계정 생성 중...' : '동의하고 회원가입'}
               </button>
@@ -594,7 +607,7 @@ ${r.fuelAmount > 0 ? `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (�
     );
   }
 
-  // 2. 로그인 완료 메인 대시보드
+  // 2. 메인 대시보드
   return (
     <div className="min-h-screen bg-[#070B14] text-slate-100 font-sans pb-20 selection:bg-indigo-500 selection:text-white">
       {/* 상단 헤더 */}
@@ -635,7 +648,7 @@ ${r.fuelAmount > 0 ? `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (�
       {/* 메인 본문 컨테이너 */}
       <main className="max-w-[1400px] mx-auto px-4 lg:px-8 pt-6 space-y-6">
         
-        {/* 핵심 킬러 카드: 미수금 및 대납 주유비 경고 알림 바 */}
+        {/* 미수금 및 대납 주유비 경고 알림 바 */}
         {totalUnpaidAmount > 0 && (
           <section className="bg-gradient-to-r from-rose-950/40 via-slate-900 to-rose-950/40 border border-rose-500/40 rounded-2xl p-4 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex items-center gap-3.5">
@@ -659,7 +672,7 @@ ${r.fuelAmount > 0 ? `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (�
             </div>
 
             <div className="text-xs text-slate-400 flex items-center gap-2">
-              <span>운행 카드에서 [정산 요청] 버튼을 눌러 문자로 즉시 청구하세요.</span>
+              <span>운행 카드에서 [청구문자] 버튼을 눌러 내용을 확인·수정한 뒤 문자로 전송하세요.</span>
             </div>
           </section>
         )}
@@ -776,7 +789,7 @@ ${r.fuelAmount > 0 ? `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (�
         {/* TAB 1: 운행 및 주유/미수금 일지 */}
         {activeTab === 'records' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* 좌측: 운행 기록 + 주유비 + 갤러리 영수증 폼 */}
+            {/* 좌측: 운행 기록 등록 폼 */}
             <div className="bg-[#0E1424]/80 border border-slate-800/80 rounded-xl p-5">
               <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
                 <PlusCircle className="w-4 h-4 text-indigo-400" />
@@ -873,7 +886,7 @@ ${r.fuelAmount > 0 ? `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (�
                   </div>
                 </div>
 
-                {/* 핵심: 대납 주유비 & 갤러리 영수증 선택 */}
+                {/* 대납 주유비 & 갤러리 영수증 선택 */}
                 <div className="p-3.5 rounded-xl bg-slate-900 border border-indigo-500/30 space-y-2.5">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
@@ -889,7 +902,6 @@ ${r.fuelAmount > 0 ? `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (�
                     className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-bold text-xs"
                   />
 
-                  {/* 갤러리 바로 열기 버튼 */}
                   <div className="flex items-center justify-between pt-1">
                     <input
                       type="file"
@@ -934,7 +946,7 @@ ${r.fuelAmount > 0 ? `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (�
               </form>
             </div>
 
-            {/* 우측: 운행 목록 & 미수금 관리 카드 */}
+            {/* 우측: 운행 목록 */}
             <div className="lg:col-span-2 bg-[#0E1424]/80 border border-slate-800/80 rounded-xl p-5">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
@@ -975,7 +987,6 @@ ${r.fuelAmount > 0 ? `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (�
                             </div>
                           </div>
 
-                          {/* 정산 입금 상태 토글 배지 */}
                           <div className="flex items-center gap-2">
                             <button
                               onClick={() => togglePaidStatus(r.id)}
@@ -999,7 +1010,6 @@ ${r.fuelAmount > 0 ? `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (�
                           </div>
                         </div>
 
-                        {/* 금액 세부 내역 */}
                         <div className="pt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                           <div className="flex flex-wrap items-center gap-3 text-slate-400">
                             <span>탁송료: <strong className="text-white">{r.grossAmount.toLocaleString()}원</strong></span>
@@ -1011,7 +1021,6 @@ ${r.fuelAmount > 0 ? `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (�
                             <span className="text-emerald-400 font-semibold">순수입: +{r.netAmount.toLocaleString()}원</span>
                           </div>
 
-                          {/* 액션 버튼군: 정산 문자 복사, 영수증 보기, 삭제 */}
                           <div className="flex items-center gap-2">
                             <div className="text-right pr-2">
                               <span className="text-[10px] text-slate-400 block">총 청구액</span>
@@ -1028,15 +1037,14 @@ ${r.fuelAmount > 0 ? `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (�
                               </button>
                             )}
 
-                            {!r.isPaid && (
-                              <button
-                                onClick={() => handleCopyClaimMessage(r)}
-                                className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1 shadow-md cursor-pointer"
-                                title="정산 요청 문자 복사"
-                              >
-                                <Send className="w-3 h-3" /> 청구문자 복사
-                              </button>
-                            )}
+                            {/* 청구 문자 수정 및 복사 버튼 */}
+                            <button
+                              onClick={() => openClaimMessageModal(r)}
+                              className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1 shadow-md cursor-pointer"
+                              title="청구문자 확인 및 수정 복사"
+                            >
+                              <MessageSquare className="w-3 h-3" /> 청구문자
+                            </button>
 
                             <button
                               onClick={() => setRecords(records.filter((item) => item.id !== r.id))}
@@ -1234,7 +1242,53 @@ ${r.fuelAmount > 0 ? `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (�
         )}
       </main>
 
-      {/* 영수증 사진 원본 보기 팝업 모달 */}
+      {/* 청구 문자 직접 편집 및 복사 모달 */}
+      {claimModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="w-full max-w-lg bg-[#0E1424] border border-slate-800 rounded-2xl p-6 shadow-2xl relative">
+            <button
+              onClick={() => setClaimModalOpen(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-2.5 mb-3">
+              <MessageSquare className="w-5 h-5 text-indigo-400" />
+              <h3 className="text-sm font-bold text-white">정산 청구 문자 편집</h3>
+            </div>
+            <p className="text-xs text-slate-400 mb-4">
+              상황에 맞게 문구를 자유롭게 수정한 후 복사하여 문자나 카카오톡으로 전송하세요.
+            </p>
+
+            <textarea
+              rows={9}
+              value={claimMessageText}
+              onChange={(e) => setClaimMessageText(e.target.value)}
+              className="w-full p-3.5 rounded-xl bg-white text-slate-950 font-medium text-xs border border-slate-200 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 leading-relaxed font-mono"
+            />
+
+            <div className="pt-4 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setClaimModalOpen(false)}
+                className="flex-1 py-2.5 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs cursor-pointer"
+              >
+                닫기
+              </button>
+              <button
+                type="button"
+                onClick={handleCopyClaimMessage}
+                className="flex-1 py-2.5 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md cursor-pointer"
+              >
+                <Copy className="w-3.5 h-3.5" /> 수정한 문구 복사하기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 영수증 원본 보기 모달 */}
       {previewImage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
           <div className="relative max-w-lg w-full bg-slate-900 border border-slate-800 rounded-2xl p-4">
@@ -1254,7 +1308,7 @@ ${r.fuelAmount > 0 ? `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (�
         </div>
       )}
 
-      {/* 비밀번호 변경 팝업 모달 */}
+      {/* 비밀번호 변경 모달 */}
       {showProfileModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
           <div className="w-full max-w-sm bg-[#0E1424] border border-slate-800 rounded-2xl p-6 shadow-2xl relative">
