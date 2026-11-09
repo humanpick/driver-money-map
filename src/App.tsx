@@ -43,6 +43,20 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+// 천 단위 콤마 포맷터 & 언포맷 유틸리티
+const formatNumberWithComma = (val: string | number) => {
+  if (val === '' || val === null || val === undefined) return '';
+  const numStr = String(val).replace(/[^0-9]/g, '');
+  if (!numStr) return '';
+  return Number(numStr).toLocaleString('ko-KR');
+};
+
+const cleanNumber = (val: string | number): number => {
+  if (typeof val === 'number') return val;
+  if (!val) return 0;
+  return Number(String(val).replace(/,/g, '')) || 0;
+};
+
 interface DrivingRecord {
   id: string;
   date: string;
@@ -104,8 +118,12 @@ export default function App() {
   const [pwdLoading, setPwdLoading] = useState(false);
   const [pwdMessage, setPwdMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // 운행 일지 수정 모달 상태
+  // 운행 일지 수정 모달 상태 (입력용 콤마 문자열 필드 매핑)
   const [editingRecord, setEditingRecord] = useState<DrivingRecord | null>(null);
+  const [editGross, setEditGross] = useState('');
+  const [editFuel, setEditFuel] = useState('');
+  const [editExtra, setEditExtra] = useState('');
+  const [editTip, setEditTip] = useState('');
 
   // 영수증 사진 확대 모달 상태
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -150,7 +168,7 @@ export default function App() {
     localStorage.setItem('jundriver_local_accounts', JSON.stringify(accounts));
   }, [accounts]);
 
-  // 운행 등록 폼 상태
+  // 운행 등록 폼 상태 (콤마 포맷터 문자열 지원)
   const [newDate, setNewDate] = useState('2026-11-09');
   const [newStartTime, setNewStartTime] = useState('');
   const [newEndTime, setNewEndTime] = useState('');
@@ -365,7 +383,7 @@ export default function App() {
     }
   };
 
-  // 운행 등록 핸들러 (에러 검증 포함)
+  // 운행 등록 핸들러 (cleanNumber 적용)
   const handleAddRecord = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!session) {
@@ -373,11 +391,11 @@ export default function App() {
       return;
     }
 
-    const gross = Number(newGross) || 0;
-    const feeRate = Number(newFeeRate) || 0;
-    const fuel = Number(newFuel) || 0;
-    const extraExp = Number(newExtraExpense) || 0;
-    const tip = Number(newTip) || 0;
+    const gross = cleanNumber(newGross);
+    const feeRate = cleanNumber(newFeeRate);
+    const fuel = cleanNumber(newFuel);
+    const extraExp = cleanNumber(newExtraExpense);
+    const tip = cleanNumber(newTip);
 
     const feeAmount = gross * (feeRate / 100);
     const net = gross - feeAmount + tip;
@@ -403,11 +421,10 @@ export default function App() {
       total_claim_amount: Math.round(claimTotal),
     };
 
-    // DB에 먼저 전송하고 성공 시에만 로컬 상태에 반영
     const { error } = await supabase.from('driving_records').insert([insertPayload]);
 
     if (error) {
-      alert('DB 저장 오류 발생: ' + error.message + '\n(세부: ' + error.details + ')');
+      alert('DB 저장 오류 발생: ' + error.message);
       console.error('Insert error:', error);
       return;
     }
@@ -440,16 +457,25 @@ export default function App() {
     setReceiptImage('');
   };
 
+  // 수정 모달 열기 핸들러
+  const handleOpenEditModal = (r: DrivingRecord) => {
+    setEditingRecord(r);
+    setEditGross(formatNumberWithComma(r.grossAmount));
+    setEditFuel(formatNumberWithComma(r.fuelAmount));
+    setEditExtra(formatNumberWithComma(r.extraExpenseAmount));
+    setEditTip(formatNumberWithComma(r.tipAmount));
+  };
+
   // 운행 기록 수정 저장 핸들러
   const handleUpdateRecord = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingRecord || !session) return;
 
-    const gross = Number(editingRecord.grossAmount) || 0;
-    const feeRate = Number(editingRecord.feeRate) || 0;
-    const fuel = Number(editingRecord.fuelAmount) || 0;
-    const extraExp = Number(editingRecord.extraExpenseAmount) || 0;
-    const tip = Number(editingRecord.tipAmount) || 0;
+    const gross = cleanNumber(editGross);
+    const feeRate = cleanNumber(editingRecord.feeRate);
+    const fuel = cleanNumber(editFuel);
+    const extraExp = cleanNumber(editExtra);
+    const tip = cleanNumber(editTip);
 
     const feeAmount = gross * (feeRate / 100);
     const net = gross - feeAmount + tip;
@@ -582,10 +608,11 @@ ${itemsText}--------------------------------
     return Math.max(0, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
   };
 
-  // 경비 등록 핸들러
+  // 경비 등록 핸들러 (cleanNumber 적용)
   const handleAddExpense = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!expAmount || !session) return;
+    const cleanAmt = cleanNumber(expAmount);
+    if (!cleanAmt || !session) return;
     const expenseId = 'exp_' + Date.now().toString();
 
     const insertPayload = {
@@ -593,7 +620,7 @@ ${itemsText}--------------------------------
       user_id: session.user.id,
       date: newDate,
       category: expCategory,
-      amount: Number(expAmount) || 0,
+      amount: cleanAmt,
       memo: expMemo,
     };
 
@@ -607,7 +634,7 @@ ${itemsText}--------------------------------
       id: expenseId,
       date: newDate,
       category: expCategory,
-      amount: Number(expAmount) || 0,
+      amount: cleanAmt,
       memo: expMemo,
     };
 
@@ -626,7 +653,7 @@ ${itemsText}--------------------------------
     setExpenses(expenses.filter((e) => e.id !== id));
   };
 
-  // 계좌 추가 핸들러 (기기 로컬)
+  // 계좌 추가 핸들러
   const handleAddAccount = (e: React.FormEvent) => {
     e.preventDefault();
     if (!bankName || !accountNumber) return;
@@ -1113,7 +1140,7 @@ ${itemsText}--------------------------------
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* 등록 폼 */}
+              {/* 등록 폼 (금액 실시간 콤마 적용) */}
               <div className="bg-[#0E1424]/80 border border-slate-800/80 rounded-xl p-5">
                 <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
                   <PlusCircle className="w-4 h-4 text-indigo-400" />
@@ -1181,12 +1208,13 @@ ${itemsText}--------------------------------
                     <div>
                       <label className="block text-[11px] font-semibold text-slate-300 mb-1">탁송료(원)</label>
                       <input
-                        type="number"
-                        placeholder="85000"
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="85,000"
                         value={newGross}
-                        onChange={(e) => setNewGross(e.target.value)}
+                        onChange={(e) => setNewGross(formatNumberWithComma(e.target.value))}
                         required
-                        className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
+                        className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-bold text-xs"
                       />
                     </div>
                     <div>
@@ -1200,7 +1228,7 @@ ${itemsText}--------------------------------
                     </div>
                   </div>
 
-                  {/* 대납 주유비 & 대납 추가경비 */}
+                  {/* 대납 주유비 & 대납 추가경비 (콤마 적용) */}
                   <div className="p-3.5 rounded-xl bg-slate-900 border border-indigo-500/30 space-y-3">
                     <div>
                       <label className="text-xs font-bold text-indigo-300 flex items-center gap-1.5 mb-1">
@@ -1208,10 +1236,11 @@ ${itemsText}--------------------------------
                         대납 주유/충전비 (회수금)
                       </label>
                       <input
-                        type="number"
-                        placeholder="사비 선결제 금액 (없으면 0)"
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="선결제 금액 (예: 50,000)"
                         value={newFuel}
-                        onChange={(e) => setNewFuel(e.target.value)}
+                        onChange={(e) => setNewFuel(formatNumberWithComma(e.target.value))}
                         className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-bold text-xs"
                       />
                     </div>
@@ -1222,10 +1251,11 @@ ${itemsText}--------------------------------
                         대납 추가경비 (통행료/세차비/주차비)
                       </label>
                       <input
-                        type="number"
-                        placeholder="선결제한 추가 경비 (없으면 0)"
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="선결제 추가 경비 (없으면 0)"
                         value={newExtraExpense}
-                        onChange={(e) => setNewExtraExpense(e.target.value)}
+                        onChange={(e) => setNewExtraExpense(formatNumberWithComma(e.target.value))}
                         className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-bold text-xs"
                       />
                     </div>
@@ -1265,17 +1295,18 @@ ${itemsText}--------------------------------
                     )}
                   </div>
 
-                  {/* 순수 수입용 팁 */}
+                  {/* 순수 수입용 팁 (콤마 적용) */}
                   <div>
                     <label className="block text-[11px] font-semibold text-emerald-400 mb-1 flex items-center gap-1">
                       <Coins className="w-3.5 h-3.5" />
                       손님 수고비 / 팁 (순수 기사 수익)
                     </label>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="numeric"
                       placeholder="청구문자 미포함, 내 순익에만 합산"
                       value={newTip}
-                      onChange={(e) => setNewTip(e.target.value)}
+                      onChange={(e) => setNewTip(formatNumberWithComma(e.target.value))}
                       className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
                     />
                   </div>
@@ -1360,7 +1391,7 @@ ${itemsText}--------------------------------
                               )}
 
                               <button
-                                onClick={() => setEditingRecord(r)}
+                                onClick={() => handleOpenEditModal(r)}
                                 className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-indigo-300 hover:text-white transition-all cursor-pointer"
                                 title="운행 내역 수정"
                               >
@@ -1516,12 +1547,13 @@ ${itemsText}--------------------------------
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-300 mb-1">지출 금액(원)</label>
                   <input
-                    type="number"
-                    placeholder="4500"
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="4,500"
                     value={expAmount}
-                    onChange={(e) => setExpAmount(e.target.value)}
+                    onChange={(e) => setExpAmount(formatNumberWithComma(e.target.value))}
                     required
-                    className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
+                    className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-bold text-xs"
                   />
                 </div>
                 <div>
@@ -1638,7 +1670,7 @@ ${itemsText}--------------------------------
         )}
       </main>
 
-      {/* 운행 일지 수정 팝업 모달 */}
+      {/* 운행 일지 수정 팝업 모달 (수정 시에도 콤마 지원) */}
       {editingRecord && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
           <div className="w-full max-w-md bg-[#0E1424] border border-slate-800 rounded-2xl p-6 shadow-2xl relative">
@@ -1716,11 +1748,12 @@ ${itemsText}--------------------------------
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-300 mb-1">탁송료(원)</label>
                   <input
-                    type="number"
-                    value={editingRecord.grossAmount}
-                    onChange={(e) => setEditingRecord({ ...editingRecord, grossAmount: Number(e.target.value) })}
+                    type="text"
+                    inputMode="numeric"
+                    value={editGross}
+                    onChange={(e) => setEditGross(formatNumberWithComma(e.target.value))}
                     required
-                    className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
+                    className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-bold text-xs"
                   />
                 </div>
                 <div>
@@ -1738,19 +1771,21 @@ ${itemsText}--------------------------------
                 <div>
                   <label className="block text-[11px] font-semibold text-indigo-300 mb-1">대납 주유비</label>
                   <input
-                    type="number"
-                    value={editingRecord.fuelAmount}
-                    onChange={(e) => setEditingRecord({ ...editingRecord, fuelAmount: Number(e.target.value) })}
-                    className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
+                    type="text"
+                    inputMode="numeric"
+                    value={editFuel}
+                    onChange={(e) => setEditFuel(formatNumberWithComma(e.target.value))}
+                    className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-bold text-xs"
                   />
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold text-sky-300 mb-1">대납 추가경비</label>
                   <input
-                    type="number"
-                    value={editingRecord.extraExpenseAmount}
-                    onChange={(e) => setEditingRecord({ ...editingRecord, extraExpenseAmount: Number(e.target.value) })}
-                    className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
+                    type="text"
+                    inputMode="numeric"
+                    value={editExtra}
+                    onChange={(e) => setEditExtra(formatNumberWithComma(e.target.value))}
+                    className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-bold text-xs"
                   />
                 </div>
               </div>
@@ -1758,9 +1793,10 @@ ${itemsText}--------------------------------
               <div>
                 <label className="block text-[11px] font-semibold text-emerald-400 mb-1">팁/수고비 (순익 가산용)</label>
                 <input
-                  type="number"
-                  value={editingRecord.tipAmount}
-                  onChange={(e) => setEditingRecord({ ...editingRecord, tipAmount: Number(e.target.value) })}
+                  type="text"
+                  inputMode="numeric"
+                  value={editTip}
+                  onChange={(e) => setEditTip(formatNumberWithComma(e.target.value))}
                   className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
                 />
               </div>
