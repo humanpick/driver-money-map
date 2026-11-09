@@ -63,14 +63,12 @@ export default function App() {
     setSelectedDate(d.toISOString().slice(0, 10));
   };
 
-  // 캘린더용 포맷 (예: 2026. 11. 09 (월))
   const getFormattedDate = (dateString: string) => {
     const d = new Date(dateString);
     const days = ['일', '월', '화', '수', '목', '금', '토'];
     return `${d.getFullYear()}. ${String(d.getMonth() + 1).padStart(2, '0')}. ${String(d.getDate()).padStart(2, '0')} (${days[d.getDay()]})`;
   };
 
-  // 월 추출 (예: 2026-11)
   const currentMonthPrefix = selectedDate.substring(0, 7);
   const currentMonthDisplay = `${new Date(selectedDate).getMonth() + 1}월`;
 
@@ -120,7 +118,6 @@ export default function App() {
   const currentFee = grossAmount ? Number(grossAmount) * (feeRate / 100) : 0;
   const currentNetAmount = grossAmount ? (Number(grossAmount) - currentFee) + Number(tipAmount || 0) : 0;
 
-  // 하루 총 순수익 요약
   const filteredRecords = records.filter(r => r.date === selectedDate);
   const filteredExpenses = expenses.filter(e => e.date === selectedDate);
   const dailyDrivingNet = filteredRecords.reduce((sum, r) => sum + (r.grossAmount * (1 - r.feeRate / 100)), 0);
@@ -128,7 +125,6 @@ export default function App() {
   const dailyExpenseTotal = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
   const dailyRealNetProfit = dailyDrivingNet + dailyTips - dailyExpenseTotal;
 
-  // 💡 월 총 누적 순수익 요약 (NEW)
   const monthlyRecords = records.filter(r => r.date.startsWith(currentMonthPrefix));
   const monthlyExpenses = expenses.filter(e => e.date.startsWith(currentMonthPrefix));
   const monthlyDrivingNet = monthlyRecords.reduce((sum, r) => sum + (r.grossAmount * (1 - r.feeRate / 100)), 0);
@@ -141,7 +137,6 @@ export default function App() {
     e.preventDefault();
     if (!departure || !destination || !grossAmount) return;
     
-    // 빠른 입력 칩 배열 업데이트 (중복 제거 후 최근 순으로 6개 유지)
     const newLocs = Array.from(new Set([departure, destination, ...recentLocations])).slice(0, 6);
     setRecentLocations(newLocs);
 
@@ -214,10 +209,10 @@ export default function App() {
     return (
       <label className="cursor-pointer relative group">
         <input type="radio" name="sidebar-menu" className="hidden" checked={isActive} onChange={() => setActiveTab(id)} />
-        <div className={`flex items-center gap-3 px-4 py-3.5 rounded-2xl font-bold transition-all duration-300 ${
+        <div className={`flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all duration-300 ${
           isActive 
-            ? 'bg-gradient-to-r from-[#8B5CF6] to-[#EC4899] text-white shadow-[0_0_20px_rgba(139,92,246,0.6)]' 
-            : 'text-slate-400 hover:bg-slate-800/60 hover:text-white'
+            ? 'bg-gradient-to-r from-[#8B5CF6] to-[#EC4899] text-white shadow-[0_0_15px_rgba(139,92,246,0.5)]' 
+            : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
         }`}>
           <Icon className="w-5 h-5" />
           {label}
@@ -229,49 +224,46 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#0B1120] text-white font-['Pretendard'] flex overflow-hidden">
       
-      {/* --- 왼쪽 사이드바 --- */}
-      <aside className="w-64 min-h-screen bg-gradient-to-b from-[#0B1120] to-[#050B14] border-r border-white/5 flex flex-col p-5 shrink-0 hidden md:flex">
-        <div className="flex items-center gap-3 mb-12 mt-2">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#8B5CF6] to-[#EC4899] flex items-center justify-center shadow-[0_0_25px_rgba(139,92,246,0.5)]">
-            <Wallet className="w-7 h-7 text-white" />
+      {/* --- 왼쪽 사이드바 (기존 오리지널 디자인 복구) --- */}
+      <aside className="w-64 min-h-screen bg-gradient-to-b from-[#0B1120] to-[#0f172a] border-r border-slate-800 flex flex-col p-4 shrink-0 hidden md:flex">
+        <div className="flex items-center gap-3 mb-10 px-2 py-4">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#8B5CF6] to-[#EC4899] flex items-center justify-center shadow-[0_0_15px_rgba(139,92,246,0.4)]">
+            <Wallet className="w-6 h-6 text-white" />
           </div>
           <div>
-            <h1 className="text-2xl font-extrabold tracking-tight bg-gradient-to-r from-white to-[#38BDF8] bg-clip-text text-transparent">JunDriver</h1>
-            <p className="text-xs text-[#8B5CF6] font-medium tracking-widest mt-0.5">드라이버 지갑</p>
+            <h1 className="text-xl font-bold tracking-tight bg-gradient-to-r from-white via-slate-200 to-[#38BDF8] bg-clip-text text-transparent">JunDriver</h1>
+            <p className="text-[10px] text-[#38BDF8]">드라이버 지갑</p>
           </div>
         </div>
-        <nav className="flex flex-col gap-3 flex-1">
+
+        <nav className="flex flex-col gap-2 flex-1">
           {renderMenuButton('driving', CreditCard, '내 지갑 (가계부)')}
           {renderMenuButton('settlement', LayoutDashboard, '플랫폼 정산')}
           {renderMenuButton('accounts', Send, '송금 계좌 관리')}
         </nav>
       </aside>
 
-      {/* --- 모바일 하단 탭 --- */}
-      <div className="md:hidden fixed bottom-0 left-0 w-full bg-[#050B14]/95 backdrop-blur-xl border-t border-white/10 flex justify-around p-2 z-50 shadow-[0_-10px_30px_rgba(0,0,0,0.5)]">
-        <button onClick={() => setActiveTab('driving')} className={`flex flex-col items-center p-2 transition-colors ${activeTab === 'driving' ? 'text-[#38BDF8]' : 'text-slate-500'}`}><CreditCard className="w-6 h-6 mb-1" /><span className="text-[10px] font-bold">지갑</span></button>
-        <button onClick={() => setActiveTab('settlement')} className={`flex flex-col items-center p-2 transition-colors ${activeTab === 'settlement' ? 'text-[#EC4899]' : 'text-slate-500'}`}><LayoutDashboard className="w-6 h-6 mb-1" /><span className="text-[10px] font-bold">정산</span></button>
-        <button onClick={() => setActiveTab('accounts')} className={`flex flex-col items-center p-2 transition-colors ${activeTab === 'accounts' ? 'text-[#8B5CF6]' : 'text-slate-500'}`}><Send className="w-6 h-6 mb-1" /><span className="text-[10px] font-bold">계좌</span></button>
+      {/* --- 모바일 하단 탭 (기존 오리지널 디자인 복구) --- */}
+      <div className="md:hidden fixed bottom-0 left-0 w-full bg-[#0B1120]/90 backdrop-blur-md border-t border-slate-800 flex justify-around p-2 z-50">
+        <button onClick={() => setActiveTab('driving')} className={`flex flex-col items-center p-2 ${activeTab === 'driving' ? 'text-[#38BDF8]' : 'text-slate-500'}`}><CreditCard className="w-6 h-6 mb-1" /><span className="text-[10px] font-bold">지갑</span></button>
+        <button onClick={() => setActiveTab('settlement')} className={`flex flex-col items-center p-2 ${activeTab === 'settlement' ? 'text-[#EC4899]' : 'text-slate-500'}`}><LayoutDashboard className="w-6 h-6 mb-1" /><span className="text-[10px] font-bold">정산</span></button>
+        <button onClick={() => setActiveTab('accounts')} className={`flex flex-col items-center p-2 ${activeTab === 'accounts' ? 'text-[#8B5CF6]' : 'text-slate-500'}`}><Send className="w-6 h-6 mb-1" /><span className="text-[10px] font-bold">계좌</span></button>
       </div>
 
       {/* --- 메인 콘텐츠 영역 --- */}
-      <main className="flex-1 flex justify-center p-4 sm:p-6 md:p-10 h-screen overflow-y-auto pb-24 md:pb-10 scroll-smooth">
-        <div className="w-full max-w-[1200px] flex flex-col gap-8">
+      <main className="flex-1 flex justify-center p-4 sm:p-6 md:p-8 h-screen overflow-y-auto pb-24 md:pb-8 scroll-smooth">
+        <div className="w-full max-w-[1200px] flex flex-col gap-6">
           
+          {/* 모바일 상단 로고 (기존 오리지널 디자인 복구) */}
           <div className="md:hidden flex items-center gap-3 mb-2">
-             <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#8B5CF6] to-[#EC4899] flex items-center justify-center shadow-[0_0_20px_rgba(139,92,246,0.4)]">
-               <Wallet className="w-6 h-6 text-white" />
-             </div>
-             <div className="flex flex-col">
-               <h1 className="text-xl font-extrabold bg-gradient-to-r from-white to-[#38BDF8] bg-clip-text text-transparent leading-tight">JunDriver</h1>
-               <span className="text-[10px] text-[#8B5CF6] font-medium tracking-widest">드라이버 지갑</span>
-             </div>
+             <Wallet className="w-8 h-8 text-[#8B5CF6]" />
+             <h1 className="text-xl font-bold bg-gradient-to-r from-white to-[#38BDF8] bg-clip-text text-transparent">JunDriver</h1>
           </div>
 
           {activeTab === 'driving' && (
             <section className="animate-fade-in space-y-6 md:space-y-8">
               
-              {/* 💡 월 총 수익 도파민 패널 (NEW - 최상단 고정) */}
+              {/* 월 총 수익 패널 */}
               <div className="relative overflow-hidden p-6 rounded-3xl bg-gradient-to-r from-[#8B5CF6]/20 via-[#0B1120] to-[#EC4899]/20 border border-[#8B5CF6]/30 shadow-[0_10px_30px_rgba(139,92,246,0.15)] flex flex-col sm:flex-row justify-between items-center sm:items-end gap-4">
                 <div className="flex items-center gap-4 z-10 w-full sm:w-auto">
                   <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#8B5CF6] to-[#EC4899] flex items-center justify-center shadow-lg">
@@ -291,7 +283,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* --- 고급 캘린더 네비게이션 --- */}
+              {/* 캘린더 네비게이션 (고급화 유지) */}
               <div className="flex flex-col md:flex-row justify-between md:items-end gap-4 mt-8">
                 <div>
                   <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight mb-2">일일 지갑 현황</h2>
@@ -308,7 +300,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* --- 일일 메인 월렛 (블랙 앤 네온) --- */}
+              {/* 일일 메인 월렛 (고급화 유지) */}
               <div className="relative overflow-hidden p-6 md:p-8 rounded-3xl bg-gradient-to-br from-[#1E293B] via-[#0B1120] to-[#020617] border border-emerald-500/20 shadow-[0_10px_30px_rgba(16,185,129,0.1)] group">
                 <div className="relative z-10 flex flex-col md:flex-row justify-between md:items-end gap-6">
                   <div>
@@ -329,7 +321,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* --- 운행 기록 폼 (+ 빠른 입력 칩) --- */}
+              {/* 운행 기록 폼 */}
               <div className="bg-slate-900/50 backdrop-blur-[16px] p-6 rounded-3xl border border-white/10 shadow-2xl">
                 <h3 className="text-lg font-extrabold mb-5 text-[#8B5CF6] flex items-center gap-2"><Navigation className="w-5 h-5"/> 수입 등록</h3>
                 <form onSubmit={handleAddRecord} className="flex flex-col gap-4">
@@ -347,7 +339,6 @@ export default function App() {
                       </div>
                     </div>
                     
-                    {/* 💡 출발지 입력창 + 빠른 입력 칩 */}
                     <div className="flex flex-col gap-1.5 w-full">
                       <div className="flex items-center gap-2 bg-[#FFFFFF] text-[#000000] px-4 py-2.5 rounded-xl font-bold text-sm shadow-inner focus-within:shadow-[0_0_15px_rgba(139,92,246,0.3)]">
                         <MapPin className="w-4 h-4 text-[#8B5CF6] shrink-0" />
@@ -360,7 +351,6 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* 💡 도착지 입력창 + 빠른 입력 칩 */}
                     <div className="flex flex-col gap-1.5 w-full">
                       <div className="flex items-center gap-2 bg-[#FFFFFF] text-[#000000] px-4 py-2.5 rounded-xl font-bold text-sm shadow-inner focus-within:shadow-[0_0_15px_rgba(16,185,129,0.3)]">
                         <MapPin className="w-4 h-4 text-emerald-500 shrink-0" />
@@ -426,7 +416,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* --- 지출 기록 폼 --- */}
+              {/* 지출 기록 폼 */}
               <div className="bg-slate-900/50 backdrop-blur-[16px] p-6 rounded-3xl border border-white/10 shadow-2xl">
                 <h3 className="text-lg font-extrabold mb-5 text-[#EC4899] flex items-center gap-2"><Receipt className="w-5 h-5"/> 일일 지출 내역</h3>
                 <form onSubmit={handleAddExpense} className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
@@ -467,7 +457,6 @@ export default function App() {
             </section>
           )}
 
-          {/* --- 플랫폼 정산 --- */}
           {activeTab === 'settlement' && (
             <section className="bg-slate-900/50 backdrop-blur-[16px] p-6 sm:p-8 rounded-3xl border border-white/10 shadow-2xl animate-fade-in">
               <div className="flex items-center gap-3 mb-8">
@@ -481,7 +470,6 @@ export default function App() {
             </section>
           )}
 
-          {/* --- 송금 계좌 --- */}
           {activeTab === 'accounts' && (
             <section className="bg-slate-900/50 backdrop-blur-[16px] p-6 sm:p-8 rounded-3xl border border-white/10 shadow-2xl animate-fade-in">
               <div className="flex items-center gap-3 mb-8">
