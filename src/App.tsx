@@ -201,14 +201,15 @@ export default function App() {
   const fetchUserData = async (userId: string) => {
     setDataLoading(true);
     try {
-      // 1. 운행 일지 불러오기
       const { data: recordsData, error: recordsError } = await supabase
         .from('driving_records')
         .select('*')
         .eq('user_id', userId)
         .order('date', { ascending: false });
 
-      if (!recordsError && recordsData) {
+      if (recordsError) {
+        console.error('운행 일지 로드 오류:', recordsError);
+      } else if (recordsData) {
         setRecords(
           recordsData.map((r: any) => ({
             id: r.id,
@@ -230,14 +231,15 @@ export default function App() {
         );
       }
 
-      // 2. 경비 장부 불러오기
       const { data: expensesData, error: expensesError } = await supabase
         .from('expenses')
         .select('*')
         .eq('user_id', userId)
         .order('date', { ascending: false });
 
-      if (!expensesError && expensesData) {
+      if (expensesError) {
+        console.error('경비 로드 오류:', expensesError);
+      } else if (expensesData) {
         setExpenses(
           expensesData.map((e: any) => ({
             id: e.id,
@@ -249,7 +251,7 @@ export default function App() {
         );
       }
     } catch (err) {
-      console.error('데이터 로드 실패:', err);
+      console.error('데이터 통신 실패:', err);
     } finally {
       setDataLoading(false);
     }
@@ -363,10 +365,13 @@ export default function App() {
     }
   };
 
-  // 운행 등록 핸들러 (Supabase DB INSERT)
+  // 운행 등록 핸들러 (에러 검증 포함)
   const handleAddRecord = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!session) return;
+    if (!session) {
+      alert('로그인이 필요한 기능입니다.');
+      return;
+    }
 
     const gross = Number(newGross) || 0;
     const feeRate = Number(newFeeRate) || 0;
@@ -378,6 +383,34 @@ export default function App() {
     const net = gross - feeAmount + tip;
     const claimTotal = gross + fuel + extraExp;
     const recordId = 'rec_' + Date.now().toString();
+
+    const insertPayload = {
+      id: recordId,
+      user_id: session.user.id,
+      date: newDate,
+      start_time: newStartTime || '-',
+      end_time: newEndTime || '-',
+      departure: newDeparture,
+      destination: newDestination,
+      gross_amount: gross,
+      fee_rate: feeRate,
+      fuel_amount: fuel,
+      extra_expense_amount: extraExp,
+      tip_amount: tip,
+      receipt_image: receiptImage || null,
+      is_paid: false,
+      net_amount: Math.round(net),
+      total_claim_amount: Math.round(claimTotal),
+    };
+
+    // DB에 먼저 전송하고 성공 시에만 로컬 상태에 반영
+    const { error } = await supabase.from('driving_records').insert([insertPayload]);
+
+    if (error) {
+      alert('DB 저장 오류 발생: ' + error.message + '\n(세부: ' + error.details + ')');
+      console.error('Insert error:', error);
+      return;
+    }
 
     const newRecord: DrivingRecord = {
       id: recordId,
@@ -397,7 +430,6 @@ export default function App() {
       totalClaimAmount: Math.round(claimTotal),
     };
 
-    // UI 우선 반영
     setRecords([newRecord, ...records]);
     setNewDeparture('');
     setNewDestination('');
@@ -406,31 +438,9 @@ export default function App() {
     setNewExtraExpense('');
     setNewTip('');
     setReceiptImage('');
-
-    // DB 영구 저장
-    await supabase.from('driving_records').insert([
-      {
-        id: newRecord.id,
-        user_id: session.user.id,
-        date: newRecord.date,
-        start_time: newRecord.startTime,
-        end_time: newRecord.endTime,
-        departure: newRecord.departure,
-        destination: newRecord.destination,
-        gross_amount: newRecord.grossAmount,
-        fee_rate: newRecord.feeRate,
-        fuel_amount: newRecord.fuelAmount,
-        extra_expense_amount: newRecord.extraExpenseAmount,
-        tip_amount: newRecord.tipAmount,
-        receipt_image: newRecord.receiptImage || null,
-        is_paid: false,
-        net_amount: newRecord.netAmount,
-        total_claim_amount: newRecord.totalClaimAmount,
-      },
-    ]);
   };
 
-  // 운행 기록 수정 저장 핸들러 (Supabase DB UPDATE)
+  // 운행 기록 수정 저장 핸들러
   const handleUpdateRecord = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingRecord || !session) return;
@@ -445,6 +455,29 @@ export default function App() {
     const net = gross - feeAmount + tip;
     const claimTotal = gross + fuel + extraExp;
 
+    const { error } = await supabase
+      .from('driving_records')
+      .update({
+        date: editingRecord.date,
+        start_time: editingRecord.startTime,
+        end_time: editingRecord.endTime,
+        departure: editingRecord.departure,
+        destination: editingRecord.destination,
+        gross_amount: gross,
+        fee_rate: feeRate,
+        fuel_amount: fuel,
+        extra_expense_amount: extraExp,
+        tip_amount: tip,
+        net_amount: Math.round(net),
+        total_claim_amount: Math.round(claimTotal),
+      })
+      .eq('id', editingRecord.id);
+
+    if (error) {
+      alert('수정 실패: ' + error.message);
+      return;
+    }
+
     const updated: DrivingRecord = {
       ...editingRecord,
       grossAmount: gross,
@@ -458,40 +491,30 @@ export default function App() {
 
     setRecords(records.map((r) => (r.id === updated.id ? updated : r)));
     setEditingRecord(null);
-
-    await supabase
-      .from('driving_records')
-      .update({
-        date: updated.date,
-        start_time: updated.startTime,
-        end_time: updated.endTime,
-        departure: updated.departure,
-        destination: updated.destination,
-        gross_amount: updated.grossAmount,
-        fee_rate: updated.feeRate,
-        fuel_amount: updated.fuelAmount,
-        extra_expense_amount: updated.extraExpenseAmount,
-        tip_amount: updated.tipAmount,
-        net_amount: updated.netAmount,
-        total_claim_amount: updated.totalClaimAmount,
-      })
-      .eq('id', updated.id);
   };
 
-  // 운행 기록 삭제 핸들러 (Supabase DB DELETE)
+  // 운행 기록 삭제 핸들러
   const handleDeleteRecord = async (id: string) => {
+    const { error } = await supabase.from('driving_records').delete().eq('id', id);
+    if (error) {
+      alert('삭제 실패: ' + error.message);
+      return;
+    }
     setRecords(records.filter((r) => r.id !== id));
-    await supabase.from('driving_records').delete().eq('id', id);
   };
 
-  // 입금 상태 토글 (Supabase DB UPDATE)
+  // 입금 상태 토글
   const togglePaidStatus = async (id: string) => {
     const target = records.find((r) => r.id === id);
     if (!target) return;
     const newStatus = !target.isPaid;
 
+    const { error } = await supabase.from('driving_records').update({ is_paid: newStatus }).eq('id', id);
+    if (error) {
+      alert('상태 변경 실패: ' + error.message);
+      return;
+    }
     setRecords(records.map((r) => (r.id === id ? { ...r, isPaid: newStatus } : r)));
-    await supabase.from('driving_records').update({ is_paid: newStatus }).eq('id', id);
   };
 
   // 청구 문자 템플릿 생성
@@ -559,11 +582,26 @@ ${itemsText}--------------------------------
     return Math.max(0, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
   };
 
-  // 경비 등록 핸들러 (Supabase DB INSERT)
+  // 경비 등록 핸들러
   const handleAddExpense = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!expAmount || !session) return;
     const expenseId = 'exp_' + Date.now().toString();
+
+    const insertPayload = {
+      id: expenseId,
+      user_id: session.user.id,
+      date: newDate,
+      category: expCategory,
+      amount: Number(expAmount) || 0,
+      memo: expMemo,
+    };
+
+    const { error } = await supabase.from('expenses').insert([insertPayload]);
+    if (error) {
+      alert('경비 저장 실패: ' + error.message);
+      return;
+    }
 
     const newExp: ExpenseRecord = {
       id: expenseId,
@@ -576,23 +614,16 @@ ${itemsText}--------------------------------
     setExpenses([newExp, ...expenses]);
     setExpAmount('');
     setExpMemo('');
-
-    await supabase.from('expenses').insert([
-      {
-        id: newExp.id,
-        user_id: session.user.id,
-        date: newExp.date,
-        category: newExp.category,
-        amount: newExp.amount,
-        memo: newExp.memo,
-      },
-    ]);
   };
 
-  // 경비 삭제 핸들러 (Supabase DB DELETE)
+  // 경비 삭제 핸들러
   const handleDeleteExpense = async (id: string) => {
+    const { error } = await supabase.from('expenses').delete().eq('id', id);
+    if (error) {
+      alert('삭제 실패: ' + error.message);
+      return;
+    }
     setExpenses(expenses.filter((e) => e.id !== id));
-    await supabase.from('expenses').delete().eq('id', id);
   };
 
   // 계좌 추가 핸들러 (기기 로컬)
@@ -923,7 +954,7 @@ ${itemsText}--------------------------------
         </div>
       </header>
 
-      {/* 메인 본문 컨테이너 */}
+      {/* 본문 컨테이너 */}
       <main className="max-w-[1400px] mx-auto px-4 lg:px-8 pt-6 space-y-6">
         
         {/* 미수금 알림 배너 */}
@@ -1169,6 +1200,7 @@ ${itemsText}--------------------------------
                     </div>
                   </div>
 
+                  {/* 대납 주유비 & 대납 추가경비 */}
                   <div className="p-3.5 rounded-xl bg-slate-900 border border-indigo-500/30 space-y-3">
                     <div>
                       <label className="text-xs font-bold text-indigo-300 flex items-center gap-1.5 mb-1">
@@ -1233,6 +1265,7 @@ ${itemsText}--------------------------------
                     )}
                   </div>
 
+                  {/* 순수 수입용 팁 */}
                   <div>
                     <label className="block text-[11px] font-semibold text-emerald-400 mb-1 flex items-center gap-1">
                       <Coins className="w-3.5 h-3.5" />
@@ -1268,7 +1301,7 @@ ${itemsText}--------------------------------
 
                 {filteredRecords.length === 0 ? (
                   <div className="py-12 text-center text-slate-500 text-xs">
-                    {dataLoading ? '데이터를 불러오는 중입니다...' : '해당 일자에 등록된 운행이 없습니다.'}
+                    {dataLoading ? '데이터를 불러오는 중입니다...' : '등록된 운행 기록이 없습니다.'}
                   </div>
                 ) : (
                   <div className="space-y-3 max-h-[560px] overflow-y-auto pr-1">
