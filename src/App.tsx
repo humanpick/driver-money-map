@@ -31,7 +31,8 @@ import {
   Image as ImageIcon,
   AlertTriangle,
   MessageSquare,
-  Check
+  Check,
+  Edit2
 } from 'lucide-react';
 
 // Supabase 클라이언트 초기화
@@ -97,14 +98,17 @@ export default function App() {
   const [pwdLoading, setPwdLoading] = useState(false);
   const [pwdMessage, setPwdMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // 운행 일지 수정 모달 상태
+  const [editingRecord, setEditingRecord] = useState<DrivingRecord | null>(null);
+
   // 영수증 사진 확대 모달 상태
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   // 청구 문자 전용 모달 및 개별 항목 선택 상태
   const [claimModalOpen, setClaimModalOpen] = useState(false);
   const [selectedClaimRecord, setSelectedClaimRecord] = useState<DrivingRecord | null>(null);
-  const [includeGross, setIncludeGross] = useState(true); // 탁송료 포함 여부
-  const [includeFuel, setIncludeFuel] = useState(true); // 주유비 포함 여부
+  const [includeGross, setIncludeGross] = useState(true);
+  const [includeFuel, setIncludeFuel] = useState(true);
   const [claimMessageText, setClaimMessageText] = useState('');
 
   // 파일 입력 ref
@@ -345,6 +349,31 @@ export default function App() {
     setReceiptImage('');
   };
 
+  // 운행 기록 수정 저장 핸들러
+  const handleUpdateRecord = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingRecord) return;
+
+    const gross = Number(editingRecord.grossAmount) || 0;
+    const feeRate = Number(editingRecord.feeRate) || 0;
+    const fuel = Number(editingRecord.fuelAmount) || 0;
+    const feeAmount = gross * (feeRate / 100);
+    const net = gross - feeAmount;
+    const claimTotal = gross + fuel;
+
+    const updated: DrivingRecord = {
+      ...editingRecord,
+      grossAmount: gross,
+      feeRate,
+      fuelAmount: fuel,
+      netAmount: Math.round(net),
+      totalClaimAmount: Math.round(claimTotal),
+    };
+
+    setRecords(records.map((r) => (r.id === updated.id ? updated : r)));
+    setEditingRecord(null);
+  };
+
   // 입금 상태 토글
   const togglePaidStatus = (id: string) => {
     setRecords(records.map(r => r.id === id ? { ...r, isPaid: !r.isPaid } : r));
@@ -391,7 +420,7 @@ ${itemsText}--------------------------------
     setClaimModalOpen(true);
   };
 
-  // 체크박스 클릭에 따라 청구 문구 및 합산 실시간 재계산
+  // 체크박스 클릭 토글
   const handleToggleInclude = (type: 'gross' | 'fuel') => {
     if (!selectedClaimRecord) return;
     const newGross = type === 'gross' ? !includeGross : includeGross;
@@ -988,7 +1017,7 @@ ${itemsText}--------------------------------
                               </div>
                               <div>
                                 <div className="text-sm font-bold text-white flex items-center gap-2">
-                                  <span>{r.departure}</span>
+                                <span>{r.departure}</span>
                                   <span className="text-indigo-400">➔</span>
                                   <span>{r.destination}</span>
                                 </div>
@@ -1028,6 +1057,16 @@ ${itemsText}--------------------------------
                                   <ImageIcon className="w-3.5 h-3.5" />
                                 </button>
                               )}
+
+                              {/* [수정 버튼] 복구 완료 */}
+                              <button
+                                onClick={() => setEditingRecord(r)}
+                                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-indigo-300 hover:text-white transition-all cursor-pointer"
+                                title="운행 내역 수정"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+
                               <button
                                 onClick={() => setRecords(records.filter((item) => item.id !== r.id))}
                                 className="p-1.5 text-slate-500 hover:text-rose-400 cursor-pointer"
@@ -1047,7 +1086,7 @@ ${itemsText}--------------------------------
           </div>
         )}
 
-        {/* TAB 2: 청구문자 (미수금 관리) 전용 탭 */}
+        {/* TAB 2: 청구문자 */}
         {activeTab === 'claims' && (
           <div className="bg-[#0E1424]/80 border border-slate-800/80 rounded-xl p-6 space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
@@ -1298,7 +1337,132 @@ ${itemsText}--------------------------------
         )}
       </main>
 
-      {/* 청구 문자 선택 합산 및 직접 편집 모달 (핵심 기능) */}
+      {/* 운행 일지 수정 팝업 모달 */}
+      {editingRecord && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="w-full max-w-md bg-[#0E1424] border border-slate-800 rounded-2xl p-6 shadow-2xl relative">
+            <button
+              onClick={() => setEditingRecord(null)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-2.5 mb-4">
+              <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-400">
+                <Edit2 className="w-4 h-4" />
+              </div>
+              <h3 className="text-sm font-bold text-white">운행 일지 내역 수정</h3>
+            </div>
+
+            <form onSubmit={handleUpdateRecord} className="space-y-3.5">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1">운행 일자</label>
+                <input
+                  type="date"
+                  value={editingRecord.date}
+                  onChange={(e) => setEditingRecord({ ...editingRecord, date: e.target.value })}
+                  required
+                  className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">출발 시각</label>
+                  <input
+                    type="time"
+                    value={editingRecord.startTime}
+                    onChange={(e) => setEditingRecord({ ...editingRecord, startTime: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">도착 시각</label>
+                  <input
+                    type="time"
+                    value={editingRecord.endTime}
+                    onChange={(e) => setEditingRecord({ ...editingRecord, endTime: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">출발지</label>
+                  <input
+                    type="text"
+                    value={editingRecord.departure}
+                    onChange={(e) => setEditingRecord({ ...editingRecord, departure: e.target.value })}
+                    required
+                    className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">도착지</label>
+                  <input
+                    type="text"
+                    value={editingRecord.destination}
+                    onChange={(e) => setEditingRecord({ ...editingRecord, destination: e.target.value })}
+                    required
+                    className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">탁송료(원)</label>
+                  <input
+                    type="number"
+                    value={editingRecord.grossAmount}
+                    onChange={(e) => setEditingRecord({ ...editingRecord, grossAmount: Number(e.target.value) })}
+                    required
+                    className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">수수료(%)</label>
+                  <input
+                    type="number"
+                    value={editingRecord.feeRate}
+                    onChange={(e) => setEditingRecord({ ...editingRecord, feeRate: Number(e.target.value) })}
+                    className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">대납 주유비</label>
+                  <input
+                    type="number"
+                    value={editingRecord.fuelAmount}
+                    onChange={(e) => setEditingRecord({ ...editingRecord, fuelAmount: Number(e.target.value) })}
+                    className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingRecord(null)}
+                  className="flex-1 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs cursor-pointer"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-md cursor-pointer"
+                >
+                  수정 완료
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 청구 문자 선택 합산 및 직접 편집 모달 */}
       {claimModalOpen && selectedClaimRecord && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
           <div className="w-full max-w-lg bg-[#0E1424] border border-slate-800 rounded-2xl p-6 shadow-2xl relative">
@@ -1317,7 +1481,6 @@ ${itemsText}--------------------------------
               청구할 항목을 클릭해 선택하면 문구와 합산 금액이 실시간으로 변경됩니다.
             </p>
 
-            {/* 청구 항목 선택 버튼/체크박스 바 */}
             <div className="grid grid-cols-2 gap-2.5 mb-4 p-3 rounded-xl bg-slate-900 border border-slate-800">
               <button
                 type="button"
@@ -1349,7 +1512,6 @@ ${itemsText}--------------------------------
               </button>
             </div>
 
-            {/* 편집 영역 */}
             <textarea
               rows={9}
               value={claimMessageText}
