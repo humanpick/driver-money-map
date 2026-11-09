@@ -1,0 +1,67 @@
+@import "tailwindcss";
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css');
+@import 'maplibre-gl/dist/maplibre-gl.css';
+
+/* 1. 시각적 정체성: 다크 모드 배경 및 타이포그래피 */
+body {
+  background-color: #0B1120 !important;
+  color: #CBD5E1 !important; /* 연한 슬레이트 */
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif !important;
+}
+
+/* 2. 입력창 표준 (White Form) 완벽 적용 */
+input, select, textarea {
+  background-color: #FFFFFF !important;
+  color: #000000 !important; /* 글자색 블랙 강제 */
+  font-weight: 600 !important; /* 굵기 600 이상 */
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  transition: all 0.3s ease-in-out;
+}
+
+/* 포커스 시 보라색 네온 섀도우 */
+input:focus, select:focus, textarea:focus {
+  outline: none !important;
+  border-color: #8B5CF6 !important;
+  box-shadow: 0 0 15px rgba(139, 92, 246, 0.6), inset 0 0 0 1px #8B5CF6 !important;
+}
+
+input::placeholder, textarea::placeholder {
+  color: #94a3b8 !important;
+  font-weight: 500 !important;
+}
+
+/* 3. 카드 컴포넌트: 글래스모피즘 표준 */
+.glass-panel {
+  background-color: rgba(15, 23, 42, 0.7) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 1rem;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
+}
+
+/* 4. 인터랙션: 사이버펑크 버튼 표준 */
+.cyber-button {
+  background: linear-gradient(to right, #8B5CF6, #EC4899) !important;
+  color: #FFFFFF !important;
+  font-weight: 700 !important;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 호버 시 Y축 부상 및 글로우 섀도우 */
+.cyber-button:hover {
+  transform: translateY(-4px) !important;
+  box-shadow: 0 10px 20px -5px rgba(139, 92, 246, 0.6), 0 0 15px rgba(236, 72, 153, 0.5) !important;
+}
+
+/* 스크롤바 최적화 */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
