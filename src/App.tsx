@@ -1,686 +1,360 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import {
-  LayoutDashboard, PlusCircle, History, AlertTriangle, Fuel,
-  CreditCard, Receipt, Building2, Bell, PieChart, Calendar,
-  Users, Download, Settings, Search, CheckCircle2, X, Plus,
-  Send, Copy, ChevronRight, Menu, Car, Map, User, Edit, Trash2
-} from 'lucide-react';
+import React, { useState } from 'react';
+import { Send, Copy, Check, Plus, Building2, Trash2, Edit3, X, Save, CheckCircle2, AlertCircle, Clock, Wallet, LayoutDashboard, MapPin, Navigation } from 'lucide-react';
 
-// --- INITIAL MOCK DATA ---
-const INITIAL_COMPANIES = [
-  { id: 'c1', name: 'SK로드탁송', contact: '010-1234-5678', cycle: '매주 금요일', defaultFee: 180000 },
-  { id: 'c2', name: '카카오대리', contact: '1588-0000', cycle: '당일 정산', defaultFee: 45000 },
-];
+// --- Types ---
+interface DrivingRecord {
+  id: string;
+  time: string;
+  departure: string;
+  destination: string;
+  amount: number;
+}
 
-const INITIAL_TRIPS = [
-  {
-    id: 'TRIP-1001', date: '2026-11-07', startTime: '14:00', endTime: '17:30',
-    type: '로드탁송', company: 'SK로드탁송', customer: '홍길동', phone: '010-8888-9999',
-    vehicleNo: '12가 3456', vehicleType: '제네시스 G80', from: '서울 강남구', to: '부산 해운대구',
-    freightFee: 180000, fuelFee: 70000, fuelPaidBy: 'driver_prepaid',
-    dueDate: '2026-11-14', status: '정산 대기', paidFreight: 0, paidFuel: 0,
-    memo: '주유비 7만원선결제 (영수증 첨부완료)'
-  },
-  {
-    id: 'TRIP-1003', date: '2026-11-05', startTime: '09:00', endTime: '12:00',
-    type: '로드탁송', company: '오토원탁송', customer: '성춘향', phone: '010-7777-1111',
-    vehicleNo: '77다 1234', vehicleType: 'K8 Hybrid', from: '경기 수원', to: '대전 유성구',
-    freightFee: 200000, fuelFee: 50000, fuelPaidBy: 'driver_prepaid',
-    dueDate: '2026-11-06', status: '부분 입금', paidFreight: 100000, paidFuel: 0,
-    memo: '탁송비 1차 10만원 입금됨, 잔액 10만+주유 5만 미수'
-  }
-];
+interface Settlement {
+  id: string;
+  company: string;
+  amount: number;
+  expectedDate: string;
+  status: 'pending' | 'completed' | 'overdue';
+}
 
-const INITIAL_EXPENSES = [
-  { id: 'e1', date: '2026-11-07', category: '통행료', amount: 15400, memo: '서울-부산 톨게이트' },
-  { id: 'e2', date: '2026-11-07', category: '복귀 교통비', amount: 32000, memo: 'KTX 부산-서울' },
-];
+interface RemittanceAccount {
+  id: string;
+  agencyName: string; 
+  bankName: string;   
+  accountNumber: string; 
+  holder: string;     
+}
 
 export default function App() {
-  const [trips, setTrips] = useState(() => {
-    const saved = localStorage.getItem('dm_trips');
-    return saved ? JSON.parse(saved) : INITIAL_TRIPS;
-  });
-
-  const [expenses, setExpenses] = useState(() => {
-    const saved = localStorage.getItem('dm_expenses');
-    return saved ? JSON.parse(saved) : INITIAL_EXPENSES;
-  });
-
-  // 내 계좌번호 상태 저장
-  const [accountInfo, setAccountInfo] = useState(() => {
-    const saved = localStorage.getItem('dm_account');
-    return saved ? JSON.parse(saved) : { bank: '', number: '', holder: '' };
-  });
-
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-
-  // Modal States
-  const [isTripModalOpen, setIsTripModalOpen] = useState(false);
-  const [editingTrip, setEditingTrip] = useState<any>(null);
-  const [isDepositModalOpen, setIsDepositModalOpen] = useState(false);
-  const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
-  const [isSmsModalOpen, setIsSmsModalOpen] = useState(false);
-  const [selectedTripForSms, setSelectedTripForSms] = useState<any>(null);
-  const [selectedTripForDeposit, setSelectedTripForDeposit] = useState<any>(null);
-  const [searchTerm, setSearchTerm] = useState('');
-
-  useEffect(() => localStorage.setItem('dm_trips', JSON.stringify(trips)), [trips]);
-  useEffect(() => localStorage.setItem('dm_expenses', JSON.stringify(expenses)), [expenses]);
-  useEffect(() => localStorage.setItem('dm_account', JSON.stringify(accountInfo)), [accountInfo]); // 계좌정보 자동 저장
-
-  // Financial Engine
-  const stats = useMemo(() => {
-    let todayCount = 0, todaySettlementTarget = 0, todayDeposit = 0;
-    let totalUnpaidFreight = 0, totalUnpaidFuel = 0;
-    let monthlyFreightIncome = 0, monthlyExpenses = 0;
-    const todayStr = '2026-11-07';
-
-    trips.forEach(t => {
-      const freightUnpaid = t.freightFee - t.paidFreight;
-      const fuelUnpaid = t.fuelPaidBy === 'driver_prepaid' ? Math.max(0, t.fuelFee - t.paidFuel) : 0;
-      totalUnpaidFreight += freightUnpaid;
-      totalUnpaidFuel += fuelUnpaid;
-      monthlyFreightIncome += t.paidFreight;
-
-      if (t.date === todayStr) {
-        todayCount++;
-        todaySettlementTarget += (t.freightFee + (t.fuelPaidBy === 'driver_prepaid' ? t.fuelFee : 0));
-        todayDeposit += (t.paidFreight + t.paidFuel);
-      }
-    });
-
-    expenses.forEach(e => { monthlyExpenses += Number(e.amount || 0); });
-
-    return {
-      todayCount, todaySettlementTarget, todayDeposit,
-      totalUnpaidFreight, totalUnpaidFuel,
-      totalUnpaid: totalUnpaidFreight + totalUnpaidFuel,
-      monthlyFreightIncome, monthlyExpenses,
-      netProfit: monthlyFreightIncome - monthlyExpenses
-    };
-  }, [trips, expenses]);
-
-  // 입금 처리 로직
-  const handleApplyDeposit = (tripId: string, freightAmt: number, fuelAmt: number) => {
-    setTrips(prev => prev.map(t => {
-      if (t.id === tripId) {
-        const newPaidFreight = t.paidFreight + freightAmt;
-        const newPaidFuel = t.paidFuel + fuelAmt;
-        const totalTarget = t.freightFee + (t.fuelPaidBy === 'driver_prepaid' ? t.fuelFee : 0);
-        const totalPaid = newPaidFreight + newPaidFuel;
-        let newStatus = '부분 입금';
-        if (totalPaid >= totalTarget) newStatus = '정산 완료';
-        else if (totalPaid === 0) newStatus = '정산 대기';
-        
-        return { ...t, paidFreight: newPaidFreight, paidFuel: newPaidFuel, status: newStatus };
-      }
-      return t;
-    }));
-    setIsDepositModalOpen(false);
+  // --- State: 운행 기록 (시간 + 출발/도착 + 수입) ---
+  const [records, setRecords] = useState<DrivingRecord[]>([
+    { id: '1', time: '09:30', departure: '서울 강남', destination: '경기 성남', amount: 45000 },
+    { id: '2', time: '14:15', departure: '경기 수원', destination: '인천 송도', amount: 65000 },
+  ]);
+  
+  // 현재 시간을 HH:MM 형식으로 기본 세팅
+  const getCurrentTime = () => {
+    const now = new Date();
+    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   };
 
-  // 운행 내역 삭제 로직
-  const handleDeleteTrip = (tripId: string) => {
-    if (window.confirm('정말 이 운행 내역을 삭제하시겠습니까? (삭제 후 복구할 수 없습니다)')) {
-      setTrips(prev => prev.filter(t => t.id !== tripId));
+  const [recordTime, setRecordTime] = useState(getCurrentTime());
+  const [departure, setDeparture] = useState('');
+  const [destination, setDestination] = useState('');
+  const [recordAmount, setRecordAmount] = useState('');
+
+  // --- State: 정산 및 미수금 관리 ---
+  const [settlements, setSettlements] = useState<Settlement[]>([
+    { id: '1', company: '로지 연합대행사', amount: 145000, expectedDate: '2026-11-10', status: 'pending' },
+    { id: '2', company: '아이원 물류', amount: 98000, expectedDate: '2026-11-05', status: 'overdue' },
+    { id: '3', company: '한국탁송플러스', amount: 210000, expectedDate: '2026-11-01', status: 'completed' },
+  ]);
+
+  const totalPending = settlements.filter(s => s.status !== 'completed').reduce((sum, s) => sum + s.amount, 0);
+  const totalOverdue = settlements.filter(s => s.status === 'overdue').reduce((sum, s) => sum + s.amount, 0);
+  const totalTodayEarnings = records.reduce((sum, r) => sum + r.amount, 0);
+
+  // --- State: 송금 계좌 관리 ---
+  const [accounts, setAccounts] = useState<RemittanceAccount[]>([
+    { id: '1', agencyName: '로지 연합충전계좌', bankName: '국민은행', accountNumber: '123456-04-789012', holder: '(주)로지소프트' },
+    { id: '2', agencyName: '아이콘 물류비 송금', bankName: '신한은행', accountNumber: '987654-11-234567', holder: '아이콘(주)' },
+  ]);
+  
+  const [newAgency, setNewAgency] = useState('');
+  const [newBank, setNewBank] = useState('');
+  const [newAccount, setNewAccount] = useState('');
+  const [newHolder, setNewHolder] = useState('');
+  
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editAgency, setEditAgency] = useState('');
+  const [editBank, setEditBank] = useState('');
+  const [editAccount, setEditAccount] = useState('');
+  const [editHolder, setEditHolder] = useState('');
+
+  // --- Handlers: 운행 기록 추가 ---
+  const handleAddRecord = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!departure || !destination || !recordAmount) return;
+
+    const newRecord: DrivingRecord = {
+      id: Date.now().toString(),
+      time: recordTime || getCurrentTime(),
+      departure,
+      destination,
+      amount: Number(recordAmount),
+    };
+
+    setRecords([newRecord, ...records]);
+    setDeparture('');
+    setDestination('');
+    setRecordAmount('');
+    setRecordTime(getCurrentTime());
+  };
+
+  const handleDeleteRecord = (id: string) => {
+    setRecords(records.filter(r => r.id !== id));
+  };
+
+  // --- Handlers: 송금 계좌 ---
+  const handleCopy = (id: string, accountNumber: string) => {
+    navigator.clipboard.writeText(accountNumber);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const handleAddAccount = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newAgency || !newAccount) return;
+    const newItem: RemittanceAccount = {
+      id: Date.now().toString(),
+      agencyName: newAgency,
+      bankName: newBank || '미입력',
+      accountNumber: newAccount,
+      holder: newHolder || '미입력',
+    };
+    setAccounts([newItem, ...accounts]);
+    setNewAgency(''); setNewBank(''); setNewAccount(''); setNewHolder('');
+  };
+
+  const handleDelete = (id: string) => {
+    if (window.confirm('정말 이 송금 계좌를 삭제하시겠습니까?')) {
+      setAccounts(accounts.filter(acc => acc.id !== id));
     }
   };
 
-  const navItems = [
-    { id: 'dashboard', label: '대시보드', icon: LayoutDashboard },
-    { id: 'trip_list', label: '운행 내역', icon: History },
-    { id: 'unpaid', label: '미수금 & SMS', icon: AlertTriangle, badge: trips.filter(t => (t.freightFee - t.paidFreight + (t.fuelPaidBy==='driver_prepaid'?(t.fuelFee-t.paidFuel):0)) > 0).length },
-    { id: 'fuel', label: '주유비 환급', icon: Fuel },
-    { id: 'expenses', label: '지출 관리', icon: Receipt },
-    { id: 'analytics', label: '수익 분석', icon: PieChart },
-    { id: 'backup', label: '백업/엑셀', icon: Download },
-    { id: 'map', label: '콜지 지도', icon: Map },
-    { id: 'profile', label: '내 정보', icon: User },
-  ];
+  const handleStartEdit = (acc: RemittanceAccount) => {
+    setEditingId(acc.id);
+    setEditAgency(acc.agencyName);
+    setEditBank(acc.bankName);
+    setEditAccount(acc.accountNumber);
+    setEditHolder(acc.holder);
+  };
 
-  const mobileNavItems = [
-    { id: 'dashboard', label: '홈', icon: LayoutDashboard },
-    { id: 'trip_list', label: '내역', icon: History },
-    { id: 'unpaid', label: '미수금', icon: AlertTriangle, badge: trips.filter(t => (t.freightFee - t.paidFreight + (t.fuelPaidBy==='driver_prepaid'?(t.fuelFee-t.paidFuel):0)) > 0).length },
-    { id: 'analytics', label: '분석', icon: PieChart },
-    { id: 'profile', label: '정보', icon: User },
-  ];
+  const handleSaveEdit = (id: string) => {
+    setAccounts(accounts.map(acc => acc.id === id ? {
+      ...acc, agencyName: editAgency, bankName: editBank, accountNumber: editAccount, holder: editHolder
+    } : acc));
+    setEditingId(null);
+  };
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row antialiased">
-      {/* ---------------- DESKTOP SIDEBAR ---------------- */}
-      <aside className="hidden md:flex flex-col w-64 glass-panel rounded-none border-t-0 border-l-0 border-b-0 p-4 shrink-0">
-        <div className="flex items-center gap-3 px-3 py-4 mb-4 border-b border-white/10">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#8B5CF6] to-[#EC4899] flex items-center justify-center shadow-[0_0_15px_rgba(139,92,246,0.5)]">
-            <Car className="w-6 h-6 text-white" />
-          </div>
-          <div>
-            <h1 className="font-extrabold text-lg bg-gradient-to-r from-white to-[#8B5CF6] bg-clip-text text-transparent">
-              DRIVER MONEY
-            </h1>
-          </div>
-        </div>
-        <nav className="space-y-1">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeTab === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => setActiveTab(item.id)}
-                className={`w-full flex items-center justify-between px-3 py-3 rounded-xl text-sm font-bold transition-all ${
-                  isActive ? 'bg-[#8B5CF6]/30 text-white shadow-[0_0_10px_rgba(139,92,246,0.2)] border border-[#8B5CF6]/50' : 'text-[#CBD5E1] hover:bg-white/5 hover:text-white'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <Icon className={`w-4 h-4 ${isActive ? 'text-[#8B5CF6]' : 'text-[#CBD5E1]'}`} />
-                  <span>{item.label}</span>
-                </div>
-                {item.badge && item.badge > 0 ? (
-                  <span className="px-2 py-0.5 text-xs rounded-full bg-[#EC4899] text-white font-bold">{item.badge}</span>
-                ) : null}
-              </button>
-            );
-          })}
-        </nav>
-      </aside>
-
-      {/* ---------------- MOBILE HEADER ---------------- */}
-      <div className="md:hidden glass-panel rounded-none flex items-center justify-between px-4 py-3 sticky top-0 z-40">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-[#8B5CF6] to-[#EC4899] flex items-center justify-center">
-            <Car className="w-5 h-5 text-white" />
-          </div>
-          <span className="font-black bg-gradient-to-r from-white to-[#8B5CF6] bg-clip-text text-transparent">DRIVER MONEY</span>
-        </div>
-        <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 text-white">
-          {isMobileMenuOpen ? <X /> : <Menu />}
-        </button>
-      </div>
-
-      {/* ---------------- MAIN CONTENT ---------------- */}
-      <main className="flex-1 p-4 md:p-8 overflow-y-auto w-full pb-24 md:pb-8">
+    <div className="min-h-screen bg-[#0B1120] text-white font-['Pretendard'] w-full flex justify-center p-4 sm:p-6 overflow-x-hidden">
+      {/* Container: Max-width 1400px, Zero-Scroll 지향 */}
+      <div className="w-full max-w-[1400px] flex flex-col gap-6">
         
-        {/* TOP ACTION BAR */}
-        <header className="mb-6 flex flex-col sm:flex-row justify-between gap-4 border-b border-white/10 pb-4">
-          <div>
-            <h2 className="text-2xl font-black text-white flex items-center gap-2">
-              {navItems.find(n => n.id === activeTab)?.label}
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-[#38BDF8]/20 border border-[#38BDF8]/30 text-[#38BDF8]">
-                2026-11-07
-              </span>
-            </h2>
+        {/* --- Header (JunDriver 브랜딩) --- */}
+        <header className="flex items-center justify-between py-4 border-b border-slate-800">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#8B5CF6] to-[#EC4899] flex items-center justify-center shadow-[0_0_15px_rgba(139,92,246,0.4)]">
+              <Wallet className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight bg-gradient-to-r from-white via-slate-200 to-[#38BDF8] bg-clip-text text-transparent">
+                JunDriver
+              </h1>
+              <p className="text-xs sm:text-sm text-[#38BDF8]">탁송 기사 전용 스마트 가계부 & 물류 허브</p>
+            </div>
           </div>
-          <div className="flex gap-2">
-            <button onClick={() => { setEditingTrip(null); setIsTripModalOpen(true); }} className="cyber-button px-4 py-2 rounded-xl text-sm flex items-center gap-2">
-              <Plus className="w-4 h-4" /> 빠른 등록
-            </button>
-            <button onClick={() => setIsDepositModalOpen(true)} className="px-4 py-2 rounded-xl text-sm font-bold bg-[#10B981]/20 text-[#10B981] border border-[#10B981]/40 hover:bg-[#10B981]/40 transition-all flex items-center gap-1.5">
-              <CreditCard className="w-4 h-4" /> 입금 처리
-            </button>
+          <div className="text-right hidden sm:block">
+            <span className="text-xs text-slate-400">오늘 총 수입</span>
+            <p className="text-lg font-bold text-emerald-400">{totalTodayEarnings.toLocaleString()}원</p>
           </div>
         </header>
 
-        {/* TAB 1: DASHBOARD */}
-        {activeTab === 'dashboard' && (
-          <div className="space-y-6 animate-in fade-in zoom-in duration-300">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="glass-panel p-5">
-                <p className="text-xs font-bold text-[#CBD5E1]">오늘 운행/정산액</p>
-                <div className="mt-2 flex items-baseline justify-between">
-                  <span className="text-2xl font-black text-white">{stats.todayCount}건</span>
-                  <span className="text-sm font-black text-[#8B5CF6]">{stats.todaySettlementTarget.toLocaleString()}원</span>
-                </div>
-              </div>
-              <div className="glass-panel p-5 border-[#EC4899]/30 !border">
-                <p className="text-xs font-bold text-[#EC4899]">미수금 총액</p>
-                <div className="mt-2">
-                  <span className="text-2xl font-black text-[#EC4899]">{stats.totalUnpaid.toLocaleString()}원</span>
-                </div>
-              </div>
-              <div className="glass-panel p-5 border-[#38BDF8]/30 !border">
-                <p className="text-xs font-bold text-[#38BDF8]">주유 환급대기</p>
-                <div className="mt-2">
-                  <span className="text-2xl font-black text-[#38BDF8]">{stats.totalUnpaidFuel.toLocaleString()}원</span>
-                </div>
-              </div>
-              <div className="glass-panel p-5 border-[#10B981]/30 !border">
-                <p className="text-xs font-bold text-[#10B981]">이번 달 순수익</p>
-                <div className="mt-2">
-                  <span className="text-2xl font-black text-[#10B981]">{stats.netProfit.toLocaleString()}원</span>
-                </div>
-              </div>
+        {/* --- 1. 실시간 운행 기록 및 빅데이터 수집 섹션 (NEW) --- */}
+        <section className="bg-slate-900/40 backdrop-blur-[12px] p-5 sm:p-6 rounded-2xl border border-slate-800 shadow-2xl">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-2">
+              <Navigation className="w-5 h-5 text-[#8B5CF6]" />
+              <h2 className="text-lg sm:text-xl font-bold">운행 일지 & 콜 데이터 기록</h2>
             </div>
-
-            <div className="glass-panel p-5">
-              <h3 className="font-extrabold text-base text-white mb-4">최근 운행 내역</h3>
-              <div className="space-y-3">
-                {trips.slice(0, 5).map(t => (
-                  <div key={t.id} className="flex justify-between items-center p-3 rounded-xl bg-white/5 border border-white/5 hover:border-[#8B5CF6]/40 transition-all">
-                    <div>
-                      <span className="text-[10px] bg-[#8B5CF6]/20 text-[#8B5CF6] px-2 py-1 rounded font-bold mr-2">{t.company}</span>
-                      <span className="text-sm text-white font-bold">{t.from} → {t.to}</span>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-black text-[#38BDF8]">{t.freightFee.toLocaleString()}원</p>
-                      <p className="text-[10px] text-[#EC4899]">{t.status}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <span className="text-xs text-slate-400">입력된 동선은 추후 핫스팟 분석에 활용됩니다</span>
           </div>
-        )}
 
-        {/* TAB 2: TRIP LIST */}
-        {activeTab === 'trip_list' && (
-          <div className="space-y-4 animate-in fade-in zoom-in duration-300">
-            <div className="glass-panel p-4 flex flex-col sm:flex-row gap-3 justify-between">
-              <div className="relative flex-1">
-                <Search className="w-5 h-5 absolute left-3 top-3.5 text-slate-400" />
-                <input 
-                  type="text" 
-                  placeholder="업체명, 지역, 담당자 검색..." 
-                  className="w-full pl-10"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-              <button onClick={() => { setEditingTrip(null); setIsTripModalOpen(true); }} className="cyber-button px-4 py-2.5 rounded-xl text-sm flex items-center justify-center gap-2">
-                <Plus className="w-4 h-4" /> 내역 수동 등록
-              </button>
+          {/* 운행 기록 입력 폼 (White Form Style) */}
+          <form onSubmit={handleAddRecord} className="bg-[#0B1120]/60 p-4 rounded-xl border border-slate-700 mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div className="flex items-center gap-2 bg-[#FFFFFF] text-[#000000] px-3 py-2 rounded-lg font-semibold text-sm">
+              <Clock className="w-4 h-4 text-purple-600" />
+              <input type="text" value={recordTime} onChange={e => setRecordTime(e.target.value)} placeholder="시간 (HH:MM)" className="w-full bg-transparent focus:outline-none" />
             </div>
-            
-            <div className="space-y-3">
-              {trips.filter(t => t.company.includes(searchTerm) || t.from.includes(searchTerm) || t.to.includes(searchTerm)).map(t => {
-                const totalUnpaid = (t.freightFee - t.paidFreight) + (t.fuelPaidBy === 'driver_prepaid' ? (t.fuelFee - t.paidFuel) : 0);
-                return (
-                  <div key={t.id} className="glass-panel p-5 space-y-3 hover:border-[#8B5CF6]/40 transition-all">
-                    <div className="flex justify-between border-b border-white/10 pb-3">
-                      <div>
-                        <span className="px-2 py-1 rounded bg-[#8B5CF6]/20 text-[#8B5CF6] text-xs font-bold mr-2">{t.type}</span>
-                        <span className="font-extrabold text-white text-base">{t.company}</span>
-                        <p className="text-xs text-[#CBD5E1] mt-1">{t.date} | 차량: {t.vehicleType}</p>
-                      </div>
-                      <div className="text-right">
-                        <span className={`px-2 py-1 rounded text-xs font-bold ${t.status === '정산 완료' ? 'bg-[#10B981]/20 text-[#10B981]' : 'bg-[#EC4899]/20 text-[#EC4899]'}`}>
-                          {t.status}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 text-sm">
-                      <div>
-                        <p className="text-[#CBD5E1]">구간: <span className="text-white font-bold">{t.from} → {t.to}</span></p>
-                        <p className="text-[#CBD5E1] mt-1">탁송비: <span className="text-[#8B5CF6] font-bold">{t.freightFee.toLocaleString()}원</span></p>
-                      </div>
-                      <div className="text-right flex flex-col justify-end">
-                        <p className="text-xs text-[#CBD5E1]">남은 미수금</p>
-                        <p className="text-lg font-black text-[#EC4899]">{totalUnpaid.toLocaleString()}원</p>
-                      </div>
-                    </div>
-                    
-                    <div className="flex justify-between items-center pt-3 mt-2 border-t border-white/10">
-                      <div className="flex gap-2">
-                        <button onClick={() => { setEditingTrip(t); setIsTripModalOpen(true); }} className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-1 transition-all">
-                          <Edit className="w-3.5 h-3.5" /> 수정
-                        </button>
-                        <button onClick={() => handleDeleteTrip(t.id)} className="px-3 py-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-400 text-xs font-bold flex items-center gap-1 transition-all">
-                          <Trash2 className="w-3.5 h-3.5" /> 삭제
-                        </button>
-                      </div>
-                      
-                      {totalUnpaid > 0 && (
-                        <div className="flex gap-2">
-                          <button onClick={() => { setSelectedTripForSms(t); setIsSmsModalOpen(true); }} className="px-3 py-1.5 rounded-lg bg-[#EC4899]/20 hover:bg-[#EC4899]/30 text-[#EC4899] text-xs font-bold transition-all">문자독촉</button>
-                          <button onClick={() => { setSelectedTripForDeposit(t); setIsDepositModalOpen(true); }} className="px-3 py-1.5 rounded-lg bg-[#10B981]/20 hover:bg-[#10B981]/30 text-[#10B981] text-xs font-bold transition-all">입금하기</button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="flex items-center gap-2 bg-[#FFFFFF] text-[#000000] px-3 py-2 rounded-lg font-semibold text-sm">
+              <MapPin className="w-4 h-4 text-pink-600" />
+              <input type="text" placeholder="출발지 (예: 강남)" value={departure} onChange={e => setDeparture(e.target.value)} className="w-full bg-transparent focus:outline-none" />
             </div>
-          </div>
-        )}
-
-        {/* TAB 3: EXPENSES */}
-        {activeTab === 'expenses' && (
-          <div className="space-y-4 animate-in fade-in zoom-in duration-300">
-            <div className="flex justify-between items-center glass-panel p-5 border-[#EC4899]/30 !border">
-              <div>
-                <h3 className="font-extrabold text-base text-white">사업 지출 내역</h3>
-                <p className="text-xs text-[#CBD5E1]">순수익 계산을 위한 톨게이트, 교통비 관리</p>
-              </div>
-              <button onClick={() => setIsExpenseModalOpen(true)} className="cyber-button px-4 py-2 rounded-xl text-sm flex items-center gap-1.5">
-                <Plus className="w-4 h-4" /> 지출 등록
-              </button>
+            <div className="flex items-center gap-2 bg-[#FFFFFF] text-[#000000] px-3 py-2 rounded-lg font-semibold text-sm">
+              <MapPin className="w-4 h-4 text-emerald-600" />
+              <input type="text" placeholder="도착지 (예: 분당)" value={destination} onChange={e => setDestination(e.target.value)} className="w-full bg-transparent focus:outline-none" />
             </div>
-
-            <div className="space-y-3">
-              {expenses.map(e => (
-                <div key={e.id} className="glass-panel p-4 flex justify-between items-center">
-                  <div className="flex items-center gap-3">
-                    <span className="px-2 py-1 rounded bg-[#EC4899]/20 text-[#EC4899] text-xs font-bold">{e.category}</span>
-                    <div>
-                      <p className="text-white font-bold text-sm">{e.memo}</p>
-                      <p className="text-[10px] text-[#CBD5E1]">{e.date}</p>
-                    </div>
-                  </div>
-                  <span className="font-black text-[#EC4899]">-{e.amount.toLocaleString()}원</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* TAB 4: UNPAID & SMS */}
-        {activeTab === 'unpaid' && (
-          <div className="space-y-4 animate-in fade-in zoom-in duration-300">
-            <div className="glass-panel p-5 border-[#EC4899]/30 !border">
-              <h3 className="font-black text-lg text-white">미수금 종합 관리 & SMS 독촉</h3>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {trips.filter(t => (t.freightFee - t.paidFreight + (t.fuelPaidBy==='driver_prepaid'?(t.fuelFee-t.paidFuel):0)) > 0).map(t => {
-                const totalUnpaid = (t.freightFee - t.paidFreight) + (t.fuelPaidBy === 'driver_prepaid' ? (t.fuelFee - t.paidFuel) : 0);
-                return (
-                  <div key={t.id} className="glass-panel p-5 space-y-4">
-                    <div>
-                      <span className="px-2 py-1 rounded bg-[#EC4899]/20 text-[#EC4899] font-bold text-xs">예정일: {t.dueDate}</span>
-                      <h4 className="font-extrabold text-base text-white mt-2">{t.company} ({t.from}→{t.to})</h4>
-                      <p className="text-xs text-[#CBD5E1] mt-1">고객: {t.customer} | 미수금: <span className="text-[#EC4899] font-bold">{totalUnpaid.toLocaleString()}원</span></p>
-                    </div>
-                    <button
-                      onClick={() => { setSelectedTripForSms(t); setIsSmsModalOpen(true); }}
-                      className="cyber-button w-full py-3 rounded-xl flex justify-center items-center gap-2"
-                    >
-                      <Send className="w-4 h-4" /> 정산 요청 SMS 전송
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* TAB 5: PROFILE (계좌 등록 폼 추가) */}
-        {activeTab === 'profile' && (
-          <div className="space-y-6 animate-in fade-in zoom-in duration-300">
-            <div className="glass-panel p-6 max-w-xl mx-auto">
-              <div className="flex items-center gap-4 mb-6 border-b border-white/10 pb-4">
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#8B5CF6] to-[#EC4899] flex items-center justify-center shadow-lg">
-                  <User className="w-7 h-7 text-white" />
-                </div>
-                <div>
-                  <h3 className="font-extrabold text-xl text-white">내 정보 설정</h3>
-                  <p className="text-xs text-[#CBD5E1] mt-1">정산받을 계좌를 등록해두면 문자에 자동 첨부됩니다.</p>
-                </div>
-              </div>
-
-              <form onSubmit={(e: any) => {
-                e.preventDefault();
-                setAccountInfo({
-                  bank: e.target.bank.value,
-                  holder: e.target.holder.value,
-                  number: e.target.number.value
-                });
-                alert('계좌 정보가 안전하게 기기에 저장되었습니다!');
-              }} className="space-y-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-[#CBD5E1] mb-1">은행명</label>
-                    <input type="text" name="bank" defaultValue={accountInfo.bank} placeholder="예: 카카오뱅크" className="w-full" required />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-[#CBD5E1] mb-1">예금주</label>
-                    <input type="text" name="holder" defaultValue={accountInfo.holder} placeholder="예: 홍길동" className="w-full" required />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-[#CBD5E1] mb-1">계좌번호 (- 포함 권장)</label>
-                  <input type="text" name="number" defaultValue={accountInfo.number} placeholder="예: 3333-01-2345678" className="w-full" required />
-                </div>
-                <button type="submit" className="cyber-button w-full py-4 rounded-xl mt-4 text-lg">
-                  계좌 정보 저장하기
-                </button>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* TAB: MAP */}
-        {activeTab === 'map' && (
-          <div className="glass-panel p-6 flex flex-col items-center justify-center h-[60vh] text-center space-y-4 animate-in fade-in zoom-in duration-300">
-            <h2 className="text-2xl font-extrabold text-white">전국 예상 콜지 지도</h2>
-            <p className="text-sm text-[#CBD5E1]">MapLibre 엔진을 이용한 실시간 지도가 연동될 영역입니다.</p>
-          </div>
-        )}
-
-        {/* TAB 6: ANALYTICS */}
-        {activeTab === 'analytics' && (
-          <div className="space-y-6 animate-in fade-in zoom-in duration-300">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="glass-panel p-5">
-                <p className="text-xs font-bold text-[#CBD5E1]">총 탁송 수입 (수령 완료)</p>
-                <p className="text-2xl font-black text-[#8B5CF6] mt-2">{stats.monthlyFreightIncome.toLocaleString()}원</p>
-              </div>
-              <div className="glass-panel p-5">
-                <p className="text-xs font-bold text-[#CBD5E1]">총 사업 지출</p>
-                <p className="text-2xl font-black text-[#EC4899] mt-2">{stats.monthlyExpenses.toLocaleString()}원</p>
-              </div>
-              <div className="glass-panel p-5 border-[#10B981]/30 !border">
-                <p className="text-xs font-bold text-[#CBD5E1]">실제 순수익</p>
-                <p className="text-2xl font-black text-[#10B981] mt-2">{stats.netProfit.toLocaleString()}원</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Placeholder for others */}
-        {['fuel', 'backup'].includes(activeTab) && (
-          <div className="glass-panel p-8 text-center space-y-3 animate-in fade-in zoom-in duration-300">
-            <div className="w-12 h-12 rounded-2xl bg-[#8B5CF6]/20 border border-[#8B5CF6]/30 text-[#8B5CF6] flex items-center justify-center mx-auto">
-              <CheckCircle2 className="w-6 h-6" />
-            </div>
-            <h3 className="font-extrabold text-lg text-white">준비 완료</h3>
-            <p className="text-xs text-[#CBD5E1] max-w-md mx-auto">해당 모듈은 디자인 세팅이 완료되었습니다.</p>
-          </div>
-        )}
-      </main>
-
-      {/* ---------------- MODALS ---------------- */}
-      
-      {/* 1. Trip Registration / Edit Modal */}
-      {isTripModalOpen && (
-        <div className="fixed inset-0 z-50 bg-[#0B1120]/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="glass-panel p-6 w-full max-w-lg space-y-4">
-            <div className="flex justify-between items-center border-b border-white/10 pb-3">
-              <h3 className="font-black text-lg text-white">
-                {editingTrip ? '✏️ 운행 내역 수정' : '⚡ 빠른 운행 등록'}
-              </h3>
-              <button onClick={() => { setIsTripModalOpen(false); setEditingTrip(null); }} className="text-white"><X /></button>
-            </div>
-            <form onSubmit={(e: any) => { 
-              e.preventDefault(); 
-              const formData = new FormData(e.target);
-              
-              const newTripData = {
-                id: editingTrip ? editingTrip.id : `TRIP-${Date.now()}`,
-                date: formData.get('date'),
-                startTime: editingTrip ? editingTrip.startTime : '14:00',
-                endTime: editingTrip ? editingTrip.endTime : '16:00',
-                type: formData.get('type'),
-                company: formData.get('company'),
-                customer: formData.get('customer') || '미지정',
-                phone: editingTrip ? editingTrip.phone : '010-0000-0000',
-                vehicleNo: editingTrip ? editingTrip.vehicleNo : '12가 3456',
-                vehicleType: editingTrip ? editingTrip.vehicleType : '승용차',
-                from: formData.get('from'),
-                to: formData.get('to'),
-                freightFee: Number(formData.get('freightFee')),
-                fuelFee: Number(formData.get('fuelFee')),
-                fuelPaidBy: editingTrip ? editingTrip.fuelPaidBy : 'driver_prepaid',
-                dueDate: editingTrip ? editingTrip.dueDate : '2026-11-14',
-                status: editingTrip ? editingTrip.status : '정산 대기',
-                paidFreight: editingTrip ? editingTrip.paidFreight : 0,
-                paidFuel: editingTrip ? editingTrip.paidFuel : 0,
-                memo: formData.get('memo')
-              };
-
-              if (editingTrip) {
-                setTrips(prev => prev.map(t => t.id === editingTrip.id ? newTripData : t));
-              } else {
-                setTrips(prev => [newTripData, ...prev]);
-              }
-              
-              setIsTripModalOpen(false); 
-              setEditingTrip(null);
-            }} className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <input type="date" name="date" defaultValue={editingTrip?.date || "2026-11-07"} className="w-full" required />
-                <select name="type" defaultValue={editingTrip?.type || "로드탁송"} className="w-full"><option>로드탁송</option><option>대리운전</option></select>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <input type="text" name="company" defaultValue={editingTrip?.company} placeholder="업체명" className="w-full" required />
-                <input type="text" name="customer" defaultValue={editingTrip?.customer} placeholder="담당자명" className="w-full" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <input type="text" name="from" defaultValue={editingTrip?.from} placeholder="출발지" className="w-full" required />
-                <input type="text" name="to" defaultValue={editingTrip?.to} placeholder="도착지" className="w-full" required />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <input type="number" name="freightFee" defaultValue={editingTrip?.freightFee} placeholder="탁송비 (원)" className="w-full text-right" required />
-                <input type="number" name="fuelFee" defaultValue={editingTrip?.fuelFee} placeholder="주유비 (원)" className="w-full text-right" />
-              </div>
-              <input type="text" name="memo" defaultValue={editingTrip?.memo} placeholder="메모" className="w-full" />
-              <button type="submit" className="cyber-button w-full py-4 rounded-xl mt-4">
-                {editingTrip ? '내역 수정 완료' : '운행 등록 완료'}
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* 2. Deposit Modal */}
-      {isDepositModalOpen && (
-        <div className="fixed inset-0 z-50 bg-[#0B1120]/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="glass-panel p-6 w-full max-w-md space-y-4">
-            <div className="flex justify-between items-center border-b border-white/10 pb-3">
-              <h3 className="font-black text-lg text-white">💳 입금 및 정산 처리</h3>
-              <button onClick={() => setIsDepositModalOpen(false)} className="text-white"><X /></button>
-            </div>
-            <form onSubmit={(e: any) => { 
-              e.preventDefault(); 
-              handleApplyDeposit(e.target.tripId.value, Number(e.target.freightAmt.value), Number(e.target.fuelAmt.value)); 
-            }} className="space-y-4">
-              <select name="tripId" defaultValue={selectedTripForDeposit?.id || ''} className="w-full">
-                {trips.map(t => (
-                  <option key={t.id} value={t.id}>[{t.company}] {t.from}→{t.to}</option>
-                ))}
-              </select>
-              <div className="grid grid-cols-2 gap-3">
-                <input type="number" name="freightAmt" placeholder="탁송 입금액" className="w-full text-right" required />
-                <input type="number" name="fuelAmt" placeholder="주유 환급액" defaultValue="0" className="w-full text-right" />
-              </div>
-              <button type="submit" className="cyber-button w-full py-4 rounded-xl mt-2">입금 적용하기</button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* 3. Expense Modal */}
-      {isExpenseModalOpen && (
-        <div className="fixed inset-0 z-50 bg-[#0B1120]/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="glass-panel p-6 w-full max-w-md space-y-4 border-[#EC4899]/50 !border">
-            <div className="flex justify-between items-center border-b border-white/10 pb-3">
-              <h3 className="font-black text-lg text-white">🧾 사업 지출 등록</h3>
-              <button onClick={() => setIsExpenseModalOpen(false)} className="text-white"><X /></button>
-            </div>
-            <form onSubmit={(e: any) => { 
-              e.preventDefault(); 
-              setExpenses(prev => [{id: `e-${Date.now()}`, date: e.target.date.value, category: e.target.category.value, amount: Number(e.target.amount.value), memo: e.target.memo.value}, ...prev]);
-              setIsExpenseModalOpen(false);
-            }} className="space-y-4">
-              <input type="date" name="date" defaultValue="2026-11-07" className="w-full" required />
-              <select name="category" className="w-full">
-                <option value="통행료">통행료 (톨게이트)</option>
-                <option value="복귀 교통비">복귀 교통비 (KTX/버스)</option>
-                <option value="식비">식비</option>
-              </select>
-              <input type="number" name="amount" placeholder="지출 금액 (원)" className="w-full text-right" required />
-              <input type="text" name="memo" placeholder="상세 메모 (예: 경부고속도로)" className="w-full" />
-              <button type="submit" className="cyber-button w-full py-4 rounded-xl mt-2">지출 등록 완료</button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* 4. SMS Modal (계좌번호 자동 반영 로직 추가) */}
-      {isSmsModalOpen && selectedTripForSms && (
-        <div className="fixed inset-0 z-50 bg-[#0B1120]/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="glass-panel p-6 w-full max-w-md space-y-4">
-            <div className="flex justify-between border-b border-white/10 pb-3">
-              <h3 className="font-black text-lg text-white">💬 자동 SMS 생성</h3>
-              <button onClick={() => setIsSmsModalOpen(false)} className="text-white"><X /></button>
-            </div>
-            
-            {(() => {
-              // 내 정보(profile) 탭에 등록한 계좌정보가 있으면 문구 꼬리말에 추가
-              const accountText = accountInfo.bank && accountInfo.number 
-                ? `\n\n입금계좌: ${accountInfo.bank} ${accountInfo.number}\n예금주: ${accountInfo.holder}` 
-                : '';
-
-              const smsText = `안녕하세요, ${selectedTripForSms.company} ${selectedTripForSms.customer} 담당자님.\n\n${selectedTripForSms.date} 운행건 탁송비 및 주유비 정산 부탁드립니다.\n(총 미수금: ${(selectedTripForSms.freightFee - selectedTripForSms.paidFreight + selectedTripForSms.fuelFee - selectedTripForSms.paidFuel).toLocaleString()}원)${accountText}\n\n감사합니다.`;
-              
-              return (
-                <>
-                  <textarea
-                    readOnly rows={8}
-                    className="w-full resize-none text-sm"
-                    value={smsText}
-                  />
-                  <div className="flex gap-2">
-                    <button 
-                      onClick={() => {
-                        navigator.clipboard.writeText(smsText);
-                        alert('계좌번호가 포함된 정산 문구가 복사되었습니다!');
-                      }}
-                      className="flex-1 py-3 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold flex items-center justify-center gap-2 transition-all"
-                    >
-                      <Copy className="w-4 h-4" /> 문구 복사
-                    </button>
-                    <button 
-                      onClick={() => window.open(`sms:${selectedTripForSms.phone}?body=${encodeURIComponent(smsText)}`)}
-                      className="flex-1 cyber-button py-3 rounded-xl flex items-center justify-center gap-2"
-                    >
-                      <Send className="w-4 h-4" /> SMS 전송
-                    </button>
-                  </div>
-                </>
-              );
-            })()}
-          </div>
-        </div>
-      )}
-
-      {/* MOBILE BOTTOM NAV */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 glass-panel rounded-none border-b-0 border-l-0 border-r-0 z-50 flex justify-around p-2">
-        {mobileNavItems.map(item => {
-          const Icon = item.icon;
-          return (
-            <button key={item.id} onClick={() => setActiveTab(item.id)} className={`flex flex-col items-center p-2 relative ${activeTab === item.id ? 'text-[#8B5CF6]' : 'text-[#CBD5E1]'}`}>
-              <Icon className="w-5 h-5" />
-              <span className="text-[10px] mt-1">{item.label}</span>
-              {item.badge && item.badge > 0 ? (
-                <span className="absolute top-1 right-1 w-3 h-3 bg-[#EC4899] text-white text-[8px] font-bold rounded-full flex items-center justify-center">
-                  {item.badge}
-                </span>
-              ) : null}
+            <input type="number" placeholder="운행 수익 (원)" value={recordAmount} onChange={e => setRecordAmount(e.target.value)}
+              className="bg-[#FFFFFF] text-[#000000] font-semibold px-3 py-2 rounded-lg text-sm focus:outline-none focus:shadow-[0_0_10px_#8B5CF6]" />
+            <button type="submit" className="bg-gradient-to-r from-[#8B5CF6] to-[#4F46E5] hover:-translate-y-1 px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-1.5 transition-transform text-white shadow-lg">
+              <Plus className="w-4 h-4" /> 운행 기록 추가
             </button>
-          );
-        })}
-      </nav>
+          </form>
+
+          {/* 운행 기록 리스트 */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse min-w-[500px]">
+              <thead>
+                <tr className="border-b border-slate-700 text-slate-400 text-sm">
+                  <th className="py-3 px-4">시간</th>
+                  <th className="py-3 px-4">출발지 ➔ 도착지</th>
+                  <th className="py-3 px-4">수익</th>
+                  <th className="py-3 px-4 text-right">관리</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60 text-sm">
+                {records.map((r) => (
+                  <tr key={r.id} className="hover:bg-slate-800/40 transition-colors">
+                    <td className="py-3 px-4 text-[#38BDF8] font-mono font-semibold flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5" /> {r.time}
+                    </td>
+                    <td className="py-3 px-4 font-medium flex items-center gap-2">
+                      <span className="text-slate-200">{r.departure}</span>
+                      <span className="text-[#8B5CF6]">➔</span>
+                      <span className="text-slate-200">{r.destination}</span>
+                    </td>
+                    <td className="py-3 px-4 font-bold text-emerald-400">{r.amount.toLocaleString()}원</td>
+                    <td className="py-3 px-4 text-right">
+                      <button onClick={() => handleDeleteRecord(r.id)} className="text-slate-400 hover:text-[#EC4899] transition-colors p-1">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        {/* --- 2. 정산 및 미수금 관리 섹션 --- */}
+        <section className="bg-slate-900/40 backdrop-blur-[12px] p-5 sm:p-6 rounded-2xl border border-slate-800 shadow-2xl">
+          <div className="flex items-center gap-2 mb-6">
+            <LayoutDashboard className="w-5 h-5 text-[#38BDF8]" />
+            <h2 className="text-lg sm:text-xl font-bold">콜사 정산 및 미수금 현황</h2>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div className="bg-[#0B1120]/60 p-4 rounded-xl border border-[#38BDF8]/30">
+              <span className="text-sm text-slate-400">입금 대기 총액</span>
+              <p className="text-2xl font-bold text-[#38BDF8] mt-1">{totalPending.toLocaleString()}원</p>
+            </div>
+            <div className="bg-[#0B1120]/60 p-4 rounded-xl border border-[#EC4899]/30">
+              <span className="text-sm text-[#EC4899] flex items-center gap-1">
+                <AlertCircle className="w-4 h-4" /> 주의 요망 미수금
+              </span>
+              <p className="text-2xl font-bold text-[#EC4899] mt-1">{totalOverdue.toLocaleString()}원</p>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse min-w-[500px]">
+              <thead>
+                <tr className="border-b border-slate-700 text-slate-400 text-sm">
+                  <th className="py-3 px-4">대행사명</th>
+                  <th className="py-3 px-4">청구 금액</th>
+                  <th className="py-3 px-4">입금 예정일</th>
+                  <th className="py-3 px-4">상태</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60 text-sm">
+                {settlements.map((item) => (
+                  <tr key={item.id} className="hover:bg-slate-800/40 transition-colors">
+                    <td className="py-3 px-4 font-medium flex items-center gap-2">
+                      <Building2 className="w-4 h-4 text-[#8B5CF6]" /> {item.company}
+                    </td>
+                    <td className="py-3 px-4 font-bold">{item.amount.toLocaleString()}원</td>
+                    <td className="py-3 px-4 text-slate-300 flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5" /> {item.expectedDate}
+                    </td>
+                    <td className="py-3 px-4">
+                      {item.status === 'completed' && <span className="text-emerald-400 flex items-center gap-1"><CheckCircle2 className="w-4 h-4" /> 입금완료</span>}
+                      {item.status === 'pending' && <span className="text-[#38BDF8] flex items-center gap-1"><Clock className="w-4 h-4" /> 대기중</span>}
+                      {item.status === 'overdue' && <span className="text-[#EC4899] flex items-center gap-1 font-bold animate-pulse"><AlertCircle className="w-4 h-4" /> 미수금</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        {/* --- 3. 송금 계좌 관리 섹션 --- */}
+        <section className="bg-slate-900/40 backdrop-blur-[12px] p-5 sm:p-6 rounded-2xl border border-slate-800 shadow-2xl">
+          <div className="flex items-center gap-2 mb-6">
+            <Send className="w-5 h-5 text-[#8B5CF6]" />
+            <h2 className="text-lg sm:text-xl font-bold">송금 계좌 간편 관리 (원클릭 복사)</h2>
+          </div>
+
+          {/* 등록 폼 (White Form Style) */}
+          <form onSubmit={handleAddAccount} className="bg-[#0B1120]/60 p-4 rounded-xl border border-slate-700 mb-6 grid grid-cols-1 md:grid-cols-4 gap-3">
+            <input type="text" placeholder="송금처 이름 (예: 로지 충전)" value={newAgency} onChange={e => setNewAgency(e.target.value)}
+              className="bg-[#FFFFFF] text-[#000000] font-semibold px-3 py-2 rounded-lg text-sm focus:outline-none focus:shadow-[0_0_10px_#8B5CF6]" />
+            <input type="text" placeholder="은행명 (예: 국민)" value={newBank} onChange={e => setNewBank(e.target.value)}
+              className="bg-[#FFFFFF] text-[#000000] font-semibold px-3 py-2 rounded-lg text-sm focus:outline-none focus:shadow-[0_0_10px_#8B5CF6]" />
+            <input type="text" placeholder="계좌번호 (- 포함)" value={newAccount} onChange={e => setNewAccount(e.target.value)}
+              className="bg-[#FFFFFF] text-[#000000] font-semibold px-3 py-2 rounded-lg text-sm focus:outline-none focus:shadow-[0_0_10px_#8B5CF6]" />
+            <div className="flex gap-2">
+              <input type="text" placeholder="예금주" value={newHolder} onChange={e => setNewHolder(e.target.value)}
+                className="bg-[#FFFFFF] text-[#000000] font-semibold px-3 py-2 rounded-lg text-sm flex-1 focus:outline-none focus:shadow-[0_0_10px_#8B5CF6]" />
+              <button type="submit" className="bg-gradient-to-r from-[#8B5CF6] to-[#4F46E5] hover:-translate-y-1 px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center transition-transform">
+                <Plus className="w-5 h-5 text-white" />
+              </button>
+            </div>
+          </form>
+
+          {/* 저장된 계좌 리스트 */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {accounts.map(acc => (
+              <div key={acc.id} className="bg-[#0B1120]/60 p-4 rounded-xl border border-slate-700 hover:border-[#8B5CF6]/50 transition-all flex flex-col justify-between">
+                {editingId === acc.id ? (
+                  /* 수정 폼 */
+                  <div className="space-y-3">
+                    <input type="text" value={editAgency} onChange={e => setEditAgency(e.target.value)} className="w-full bg-[#FFFFFF] text-[#000000] font-semibold px-3 py-1.5 rounded-lg text-sm" placeholder="송금처 이름" />
+                    <div className="grid grid-cols-2 gap-2">
+                      <input type="text" value={editBank} onChange={e => setEditBank(e.target.value)} className="bg-[#FFFFFF] text-[#000000] font-semibold px-3 py-1.5 rounded-lg text-sm" placeholder="은행명" />
+                      <input type="text" value={editHolder} onChange={e => setEditHolder(e.target.value)} className="bg-[#FFFFFF] text-[#000000] font-semibold px-3 py-1.5 rounded-lg text-sm" placeholder="예금주" />
+                    </div>
+                    <input type="text" value={editAccount} onChange={e => setEditAccount(e.target.value)} className="w-full bg-[#FFFFFF] text-[#000000] font-semibold px-3 py-1.5 rounded-lg text-sm font-mono" placeholder="계좌번호" />
+                    <div className="flex justify-end gap-2 pt-2">
+                      <button onClick={() => setEditingId(null)} className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-xs font-semibold flex items-center gap-1"><X className="w-3.5 h-3.5" /> 취소</button>
+                      <button onClick={() => handleSaveEdit(acc.id)} className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-xs font-bold flex items-center gap-1 text-white"><Save className="w-3.5 h-3.5" /> 저장</button>
+                    </div>
+                  </div>
+                ) : (
+                  /* 일반 보기 모드 */
+                  <>
+                    <div>
+                      <div className="flex justify-between items-start mb-2">
+                        <span className="font-bold text-[#8B5CF6] flex items-center gap-1.5 text-base">
+                          <Building2 className="w-4 h-4 text-[#EC4899]" /> {acc.agencyName}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded-md border border-slate-600">{acc.bankName}</span>
+                          <button onClick={() => handleStartEdit(acc)} className="text-slate-400 hover:text-[#38BDF8] transition-colors"><Edit3 className="w-4 h-4" /></button>
+                          <button onClick={() => handleDelete(acc.id)} className="text-slate-400 hover:text-[#EC4899] transition-colors"><Trash2 className="w-4 h-4" /></button>
+                        </div>
+                      </div>
+                      <p className="text-xl font-mono font-bold text-[#38BDF8] tracking-wide my-1">{acc.accountNumber}</p>
+                      <p className="text-xs text-slate-400">예금주: <span className="text-slate-200 font-medium">{acc.holder}</span></p>
+                    </div>
+                    <div className="mt-4 pt-3 border-t border-slate-700/80 flex justify-between items-center">
+                      <span className="text-xs text-slate-500">클립보드 즉시 복사</span>
+                      <button onClick={() => handleCopy(acc.id, acc.accountNumber)}
+                        className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${copiedId === acc.id ? 'bg-emerald-500 text-white scale-95' : 'bg-gradient-to-r from-[#8B5CF6] to-[#4F46E5] hover:-translate-y-1'}`}>
+                        {copiedId === acc.id ? <><Check className="w-4 h-4" /> 복사 완료!</> : <><Copy className="w-4 h-4" /> 계좌번호 복사</>}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+
+      </div>
     </div>
   );
 }
