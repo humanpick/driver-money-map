@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Send, Copy, Check, Plus, Building2, Trash2, Edit3, X, Save, CheckCircle2, AlertCircle, Clock, Wallet, LayoutDashboard, MapPin, Navigation, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Percent, Receipt, Coins, CreditCard } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Send, Copy, Check, Plus, Building2, Trash2, Edit3, X, Save, CheckCircle2, AlertCircle, Clock, Wallet, LayoutDashboard, MapPin, Navigation, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Percent, Receipt, Coins, CreditCard, TrendingUp } from 'lucide-react';
 
 // --- Types ---
 interface DrivingRecord {
@@ -63,21 +63,28 @@ export default function App() {
     setSelectedDate(d.toISOString().slice(0, 10));
   };
 
-  // 고급스러운 날짜 포맷 (예: 2026. 11. 09 (월))
+  // 캘린더용 포맷 (예: 2026. 11. 09 (월))
   const getFormattedDate = (dateString: string) => {
     const d = new Date(dateString);
     const days = ['일', '월', '화', '수', '목', '금', '토'];
     return `${d.getFullYear()}. ${String(d.getMonth() + 1).padStart(2, '0')}. ${String(d.getDate()).padStart(2, '0')} (${days[d.getDay()]})`;
   };
 
+  // 월 추출 (예: 2026-11)
+  const currentMonthPrefix = selectedDate.substring(0, 7);
+  const currentMonthDisplay = `${new Date(selectedDate).getMonth() + 1}월`;
+
   const getCurrentTime = () => {
     const now = new Date();
     return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   };
 
+  // --- State: 자주 쓰는 지역 (빠른 입력 칩) ---
+  const [recentLocations, setRecentLocations] = useState<string[]>(['강남', '수원', '평택', '천안', '인천']);
+
   // --- State: 운행 기록 ---
   const [records, setRecords] = useState<DrivingRecord[]>([
-    { id: '1', date: getToday(), startTime: '09:30', endTime: '10:45', duration: '1시간 15분', departure: '서울 강남', destination: '경기 성남', grossAmount: 50000, feeRate: 20, tipAmount: 5000, netAmount: 45000 },
+    { id: '1', date: getToday(), startTime: '09:30', endTime: '10:45', duration: '1시간 15분', departure: '강남', destination: '수원', grossAmount: 50000, feeRate: 20, tipAmount: 5000, netAmount: 45000 },
   ]);
   
   const [startTime, setStartTime] = useState(getCurrentTime());
@@ -91,14 +98,13 @@ export default function App() {
   // --- State: 지출 기록 ---
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([
     { id: '1', date: getToday(), category: '교통비', memo: '강남역 킥보드', amount: 3500 },
-    { id: '2', date: getToday(), category: '식비', memo: '휴게소 우동', amount: 7000 },
   ]);
 
   const [expCategory, setExpCategory] = useState<'교통비' | '식비' | '숙박비' | '기타'>('교통비');
   const [expMemo, setExpMemo] = useState('');
   const [expAmount, setExpAmount] = useState('');
 
-  // --- 소요시간 및 금액 계산 ---
+  // --- 계산 로직 ---
   const calculateDuration = (start: string, end: string) => {
     if (!start || !end) return '';
     const [sh, sm] = start.split(':').map(Number);
@@ -114,19 +120,31 @@ export default function App() {
   const currentFee = grossAmount ? Number(grossAmount) * (feeRate / 100) : 0;
   const currentNetAmount = grossAmount ? (Number(grossAmount) - currentFee) + Number(tipAmount || 0) : 0;
 
-  // --- 하루 총 순수익 요약 계산 ---
+  // 하루 총 순수익 요약
   const filteredRecords = records.filter(r => r.date === selectedDate);
   const filteredExpenses = expenses.filter(e => e.date === selectedDate);
-
   const dailyDrivingNet = filteredRecords.reduce((sum, r) => sum + (r.grossAmount * (1 - r.feeRate / 100)), 0);
   const dailyTips = filteredRecords.reduce((sum, r) => sum + (r.tipAmount || 0), 0);
   const dailyExpenseTotal = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
   const dailyRealNetProfit = dailyDrivingNet + dailyTips - dailyExpenseTotal;
 
+  // 💡 월 총 누적 순수익 요약 (NEW)
+  const monthlyRecords = records.filter(r => r.date.startsWith(currentMonthPrefix));
+  const monthlyExpenses = expenses.filter(e => e.date.startsWith(currentMonthPrefix));
+  const monthlyDrivingNet = monthlyRecords.reduce((sum, r) => sum + (r.grossAmount * (1 - r.feeRate / 100)), 0);
+  const monthlyTips = monthlyRecords.reduce((sum, r) => sum + (r.tipAmount || 0), 0);
+  const monthlyExpenseTotal = monthlyExpenses.reduce((sum, e) => sum + e.amount, 0);
+  const monthlyRealNetProfit = monthlyDrivingNet + monthlyTips - monthlyExpenseTotal;
+
   // --- Handlers: 운행 기록 추가 ---
   const handleAddRecord = (e: React.FormEvent) => {
     e.preventDefault();
     if (!departure || !destination || !grossAmount) return;
+    
+    // 빠른 입력 칩 배열 업데이트 (중복 제거 후 최근 순으로 6개 유지)
+    const newLocs = Array.from(new Set([departure, destination, ...recentLocations])).slice(0, 6);
+    setRecentLocations(newLocs);
+
     const newRecord: DrivingRecord = {
       id: Date.now().toString(),
       date: selectedDate,
@@ -162,7 +180,7 @@ export default function App() {
   const handleDeleteExpense = (id: string) => setExpenses(expenses.filter(e => e.id !== id));
 
   // --- State & Handlers: 정산 및 송금 계좌 ---
-  const [settlements, setSettlements] = useState<Settlement[]>([
+  const [settlements] = useState<Settlement[]>([
     { id: '1', company: '로지 플랫폼', amount: 145000, expectedDate: '2026-11-10', status: 'pending' },
   ]);
   const [accounts, setAccounts] = useState<RemittanceAccount[]>([
@@ -191,7 +209,6 @@ export default function App() {
   };
   const handleDeleteAccount = (id: string) => window.confirm('정말 삭제하시겠습니까?') && setAccounts(accounts.filter(acc => acc.id !== id));
 
-  // --- 사이드바 메뉴 컴포넌트 ---
   const renderMenuButton = (id: 'driving' | 'settlement' | 'accounts', Icon: any, label: string) => {
     const isActive = activeTab === id;
     return (
@@ -238,7 +255,7 @@ export default function App() {
       </div>
 
       {/* --- 메인 콘텐츠 영역 --- */}
-      <main className="flex-1 flex justify-center p-4 sm:p-6 md:p-10 h-screen overflow-y-auto pb-24 md:pb-10">
+      <main className="flex-1 flex justify-center p-4 sm:p-6 md:p-10 h-screen overflow-y-auto pb-24 md:pb-10 scroll-smooth">
         <div className="w-full max-w-[1200px] flex flex-col gap-8">
           
           <div className="md:hidden flex items-center gap-3 mb-2">
@@ -252,42 +269,57 @@ export default function App() {
           </div>
 
           {activeTab === 'driving' && (
-            <section className="animate-fade-in space-y-8">
+            <section className="animate-fade-in space-y-6 md:space-y-8">
               
-              {/* --- 고급 캘린더 네비게이션 --- */}
-              <div className="flex flex-col md:flex-row justify-between md:items-end gap-4">
-                <div>
-                  <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight mb-2">내 지갑 현황</h2>
-                  <p className="text-sm text-slate-400">오늘 하루 길 위에서 만든 소중한 수익입니다.</p>
+              {/* 💡 월 총 수익 도파민 패널 (NEW - 최상단 고정) */}
+              <div className="relative overflow-hidden p-6 rounded-3xl bg-gradient-to-r from-[#8B5CF6]/20 via-[#0B1120] to-[#EC4899]/20 border border-[#8B5CF6]/30 shadow-[0_10px_30px_rgba(139,92,246,0.15)] flex flex-col sm:flex-row justify-between items-center sm:items-end gap-4">
+                <div className="flex items-center gap-4 z-10 w-full sm:w-auto">
+                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#8B5CF6] to-[#EC4899] flex items-center justify-center shadow-lg">
+                    <TrendingUp className="w-7 h-7 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-[#8B5CF6] font-bold tracking-wider mb-1">{currentMonthDisplay} 누적 총수익</p>
+                    <p className="text-3xl md:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-300">
+                      {monthlyRealNetProfit.toLocaleString()} <span className="text-xl font-bold text-slate-400">원</span>
+                    </p>
+                  </div>
                 </div>
+                <div className="z-10 flex gap-4 text-xs font-medium w-full sm:w-auto justify-between sm:justify-end bg-[#0B1120]/50 p-3 rounded-xl border border-white/5">
+                  <div className="flex flex-col"><span className="text-slate-400">총 팁 보너스</span><span className="text-[#38BDF8] font-bold">+{monthlyTips.toLocaleString()}</span></div>
+                  <div className="w-px bg-slate-700"></div>
+                  <div className="flex flex-col"><span className="text-slate-400">총 지출 누적</span><span className="text-[#EC4899] font-bold">-{monthlyExpenseTotal.toLocaleString()}</span></div>
+                </div>
+              </div>
 
+              {/* --- 고급 캘린더 네비게이션 --- */}
+              <div className="flex flex-col md:flex-row justify-between md:items-end gap-4 mt-8">
+                <div>
+                  <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight mb-2">일일 지갑 현황</h2>
+                  <p className="text-sm text-slate-400">선택하신 날짜의 상세 운행 및 지출 내역입니다.</p>
+                </div>
                 <div className="flex items-center gap-2 bg-[#0F172A]/80 backdrop-blur-xl p-1.5 rounded-2xl border border-white/10 shadow-lg">
                   <button onClick={handlePrevDay} className="p-2 hover:bg-white/10 rounded-xl transition-all"><ChevronLeft className="w-5 h-5 text-slate-300" /></button>
-                  <div className="relative flex items-center gap-2 px-4 py-2 bg-white/5 rounded-xl border border-white/5 group cursor-pointer overflow-hidden">
+                  <div className="relative flex items-center gap-2 px-4 py-2 bg-white/5 rounded-xl border border-white/5 cursor-pointer">
                     <CalendarIcon className="w-4 h-4 text-[#38BDF8]" />
                     <span className="text-base font-bold text-white tracking-wide">{getFormattedDate(selectedDate)}</span>
-                    {/* 투명한 네이티브 날짜 선택기를 텍스트 위에 덮어씌움 */}
                     <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="absolute top-0 left-0 w-full h-full opacity-0 cursor-pointer" />
                   </div>
                   <button onClick={handleNextDay} className="p-2 hover:bg-white/10 rounded-xl transition-all"><ChevronRight className="w-5 h-5 text-slate-300" /></button>
                 </div>
               </div>
 
-              {/* --- 프리미엄 메인 월렛 (블랙 앤 네온 카드 스타일) --- */}
-              <div className="relative overflow-hidden p-6 md:p-8 rounded-3xl bg-gradient-to-br from-[#1E293B] via-[#0B1120] to-[#020617] border border-slate-700/50 shadow-[0_15px_40px_rgba(16,185,129,0.15)] group">
-                <div className="absolute -top-24 -right-24 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl transition-transform duration-700 group-hover:scale-125"></div>
-                
+              {/* --- 일일 메인 월렛 (블랙 앤 네온) --- */}
+              <div className="relative overflow-hidden p-6 md:p-8 rounded-3xl bg-gradient-to-br from-[#1E293B] via-[#0B1120] to-[#020617] border border-emerald-500/20 shadow-[0_10px_30px_rgba(16,185,129,0.1)] group">
                 <div className="relative z-10 flex flex-col md:flex-row justify-between md:items-end gap-6">
                   <div>
                     <div className="flex items-center gap-2 mb-2">
                       <div className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_10px_#34d399] animate-pulse"></div>
-                      <p className="text-sm text-slate-300 font-medium tracking-wide">하루 총 순수익 (지출 차감 후)</p>
+                      <p className="text-sm text-slate-300 font-medium tracking-wide">선택일 총 순수익</p>
                     </div>
                     <p className="text-4xl md:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-emerald-300 to-emerald-500 drop-shadow-lg">
                       {dailyRealNetProfit.toLocaleString()} <span className="text-2xl text-emerald-400/80 font-bold">원</span>
                     </p>
                   </div>
-                  
                   <div className="flex flex-col gap-2.5 text-sm bg-white/5 backdrop-blur-md p-4 rounded-2xl border border-white/10 w-full md:w-auto shadow-inner">
                     <div className="flex justify-between gap-12 items-center"><span className="text-slate-400 font-medium">운행 정산금</span> <span className="font-bold text-white text-base">{dailyDrivingNet.toLocaleString()}원</span></div>
                     <div className="flex justify-between gap-12 items-center"><span className="text-slate-400 font-medium">팁 (보너스)</span> <span className="font-bold text-[#38BDF8] text-base">+{dailyTips.toLocaleString()}원</span></div>
@@ -297,37 +329,61 @@ export default function App() {
                 </div>
               </div>
 
-              {/* --- 운행 기록 폼 --- */}
+              {/* --- 운행 기록 폼 (+ 빠른 입력 칩) --- */}
               <div className="bg-slate-900/50 backdrop-blur-[16px] p-6 rounded-3xl border border-white/10 shadow-2xl">
                 <h3 className="text-lg font-extrabold mb-5 text-[#8B5CF6] flex items-center gap-2"><Navigation className="w-5 h-5"/> 수입 등록</h3>
                 <form onSubmit={handleAddRecord} className="flex flex-col gap-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div className="flex items-center gap-2 bg-[#FFFFFF] text-[#000000] px-4 py-2.5 rounded-xl font-bold text-sm shadow-inner transition-shadow focus-within:shadow-[0_0_15px_rgba(139,92,246,0.3)]">
-                      <Clock className="w-4 h-4 text-purple-600" /><span className="text-xs text-slate-500">출발</span>
-                      <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className="w-full bg-transparent focus:outline-none" />
+                    <div className="flex flex-col gap-1 w-full">
+                      <div className="flex items-center gap-2 bg-[#FFFFFF] text-[#000000] px-4 py-2.5 rounded-xl font-bold text-sm shadow-inner focus-within:shadow-[0_0_15px_rgba(139,92,246,0.3)]">
+                        <Clock className="w-4 h-4 text-purple-600 shrink-0" /><span className="text-xs text-slate-500 shrink-0">출발</span>
+                        <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className="w-full bg-transparent focus:outline-none" />
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 bg-[#FFFFFF] text-[#000000] px-4 py-2.5 rounded-xl font-bold text-sm shadow-inner transition-shadow focus-within:shadow-[0_0_15px_rgba(139,92,246,0.3)]">
-                      <Clock className="w-4 h-4 text-pink-600" /><span className="text-xs text-slate-500">도착</span>
-                      <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} className="w-full bg-transparent focus:outline-none" />
+                    <div className="flex flex-col gap-1 w-full">
+                      <div className="flex items-center gap-2 bg-[#FFFFFF] text-[#000000] px-4 py-2.5 rounded-xl font-bold text-sm shadow-inner focus-within:shadow-[0_0_15px_rgba(139,92,246,0.3)]">
+                        <Clock className="w-4 h-4 text-pink-600 shrink-0" /><span className="text-xs text-slate-500 shrink-0">도착</span>
+                        <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} className="w-full bg-transparent focus:outline-none" />
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 bg-[#FFFFFF] text-[#000000] px-4 py-2.5 rounded-xl font-bold text-sm shadow-inner transition-shadow focus-within:shadow-[0_0_15px_rgba(139,92,246,0.3)]">
-                      <MapPin className="w-4 h-4 text-indigo-600" /><input type="text" placeholder="출발지" value={departure} onChange={e => setDeparture(e.target.value)} className="w-full bg-transparent focus:outline-none" />
+                    
+                    {/* 💡 출발지 입력창 + 빠른 입력 칩 */}
+                    <div className="flex flex-col gap-1.5 w-full">
+                      <div className="flex items-center gap-2 bg-[#FFFFFF] text-[#000000] px-4 py-2.5 rounded-xl font-bold text-sm shadow-inner focus-within:shadow-[0_0_15px_rgba(139,92,246,0.3)]">
+                        <MapPin className="w-4 h-4 text-[#8B5CF6] shrink-0" />
+                        <input type="text" placeholder="출발지" autoComplete="off" value={departure} onChange={e => setDeparture(e.target.value)} className="w-full bg-transparent focus:outline-none" />
+                      </div>
+                      <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
+                        {recentLocations.map(loc => (
+                          <button type="button" key={`dep-${loc}`} onClick={() => setDeparture(loc)} className="shrink-0 px-3 py-1 text-[11px] font-bold bg-[#8B5CF6]/10 text-[#8B5CF6] border border-[#8B5CF6]/30 rounded-lg hover:bg-[#8B5CF6] hover:text-white transition-colors">{loc}</button>
+                        ))}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 bg-[#FFFFFF] text-[#000000] px-4 py-2.5 rounded-xl font-bold text-sm shadow-inner transition-shadow focus-within:shadow-[0_0_15px_rgba(139,92,246,0.3)]">
-                      <MapPin className="w-4 h-4 text-emerald-600" /><input type="text" placeholder="도착지" value={destination} onChange={e => setDestination(e.target.value)} className="w-full bg-transparent focus:outline-none" />
+
+                    {/* 💡 도착지 입력창 + 빠른 입력 칩 */}
+                    <div className="flex flex-col gap-1.5 w-full">
+                      <div className="flex items-center gap-2 bg-[#FFFFFF] text-[#000000] px-4 py-2.5 rounded-xl font-bold text-sm shadow-inner focus-within:shadow-[0_0_15px_rgba(16,185,129,0.3)]">
+                        <MapPin className="w-4 h-4 text-emerald-500 shrink-0" />
+                        <input type="text" placeholder="도착지" autoComplete="off" value={destination} onChange={e => setDestination(e.target.value)} className="w-full bg-transparent focus:outline-none" />
+                      </div>
+                      <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
+                        {recentLocations.map(loc => (
+                          <button type="button" key={`dest-${loc}`} onClick={() => setDestination(loc)} className="shrink-0 px-3 py-1 text-[11px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-lg hover:bg-emerald-500 hover:text-white transition-colors">{loc}</button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                   
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-center border-t border-white/5 pt-4 mt-2">
-                    <div className="flex items-center gap-2 bg-[#FFFFFF] text-[#000000] px-4 py-2.5 rounded-xl font-bold text-sm shadow-inner transition-shadow focus-within:shadow-[0_0_15px_rgba(139,92,246,0.3)]">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-center border-t border-white/5 pt-4 mt-1">
+                    <div className="flex items-center gap-2 bg-[#FFFFFF] text-[#000000] px-4 py-2.5 rounded-xl font-bold text-sm shadow-inner focus-within:shadow-[0_0_15px_rgba(139,92,246,0.3)]">
                       <span className="text-xs text-slate-500 shrink-0">총단가</span>
                       <input type="number" placeholder="예: 50000" value={grossAmount} onChange={e => setGrossAmount(e.target.value)} className="w-full bg-transparent focus:outline-none" />
                     </div>
-                    <div className="flex items-center gap-2 bg-[#FFFFFF] text-[#000000] px-4 py-2.5 rounded-xl font-bold text-sm shadow-inner transition-shadow focus-within:shadow-[0_0_15px_rgba(139,92,246,0.3)]">
+                    <div className="flex items-center gap-2 bg-[#FFFFFF] text-[#000000] px-4 py-2.5 rounded-xl font-bold text-sm shadow-inner focus-within:shadow-[0_0_15px_rgba(139,92,246,0.3)]">
                       <Percent className="w-4 h-4 text-slate-400" /><span className="text-xs text-slate-500 shrink-0">수수료</span>
                       <input type="number" value={feeRate} onChange={e => setFeeRate(Number(e.target.value))} className="w-[50px] bg-transparent focus:outline-none" /><span className="text-xs">%</span>
                     </div>
-                    <div className="flex items-center gap-2 bg-[#FFFFFF] text-[#000000] px-4 py-2.5 rounded-xl font-bold text-sm shadow-inner transition-shadow focus-within:shadow-[0_0_15px_rgba(139,92,246,0.3)]">
+                    <div className="flex items-center gap-2 bg-[#FFFFFF] text-[#000000] px-4 py-2.5 rounded-xl font-bold text-sm shadow-inner focus-within:shadow-[0_0_15px_rgba(139,92,246,0.3)]">
                       <Coins className="w-4 h-4 text-amber-500" /><span className="text-xs text-slate-500 shrink-0">팁(선택)</span>
                       <input type="number" placeholder="0" value={tipAmount} onChange={e => setTipAmount(e.target.value)} className="w-full bg-transparent focus:outline-none" />
                     </div>
@@ -336,7 +392,7 @@ export default function App() {
                       <span className="text-sm font-extrabold text-emerald-400">실수령: {currentNetAmount.toLocaleString()}원</span>
                     </div>
                     <button type="submit" className="bg-gradient-to-r from-[#8B5CF6] to-[#4F46E5] hover:-translate-y-1 px-5 py-3 rounded-xl text-sm font-extrabold flex items-center justify-center gap-2 transition-transform text-white shadow-[0_5px_20px_rgba(139,92,246,0.4)] h-full">
-                      <Plus className="w-5 h-5" /> 내 지갑에 넣기
+                      <Plus className="w-5 h-5" /> 지갑에 넣기
                     </button>
                   </div>
                 </form>
@@ -411,7 +467,7 @@ export default function App() {
             </section>
           )}
 
-          {/* 플랫폼 정산 / 송금 계좌 섹션은 이전 로직 유지, 패딩/라운드만 고급화 */}
+          {/* --- 플랫폼 정산 --- */}
           {activeTab === 'settlement' && (
             <section className="bg-slate-900/50 backdrop-blur-[16px] p-6 sm:p-8 rounded-3xl border border-white/10 shadow-2xl animate-fade-in">
               <div className="flex items-center gap-3 mb-8">
@@ -425,6 +481,7 @@ export default function App() {
             </section>
           )}
 
+          {/* --- 송금 계좌 --- */}
           {activeTab === 'accounts' && (
             <section className="bg-slate-900/50 backdrop-blur-[16px] p-6 sm:p-8 rounded-3xl border border-white/10 shadow-2xl animate-fade-in">
               <div className="flex items-center gap-3 mb-8">
