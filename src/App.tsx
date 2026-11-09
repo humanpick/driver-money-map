@@ -35,7 +35,9 @@ import {
   Sparkles,
   Phone,
   RefreshCw,
-  UserX
+  UserX,
+  Lock,
+  BotOff
 } from 'lucide-react';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
@@ -94,8 +96,8 @@ export default function App() {
   // 인증 관련 상태
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
-  const [name, setName] = useState(''); // 이름(실명)
-  const [phone, setPhone] = useState(''); // 휴대폰번호
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [agreePrivacy, setAgreePrivacy] = useState(false);
@@ -103,6 +105,10 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState('');
   const [authSuccess, setAuthSuccess] = useState('');
+
+  // 3중 봇 방지 상태 (허니팟 + 인터랙션 캡차)
+  const [honeypot, setHoneypot] = useState(''); // 1. 허니팟 (사람 눈엔 안 보임)
+  const [captchaVerified, setCaptchaVerified] = useState(false); // 2. 인터랙티브 보안 체크
 
   // 탭 상태
   const [activeTab, setActiveTab] = useState<'records' | 'claims' | 'expense' | 'wallet'>('records');
@@ -300,24 +306,38 @@ export default function App() {
     setAuthLoading(false);
   };
 
-  // 회원가입 핸들러 (이름, 휴대폰번호)
+  // 회원가입 핸들러 (3중 보안: 허니팟 + 캡차 + 휴대폰 중복방지)
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthLoading(true);
     setAuthError('');
     setAuthSuccess('');
 
+    // [방어 1] 허니팟 트랩: 숨겨진 인풋에 값이 채워져 있으면 자동 봇으로 판별하고 즉시 차단
+    if (honeypot.trim() !== '') {
+      console.warn('Bot detected via honeypot.');
+      setAuthLoading(false);
+      return;
+    }
+
+    // [방어 2] 봇 방지 인증(인터랙션 캡차) 통과 여부 검증
+    if (!captchaVerified) {
+      setAuthError('보안 확인(인간 인증 체크)을 완료해 주세요.');
+      setAuthLoading(false);
+      return;
+    }
+
     const trimmedName = name.trim();
     const cleanPhone = phone.replace(/[^0-9]/g, '');
 
     if (!trimmedName) {
-      setAuthError('이름(실명)을 입력해 주세요.');
+      setAuthError('이름(성함)을 입력해 주세요.');
       setAuthLoading(false);
       return;
     }
 
     if (cleanPhone.length < 10) {
-      setAuthError('올바른 휴대폰 번호를 입력해 주세요.');
+      setAuthError('올바른 휴대폰 번호 10~11자리를 입력해 주세요.');
       setAuthLoading(false);
       return;
     }
@@ -340,6 +360,20 @@ export default function App() {
       return;
     }
 
+    // [방어 3] 휴대폰 번호 중복 사전 조회 (동일 번호 대량 생성 차단)
+    const { data: existingProfile, error: checkError } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('phone', cleanPhone)
+      .maybeSingle();
+
+    if (existingProfile) {
+      setAuthError('이미 해당 휴대폰 번호로 가입된 계정이 존재합니다. (1인 1계정 원칙)');
+      setAuthLoading(false);
+      return;
+    }
+
+    // Supabase 계정 생성
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -350,7 +384,7 @@ export default function App() {
           privacy_policy_agreed: true,
           privacy_policy_agreed_at: new Date().toISOString(),
           beta_terms_agreed: true,
-          terms_version: 'v1.5_clean_auth',
+          terms_version: 'v1.6_anti_bot_triple',
         },
       },
     });
@@ -358,6 +392,18 @@ export default function App() {
     if (error) {
       setAuthError('가입 실패: ' + error.message);
     } else {
+      // profiles 테이블에 고유 정보 기록 (휴대폰 중복 방지 저장소)
+      if (data.user) {
+        await supabase.from('profiles').insert([
+          {
+            id: data.user.id,
+            email: email,
+            name: trimmedName,
+            phone: cleanPhone,
+          },
+        ]);
+      }
+
       if (data.session) {
         setAuthSuccess('회원가입이 완료되었습니다.');
       } else {
@@ -398,7 +444,7 @@ export default function App() {
     setWithdrawLoading(true);
     const now = new Date();
     const purgeDate = new Date();
-    purgeDate.setDate(now.getDate() + 30); // 30일 뒤
+    purgeDate.setDate(now.getDate() + 30);
 
     const { error } = await supabase.auth.updateUser({
       data: {
@@ -745,14 +791,14 @@ ${itemsText}--------------------------------
           <div className="flex bg-slate-900/80 p-1 rounded-xl border border-slate-800 mb-5">
             <button
               type="button"
-              onClick={() => setAuthMode('login')}
+              onClick={() => { setAuthMode('login'); setAuthError(''); setAuthSuccess(''); }}
               className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${authMode === 'login' ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}
             >
               로그인
             </button>
             <button
               type="button"
-              onClick={() => setAuthMode('signup')}
+              onClick={() => { setAuthMode('signup'); setAuthError(''); setAuthSuccess(''); setCaptchaVerified(false); }}
               className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${authMode === 'signup' ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}
             >
               회원가입
@@ -797,6 +843,19 @@ ${itemsText}--------------------------------
             </form>
           ) : (
             <form onSubmit={handleSignUp} className="space-y-3">
+              
+              {/* [방어 1] 허니팟 함정 필드 (사람 눈에는 완전 숨김 처리, 봇만 입력) */}
+              <div className="hidden" aria-hidden="true" style={{ display: 'none' }}>
+                <input
+                  type="text"
+                  name="user_website_trap"
+                  tabIndex={-1}
+                  autoComplete="off"
+                  value={honeypot}
+                  onChange={(e) => setHoneypot(e.target.value)}
+                />
+              </div>
+
               <div>
                 <label className="block text-[11px] font-semibold text-slate-300 mb-1">이메일 계정 (로그인 ID)</label>
                 <input
@@ -861,6 +920,30 @@ ${itemsText}--------------------------------
                 </div>
               </div>
 
+              {/* [방어 2] 스마트 봇 차단 인증 카드 (클라우드플레어 스타일 인터랙션) */}
+              <div className="pt-1">
+                <div
+                  onClick={() => setCaptchaVerified(!captchaVerified)}
+                  className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
+                    captchaVerified
+                      ? 'bg-emerald-950/30 border-emerald-500/50 text-emerald-300'
+                      : 'bg-slate-900 border-slate-800 hover:border-slate-700 text-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-all ${
+                      captchaVerified ? 'bg-emerald-500 border-emerald-400 text-white' : 'border-slate-600 bg-slate-800'
+                    }`}>
+                      {captchaVerified && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                    </div>
+                    <span className="text-xs font-semibold select-none">
+                      {captchaVerified ? '보안 인증 완료 (실제 사람 확인됨)' : '로봇이 아닙니다 (터치하여 인증)'}
+                    </span>
+                  </div>
+                  <BotOff className={`w-4 h-4 ${captchaVerified ? 'text-emerald-400' : 'text-slate-500'}`} />
+                </div>
+              </div>
+
               <div className="pt-1">
                 <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
                   <div className="flex items-start gap-2">
@@ -878,13 +961,10 @@ ${itemsText}--------------------------------
                   
                   <div className="text-[10px] text-slate-400 pl-6 leading-tight space-y-0.5">
                     <div className="text-indigo-300 flex items-center gap-1">
-                      <Phone className="w-2.5 h-2.5" /> 휴대폰번호는 본인 식별 및 청구문자용으로 안전 보관
-                    </div>
-                    <div className="text-emerald-400 flex items-center gap-1">
-                      <Smartphone className="w-2.5 h-2.5" /> 송금 계좌는 서버 저장 없이 기기에만 보관
+                      <Phone className="w-2.5 h-2.5" /> 1인 1계정 원칙 준수 (중복 번호 가입 차단)
                     </div>
                     <div className="text-amber-300/80 flex items-center gap-1">
-                      <Sparkles className="w-2.5 h-2.5" /> 베타 종료 후 유료 전환 가능 (동의 없는 자동결제 없음)
+                      <Sparkles className="w-2.5 h-2.5" /> 탈퇴 시 30일 유예 후 자동 영구 파기 (자동결제 없음)
                     </div>
                   </div>
 
@@ -907,7 +987,7 @@ ${itemsText}--------------------------------
                 disabled={authLoading}
                 className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm rounded-lg cursor-pointer"
               >
-                {authLoading ? '계정 생성 중...' : '동의하고 무료 회원가입'}
+                {authLoading ? '보안 검증 및 계정 생성 중...' : '동의하고 무료 회원가입'}
               </button>
             </form>
           )}
@@ -934,7 +1014,7 @@ ${itemsText}--------------------------------
                   <h4 className="font-bold text-white mb-1">1. 수집하는 개인정보 항목 및 목적</h4>
                   <p className="text-slate-400">
                     - <strong>수집 항목:</strong> 로그인 이메일, 성명(이름), 휴대폰 번호, 암호화된 비밀번호, 탁송 운행 기록<br />
-                    - <strong>이용 목적:</strong> 본인 식별, 청구문자 기사 정보 자동 기재, 서비스 공지 발송
+                    - <strong>이용 목적:</strong> 본인 식별, 1인 1계정 중복 방지, 청구문자 기사 정보 자동 기재, 서비스 공지 발송
                   </p>
                 </div>
 
