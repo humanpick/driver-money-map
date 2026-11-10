@@ -51,8 +51,8 @@ interface DrivingRecord {
   grossAmount: number; // 탁송료
   feeRate: number; // 수수료율
   fuelAmount: number; // 대납 주유비
-  extraExpenseAmount: number; // 대납 추가경비 (통행료/세차비 등)
-  tipAmount: number; // 순수 팁 (기사 순익 가산, 청구문자 미포함)
+  extraExpenseAmount: number; // 대납 추가경비 (통행료/세차비/주차비 등)
+  tipAmount: number; // 순수 팁/수고비 (청구문자 미포함, 기사 순익 가산)
   receiptImage?: string; // 영수증
   isPaid: boolean; // 입금 여부
   netAmount: number; // 순수입: (탁송료 - 수수료) + 팁
@@ -130,11 +130,11 @@ export default function App() {
       grossAmount: 85000,
       feeRate: 20,
       fuelAmount: 50000,
-      extraExpenseAmount: 8400,
-      tipAmount: 5000,
+      extraExpenseAmount: 8400, // 통행료 등
+      tipAmount: 5000, // 순수 팁
       isPaid: false,
-      netAmount: 73000,
-      totalClaimAmount: 143400,
+      netAmount: 73000, // (85000 * 0.8) + 5000 = 73000
+      totalClaimAmount: 143400, // 85000 + 50000 + 8400 = 143400
     },
     {
       id: '2',
@@ -325,7 +325,7 @@ export default function App() {
     }
   };
 
-  // 운행 등록 핸들러
+  // 운행 등록 핸들러 (팁은 순익 가산, 추가경비는 청구액 가산)
   const handleAddRecord = (e: React.FormEvent) => {
     e.preventDefault();
     const gross = Number(newGross) || 0;
@@ -401,7 +401,7 @@ export default function App() {
     setRecords(records.map(r => r.id === id ? { ...r, isPaid: !r.isPaid } : r));
   };
 
-  // 청구 문자 템플릿 실시간 동적 생성 함수
+  // 청구 문자 템플릿 실시간 동적 생성 함수 (3대 항목: 탁송료 / 주유비 / 대납추가경비)
   const buildClaimText = (r: DrivingRecord, withGross: boolean, withFuel: boolean, withExtra: boolean) => {
     const primaryAccount = accounts[0] || { bankName: '은행명', accountNumber: '계좌번호', holder: '예금주' };
     
@@ -501,7 +501,7 @@ ${itemsText}--------------------------------
     setHolder('');
   };
 
-  // 미수금 통계
+  // 미수금 통계 (대납 주유비 + 대납 경비 포함)
   const unpaidRecords = records.filter(r => !r.isPaid);
   const totalUnpaidAmount = unpaidRecords.reduce((acc, cur) => acc + cur.totalClaimAmount, 0);
   const totalUnpaidReimbursements = unpaidRecords.reduce((acc, cur) => acc + cur.fuelAmount + cur.extraExpenseAmount, 0);
@@ -529,13 +529,8 @@ ${itemsText}--------------------------------
             <div className="w-12 h-12 p-2.5 bg-slate-900 border border-slate-700/60 rounded-xl flex items-center justify-center shadow-inner mb-3">
               <Car className="w-6 h-6 text-indigo-400" />
             </div>
-            <div className="flex items-center gap-1.5">
-              <h1 className="text-2xl font-bold tracking-tight text-white">JunDriver</h1>
-              <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
-                PRO
-              </span>
-            </div>
-            <p className="text-xs text-slate-400 mt-1">프로 기사용 스마트 디지털 지갑 & 운행 일지</p>
+            <h1 className="text-xl font-bold tracking-tight text-white">탁송 일지 & 주유비 정산</h1>
+            <p className="text-xs text-slate-400 mt-1">대납 주유비 및 미수금 완벽 관리</p>
           </div>
 
           <div className="flex bg-slate-900/80 p-1 rounded-xl border border-slate-800 mb-5">
@@ -694,7 +689,7 @@ ${itemsText}--------------------------------
             <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center shadow-md">
               <Car className="w-4 h-4 text-white" />
             </div>
-            <span className="font-bold text-base text-white">JunDriver</span>
+            <span className="font-bold text-base text-white">탁송 매니저</span>
             <span className="px-1.5 py-0.5 text-[10px] font-bold bg-indigo-500/20 text-indigo-400 rounded border border-indigo-500/30">
               PRO
             </span>
@@ -1024,7 +1019,7 @@ ${itemsText}--------------------------------
                     )}
                   </div>
 
-                  {/* 순수 수입용 팁 (청구문자에 미포함) */}
+                  {/* 순수 수입용 팁 (청구문자에 절대 미반영) */}
                   <div>
                     <label className="block text-[11px] font-semibold text-emerald-400 mb-1 flex items-center gap-1">
                       <Coins className="w-3.5 h-3.5" />
@@ -1561,6 +1556,7 @@ ${itemsText}--------------------------------
               청구할 항목을 클릭해 선택하면 문구와 합산 금액이 실시간으로 변경됩니다. (팁은 포함되지 않음)
             </p>
 
+            {/* 3대 항목 선택 바 */}
             <div className="grid grid-cols-3 gap-2 mb-4 p-2.5 rounded-xl bg-slate-900 border border-slate-800">
               <button
                 type="button"
