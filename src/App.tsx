@@ -14,7 +14,7 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const ADMIN_DEFAULT_EMAIL = 'beat4989@naver.com';
-const ADMIN_DEFAULT_NAME = '공민준';
+const ADMIN_DEFAULT_NAME = '김탁송';
 const ADMIN_DEFAULT_PHONE = '01091417586';
 const STANDARD_EXPENSE_RATE = 0.794; // 탁송/대리 기본 단순경비율 (79.4%)
 
