@@ -15,7 +15,7 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const ADMIN_DEFAULT_EMAIL = 'beat4989@naver.com';
-const ADMIN_DEFAULT_NAME = '홍길동'; 
+const ADMIN_DEFAULT_NAME = '공민준'; 
 const ADMIN_DEFAULT_PHONE = '01091417586';
 
 const formatNumberWithComma = (val: string | number) => {
@@ -107,7 +107,7 @@ export default function App() {
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
   const [accounts, setAccounts] = useState<BankAccount[]>(() => {
     try { const saved = localStorage.getItem('jundriver_local_accounts_merged'); if (saved) return JSON.parse(saved); } catch (e) { console.error(e); }
-    return [{ id: '1', bankName: '신한은행', accountNumber: '110-123-456789', holder: '공민준' }];
+    return [{ id: '1', bankName: '신한은행', accountNumber: '110-123-456789', holder: '김탁송' }];
   });
 
   // 공지사항
