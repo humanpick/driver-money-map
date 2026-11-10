@@ -14,11 +14,10 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const ADMIN_DEFAULT_EMAIL = 'beat4989@naver.com';
-const ADMIN_DEFAULT_NAME = '홍길동'; // 기본계좌/프로필명 (PRO)
+const ADMIN_DEFAULT_NAME = '홍길동';
 const ADMIN_DEFAULT_PHONE = '01091417586';
-const STANDARD_EXPENSE_RATE = 0.794; // 세무용 단순경비율 (PRO)
+const STANDARD_EXPENSE_RATE = 0.794;
 
-// 천 단위 콤마 포맷터 & 언포맷
 const formatNumberWithComma = (val: string | number) => {
   if (val === '' || val === null || val === undefined) return '';
   const numStr = String(val).replace(/[^0-9]/g, '');
@@ -47,20 +46,17 @@ export default function App() {
   const [session, setSession] = useState<any>(null);
   const [currentUserRole, setCurrentUserRole] = useState<string>('user');
 
-  // 인증 관련 상태 (무료버전의 약관 모달 포함)
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState(''); const [name, setName] = useState(''); const [phone, setPhone] = useState('');
   const [password, setPassword] = useState(''); const [passwordConfirm, setPasswordConfirm] = useState('');
   const [agreePrivacy, setAgreePrivacy] = useState(false); const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [authLoading, setAuthLoading] = useState(false); const [authError, setAuthError] = useState(''); const [authSuccess, setAuthSuccess] = useState('');
 
-  // 탭 및 필터
   const [activeTab, setActiveTab] = useState<'records' | 'claims' | 'expense' | 'wallet' | 'tax' | 'admin'>('records');
   const [adminSubTab, setAdminSubTab] = useState<'campaign' | 'members' | 'analytics'>('campaign');
   const [selectedDate, setSelectedDate] = useState<string>('2026-11-10');
   const [filterAllDates, setFilterAllDates] = useState<boolean>(false);
 
-  // 모달 상태
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [pwdLoading, setPwdLoading] = useState(false);
@@ -81,7 +77,6 @@ export default function App() {
   const [claimMessageText, setClaimMessageText] = useState('');
   const [dataLoading, setDataLoading] = useState(false);
 
-  // 데이터 상태
   const [records, setRecords] = useState<DrivingRecord[]>([]);
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
   const [accounts, setAccounts] = useState<BankAccount[]>(() => {
@@ -91,7 +86,6 @@ export default function App() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 공지사항 및 관리자
   const [activeNotice, setActiveNotice] = useState<NoticeItem | null>(null);
   const [noticeList, setNoticeList] = useState<NoticeItem[]>([]);
   const [inputNoticeTitle, setInputNoticeTitle] = useState(''); const [inputNoticeContent, setInputNoticeContent] = useState('');
@@ -100,7 +94,6 @@ export default function App() {
   const [adminAllRecords, setAdminAllRecords] = useState<DrivingRecord[]>([]);
   const [adminSearchTerm, setAdminSearchTerm] = useState('');
 
-  // 폼 상태
   const [newDate, setNewDate] = useState('2026-11-10'); const [newStartTime, setNewStartTime] = useState(''); const [newEndTime, setNewEndTime] = useState('');
   const [newCompany, setNewCompany] = useState(''); const [newDeparture, setNewDeparture] = useState(''); const [newDestination, setNewDestination] = useState('');
   const [newGross, setNewGross] = useState(''); const [newFeeRate, setNewFeeRate] = useState('20');
@@ -278,7 +271,6 @@ export default function App() {
   };
   const handleDeleteAccount = (id: string) => { setAccounts(accounts.filter(a => a.id !== id)); };
 
-  // 공지/관리자 기능
   const handleSaveNoticeTemplate = async (e: React.FormEvent) => {
     e.preventDefault(); if (!inputNoticeTitle.trim() || !inputNoticeContent.trim()) return; setNoticeLoading(true);
     const { error } = await supabase.from('announcements').upsert({ id: editingNoticeId || `notice_${Date.now()}`, title: inputNoticeTitle.trim(), content: inputNoticeContent.trim(), is_active: editingNoticeId ? (noticeList.find(n => n.id === editingNoticeId)?.isActive || false) : false, updated_at: new Date().toISOString() });
@@ -290,7 +282,6 @@ export default function App() {
   const handleDeleteNotice = async (id: string) => { if (window.confirm('삭제하시겠습니까?')) { await supabase.from('announcements').delete().eq('id', id); fetchNotices(); } };
   const handleUpdateMemberRole = async (memberId: string, newRole: string) => { if (currentUserRole === 'super_admin') { await supabase.from('profiles').update({ role: newRole }).eq('id', memberId); fetchAdminData(); } };
 
-  // CSV 다운로드 (세무/통계 공용)
   const downloadCSV = (dataList: DrivingRecord[], fileName: string, isTaxFormat = false) => {
     if (dataList.length === 0) { alert('데이터가 없습니다.'); return; }
     let csvContent = '\uFEFF';
@@ -305,7 +296,6 @@ export default function App() {
     document.body.appendChild(link); link.click(); document.body.removeChild(link);
   };
 
-  // 청구 문자 로직 (PRO 분할 적용)
   const buildClaimText = (r: DrivingRecord, withGross: boolean, withFuel: boolean, withToll: boolean, withOther: boolean) => {
     const primaryAccount = accounts[0] || { bankName: '은행명', accountNumber: '계좌번호', holder: '예금주' };
     const driverPhone = formatPhoneNumber(session?.user?.user_metadata?.phone || ADMIN_DEFAULT_PHONE);
@@ -326,15 +316,16 @@ export default function App() {
     setIncludeGross(newGross); setIncludeFuel(newFuel); setIncludeToll(newToll); setIncludeOther(newOther);
     setClaimMessageText(buildClaimText(selectedClaimRecord, newGross, newFuel, newToll, newOther));
   };
+  
   const openClaimMessageModal = (r: DrivingRecord) => {
     setSelectedClaimRecord(r); setIncludeGross(true); setIncludeFuel(r.fuelAmount > 0); setIncludeToll(r.tollAmount > 0); setIncludeOther(r.otherAmount > 0);
     setClaimMessageText(buildClaimText(r, true, r.fuelAmount > 0, r.tollAmount > 0, r.otherAmount > 0)); setClaimModalOpen(true);
   };
+  
   const getElapsedDays = (recordDate: string) => {
     const today = new Date(); const target = new Date(recordDate); return Math.max(0, Math.floor((today.getTime() - target.getTime()) / (1000 * 60 * 60 * 24)));
   };
 
-  // 통계 집계
   const filteredRecords = filterAllDates ? records : records.filter((r) => r.date === selectedDate);
   const filteredExpenses = filterAllDates ? expenses : expenses.filter((e) => e.date === selectedDate);
   const unpaidRecords = records.filter((r) => !r.isPaid);
@@ -352,7 +343,6 @@ export default function App() {
   const companySummary = unpaidRecords.reduce((acc, cur) => { acc[cur.companyName] = (acc[cur.companyName] || 0) + cur.totalClaimAmount; return acc; }, {} as Record<string, number>);
   const isAdminUser = currentUserRole === 'super_admin' || currentUserRole === 'manager';
 
-  // --- 1. 로그인 뷰 (무료버전 UI 적용) ---
   if (!session) {
     return (
       <div className="min-h-screen bg-[#070B14] text-slate-100 flex items-center justify-center p-4 font-sans relative selection:bg-indigo-500 selection:text-white">
@@ -417,13 +407,11 @@ export default function App() {
     );
   }
 
-  // --- 2. 메인 대시보드 ---
   const userPhone = formatPhoneNumber(session?.user?.user_metadata?.phone || ADMIN_DEFAULT_PHONE);
   const userName = session?.user?.user_metadata?.name || ADMIN_DEFAULT_NAME;
 
   return (
     <div className="min-h-screen bg-[#070B14] text-slate-100 font-sans pb-20 selection:bg-indigo-500 selection:text-white">
-      {/* 헤더 */}
       <header className="sticky top-0 z-30 bg-[#0E1424]/90 backdrop-blur-md border-b border-slate-800/80 px-4 lg:px-8 py-3">
         <div className="max-w-[1400px] mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -441,14 +429,12 @@ export default function App() {
       </header>
 
       <main className="max-w-[1400px] mx-auto px-4 lg:px-8 pt-6 space-y-6">
-        {/* 공지 배너 */}
         {activeNotice && activeTab !== 'admin' && (
           <section className="bg-gradient-to-r from-indigo-950/60 via-purple-950/40 to-indigo-950/60 border border-indigo-500/40 rounded-2xl p-4 flex items-center justify-between shadow-lg">
             <div className="flex items-center gap-3"><Megaphone className="w-5 h-5 text-indigo-400 animate-pulse shrink-0" /><div><div className="text-xs font-extrabold text-indigo-300">{activeNotice.title}</div><div className="text-xs text-slate-200 mt-0.5">{activeNotice.content}</div></div></div>
           </section>
         )}
 
-        {/* 미수금 알림 배너 */}
         {totalUnpaidAmount > 0 && activeTab !== 'admin' && (
           <section className="bg-gradient-to-r from-rose-950/40 via-slate-900 to-rose-950/40 border border-rose-500/40 rounded-2xl p-4 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex items-center gap-3.5">
@@ -459,11 +445,10 @@ export default function App() {
           </section>
         )}
 
-        {/* 최상단 월 누적 결산 바 (무료버전 UI 적용) */}
         <section className="bg-gradient-to-r from-[#0E1424] via-[#121B30] to-[#0E1424] border border-indigo-500/30 rounded-2xl p-5 shadow-xl">
           <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-800/80">
             <div className="flex items-center gap-2"><CalendarDays className="w-4 h-4 text-indigo-400" /><h2 className="text-xs font-bold text-slate-200 tracking-wide uppercase">{currentMonthPrefix.replace('-', '년 ')}월 총 누적 결산</h2></div>
-            <div className="flex items-center gap-2">{dataLoading && <span className="text-[10px] text-slate-400 flex items-center gap-1"><RefreshCw className="w-3 h-3 animate-spin text-indigo-400" /> 동기화 중</span>}<span className="text-[11px] font-semibold text-indigo-400 bg-indigo-500/10 px-2.5 py-0.5 rounded-full border border-indigo-500/20">월간 집계 ({monthlyRecords.length}회 운행)</span></div>
+            <div className="flex items-center gap-2">{dataLoading && <span className="text-[10px] text-slate-400 flex items-center gap-1"><RefreshCw className="w-3 h-3 animate-spin text-indigo-400" /> 동기화 중</span>}<span className="text-[11px] font-semibold text-indigo-400 bg-indigo-500/10 px-2.5 py-0.5 rounded-full border border-indigo-500/20">월간 집계 ({monthlyRecords.length}회)</span></div>
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <div><div className="text-[11px] text-slate-400 mb-0.5">당월 순수 탁송매출</div><div className="text-xl lg:text-2xl font-extrabold text-white">{monthlyGross.toLocaleString()}<span className="text-xs font-normal text-slate-400 ml-1">원</span></div></div>
@@ -473,7 +458,6 @@ export default function App() {
           </div>
         </section>
 
-        {/* 탭 네비게이션 (무료버전 UI + PRO 탭 추가) */}
         <div className="flex gap-2 border-b border-slate-800 pb-2 overflow-x-auto scrollbar-hide">
           <button onClick={() => setActiveTab('records')} className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 shrink-0 transition-colors ${activeTab === 'records' ? 'bg-indigo-600 text-white' : 'bg-slate-900/60 text-slate-400 hover:text-white'}`}><Car className="w-3.5 h-3.5" />운행 일지 등록</button>
           <button onClick={() => setActiveTab('claims')} className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 relative shrink-0 transition-colors ${activeTab === 'claims' ? 'bg-indigo-600 text-white' : 'bg-slate-900/60 text-slate-400 hover:text-white'}`}><MessageSquare className="w-3.5 h-3.5" />청구문자 관리{unpaidRecords.length > 0 && <span className="ml-1 px-1.5 py-0.2 rounded-full bg-rose-500 text-white text-[10px] font-extrabold">{unpaidRecords.length}</span>}</button>
@@ -482,7 +466,6 @@ export default function App() {
           <button onClick={() => setActiveTab('tax')} className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 shrink-0 transition-colors ${activeTab === 'tax' ? 'bg-pink-600 text-white' : 'bg-slate-900/60 text-pink-400 hover:text-white border border-pink-500/30'}`}><Calculator className="w-3.5 h-3.5"/>세무/통계 (PRO)</button>
         </div>
 
-        {/* TAB 1: 운행 일지 (PRO 폼 + 영수증 사진 업로드) */}
         {activeTab === 'records' && (
           <div className="space-y-6">
             <div className="bg-[#0E1424]/90 border border-slate-800/90 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
@@ -491,12 +474,11 @@ export default function App() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* 등록 폼 */}
               <div className="bg-[#0E1424]/80 border border-slate-800/80 rounded-xl p-5">
                 <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2"><PlusCircle className="w-4 h-4 text-indigo-400" />새 운행 배차 등록</h3>
                 <form onSubmit={handleAddRecord} className="space-y-3.5">
                   <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">운행 일자</label><input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} required className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs" /></div>
-                  <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">탁송사 / 오더처 (예: 삼화탁송)</label><input type="text" value={newCompany} onChange={(e) => setNewCompany(e.target.value)} required className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs" /></div>
+                  <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">탁송사 / 오더처</label><input type="text" value={newCompany} onChange={(e) => setNewCompany(e.target.value)} required className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs" /></div>
                   
                   <div className="grid grid-cols-2 gap-2">
                     <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">출발지</label><input type="text" placeholder="예: 경기 광주" value={newDeparture} onChange={(e) => setNewDeparture(e.target.value)} required className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs" /></div>
@@ -508,7 +490,6 @@ export default function App() {
                     <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">수수료(%)</label><input type="number" value={newFeeRate} onChange={(e) => setNewFeeRate(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs" /></div>
                   </div>
 
-                  {/* 대납 경비 섹션 & 영수증 (무료버전 UI 적용) */}
                   <div className="p-3.5 rounded-xl bg-slate-900 border border-indigo-500/30 space-y-3">
                     <div><label className="text-xs font-bold text-indigo-300 flex items-center gap-1.5 mb-1"><Fuel className="w-3.5 h-3.5 text-indigo-400" />대납 주유비</label><input type="text" inputMode="numeric" placeholder="0" value={newFuel} onChange={(e) => setNewFuel(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-bold text-xs" /></div>
                     <div className="grid grid-cols-2 gap-2">
@@ -530,7 +511,6 @@ export default function App() {
                 </form>
               </div>
 
-              {/* 목록 */}
               <div className="lg:col-span-2 bg-[#0E1424]/80 border border-slate-800/80 rounded-xl p-5">
                 <div className="flex items-center justify-between mb-4"><h3 className="text-sm font-bold text-white flex items-center gap-2"><FileText className="w-4 h-4 text-indigo-400" />운행 일지 내역 ({filteredRecords.length}건)</h3></div>
                 {filteredRecords.length === 0 ? (
@@ -576,7 +556,6 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 2: 청구문자 (무료버전 UI + PRO 기능) */}
         {activeTab === 'claims' && (
           <div className="space-y-6">
             <div className="bg-[#0E1424]/80 border border-slate-800/80 rounded-xl p-5 shadow-lg">
@@ -629,7 +608,6 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 3 & 4 (무료버전 UI 적용) */}
         {activeTab === 'expense' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="bg-[#0E1424]/80 border border-slate-800/80 rounded-xl p-5"><h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2"><PlusCircle className="w-4 h-4 text-rose-400" />일반 경비 지출 등록</h3>
@@ -650,14 +628,15 @@ export default function App() {
             </div>
           </div>
         )}
+
         {activeTab === 'wallet' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-[#0E1424]/80 border border-slate-800/80 rounded-xl p-5 h-fit"><h3 className="text-sm font-bold text-white mb-2">정산 입금 계좌 추가</h3><p className="text-[11px] text-emerald-400 mb-4">계좌 정보는 외부 서버에 저장되지 않고 기기에만 보관됩니다.</p>
+            <div className="bg-[#0E1424]/80 border border-slate-800/80 rounded-xl p-5 h-fit"><h3 className="text-sm font-bold text-white mb-2">정산 입금 계좌 추가</h3><p className="text-[11px] text-emerald-400 mb-4">계좌 정보는 기기에만 보관됩니다.</p>
               <form onSubmit={handleAddAccount} className="space-y-3.5">
                 <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">은행명</label><input type="text" value={bankName} onChange={(e) => setBankName(e.target.value)} required placeholder="예: 신한은행" className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs" /></div>
                 <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">계좌번호</label><input type="text" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} required placeholder="하이픈 포함 입력" className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs" /></div>
                 <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">예금주</label><input type="text" value={holder} onChange={(e) => setHolder(e.target.value)} placeholder="예금주 성함" className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs" /></div>
-                <button type="submit" className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-lg cursor-pointer">현재 기기에 안전 저장</button>
+                <button type="submit" className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-lg cursor-pointer">기기에 안전 저장</button>
               </form>
             </div>
             <div className="space-y-3">
@@ -668,7 +647,6 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 5: 세무/통계 (PRO) */}
         {activeTab === 'tax' && (
           <div className="space-y-6">
             <div className="bg-[#0E1424]/80 backdrop-blur-md border border-pink-500/30 rounded-xl p-6 shadow-lg shadow-pink-900/10">
@@ -691,11 +669,10 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 6: 관제탑 (PRO) */}
         {activeTab === 'admin' && isAdminUser && (
           <div className="space-y-6">
             <div className="flex gap-2 border-b border-slate-800 pb-2">
-              <button onClick={() => setAdminSubTab('campaign')} className={`px-3 py-1.5 rounded text-xs font-bold cursor-pointer transition-colors ${adminSubTab === 'campaign' ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20' : 'bg-slate-900 text-slate-400 hover:text-slate-200'}`}>공지/이벤트 문구보관함</button>
+              <button onClick={() => setAdminSubTab('campaign')} className={`px-3 py-1.5 rounded text-xs font-bold cursor-pointer transition-colors ${adminSubTab === 'campaign' ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20' : 'bg-slate-900 text-slate-400 hover:text-slate-200'}`}>공지 보관함</button>
               <button onClick={() => setAdminSubTab('members')} className={`px-3 py-1.5 rounded text-xs font-bold cursor-pointer transition-colors ${adminSubTab === 'members' ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20' : 'bg-slate-900 text-slate-400 hover:text-slate-200'}`}>회원 관리 ({adminMemberList.length}명)</button>
               <button onClick={() => setAdminSubTab('analytics')} className={`px-3 py-1.5 rounded text-xs font-bold cursor-pointer transition-colors ${adminSubTab === 'analytics' ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20' : 'bg-slate-900 text-slate-400 hover:text-slate-200'}`}>마케팅 통계</button>
             </div>
@@ -735,7 +712,7 @@ export default function App() {
             )}
             {adminSubTab === 'analytics' && (
               <div className="space-y-4">
-                <div className="flex justify-end mb-2"><button onClick={() => downloadCSV(adminAllRecords, 'JunDriver_전체운행.csv', false)} className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-bold rounded cursor-pointer transition-colors flex items-center gap-1"><Download className="w-3.5 h-3.5" />전체 운행내역 CSV 엑셀 다운로드</button></div>
+                <div className="flex justify-end mb-2"><button onClick={() => downloadCSV(adminAllRecords, 'JunDriver_전체운행.csv', false)} className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-bold rounded cursor-pointer transition-colors flex items-center gap-1"><Download className="w-3.5 h-3.5" />전체 운행내역 CSV 엑셀 추출</button></div>
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="bg-[#0E1424] border border-slate-800 p-4 rounded-xl"><span className="text-xs text-slate-400">총 가입 기사</span><div className="text-2xl font-bold text-white mt-1">{adminMemberList.length}명</div></div>
                   <div className="bg-[#0E1424] border border-slate-800 p-4 rounded-xl"><span className="text-xs text-slate-400">누적 운행 건수</span><div className="text-2xl font-bold text-indigo-400 mt-1">{adminAllRecords.length}건</div></div>
@@ -748,7 +725,6 @@ export default function App() {
         )}
       </main>
 
-      {/* 모달: 운행 일지 수정 (콤마 지원 + PRO 폼) */}
       {editingRecord && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
           <div className="w-full max-w-md bg-[#0E1424] border border-slate-800 rounded-2xl p-6 shadow-2xl relative">
@@ -781,7 +757,6 @@ export default function App() {
         </div>
       )}
 
-      {/* 모달: 청구 문자 4대 항목 선택 합산 및 편집 */}
       {claimModalOpen && selectedClaimRecord && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
           <div className="w-full max-w-lg bg-[#0E1424] border border-slate-800 rounded-2xl p-6 shadow-2xl relative">
@@ -800,7 +775,6 @@ export default function App() {
         </div>
       )}
 
-      {/* 영수증 원본 보기 모달 */}
       {previewImage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
           <div className="relative max-w-lg w-full bg-slate-900 border border-slate-800 rounded-2xl p-4">
@@ -811,7 +785,6 @@ export default function App() {
         </div>
       )}
 
-      {/* 모달: 비밀번호 변경 */}
       {showProfileModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
           <div className="w-full max-w-sm bg-[#0E1424] border border-slate-800 rounded-2xl p-6 shadow-2xl relative">
