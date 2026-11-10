@@ -33,9 +33,7 @@ import {
   MessageSquare,
   Check,
   Edit2,
-  Coins,
-  Sparkles,
-  Phone
+  Coins
 } from 'lucide-react';
 
 // Supabase 클라이언트 초기화
@@ -82,7 +80,6 @@ export default function App() {
   // 인증 관련 상태
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState(''); // 휴대폰 번호 필수
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [agreePrivacy, setAgreePrivacy] = useState(false);
@@ -246,18 +243,12 @@ export default function App() {
     setAuthLoading(false);
   };
 
-  // 회원가입 핸들러 (휴대폰 번호 필수 검증 및 DB 저장)
+  // 회원가입 핸들러
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthLoading(true);
     setAuthError('');
     setAuthSuccess('');
-
-    if (!phone.trim()) {
-      setAuthError('휴대폰 번호를 입력해 주세요.');
-      setAuthLoading(false);
-      return;
-    }
 
     if (password.length < 6) {
       setAuthError('비밀번호는 최소 6자리 이상이어야 합니다.');
@@ -272,7 +263,7 @@ export default function App() {
     }
 
     if (!agreePrivacy) {
-      setAuthError('개인정보 수집 및 베타 이용약관에 동의해 주세요.');
+      setAuthError('개인정보 수집 및 이용에 동의해 주세요.');
       setAuthLoading(false);
       return;
     }
@@ -282,11 +273,8 @@ export default function App() {
       password,
       options: {
         data: {
-          phone: phone.trim(),
           privacy_policy_agreed: true,
           privacy_policy_agreed_at: new Date().toISOString(),
-          beta_terms_agreed: true,
-          terms_version: 'v1.3_phone_verified',
         },
       },
     });
@@ -413,10 +401,9 @@ export default function App() {
     setRecords(records.map(r => r.id === id ? { ...r, isPaid: !r.isPaid } : r));
   };
 
-  // 청구 문자 템플릿 실시간 동적 생성 함수 (기사 연락처 자동 포함)
+  // 청구 문자 템플릿 실시간 동적 생성 함수
   const buildClaimText = (r: DrivingRecord, withGross: boolean, withFuel: boolean, withExtra: boolean) => {
     const primaryAccount = accounts[0] || { bankName: '은행명', accountNumber: '계좌번호', holder: '예금주' };
-    const driverPhone = session?.user?.user_metadata?.phone || '';
     
     let total = 0;
     let itemsText = '';
@@ -439,7 +426,7 @@ export default function App() {
 * 운행구간: ${r.departure} ➔ ${r.destination}
 ${itemsText}--------------------------------
 * 총 청구금액: ${total.toLocaleString()}원
-* 입금계좌: ${primaryAccount.bankName} ${primaryAccount.accountNumber} (${primaryAccount.holder})${driverPhone ? `\n* 기사 연락처: ${driverPhone}` : ''}
+* 입금계좌: ${primaryAccount.bankName} ${primaryAccount.accountNumber} (${primaryAccount.holder})
 
 확인 후 빠른 입금 부탁드립니다. 감사합니다.`;
   };
@@ -532,7 +519,7 @@ ${itemsText}--------------------------------
   const filteredRecords = filterAllDates ? records : records.filter((r) => r.date === selectedDate);
   const filteredExpenses = filterAllDates ? expenses : expenses.filter((e) => e.date === selectedDate);
 
-  // 1. 미로그인 뷰 (연락처 필수 입력 포함)
+  // 1. 미로그인 뷰
   if (!session) {
     return (
       <div className="min-h-screen bg-[#070B14] text-slate-100 flex items-center justify-center p-4 font-sans relative selection:bg-indigo-500 selection:text-white">
@@ -612,35 +599,16 @@ ${itemsText}--------------------------------
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@driver.com"
                   required
                   className="w-full px-3.5 py-2.5 rounded-lg bg-white text-slate-900 font-semibold text-sm"
                 />
               </div>
-
-              {/* 휴대폰 번호 필수 입력창 */}
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-300 mb-1 flex items-center gap-1">
-                  <Phone className="w-3.5 h-3.5 text-indigo-400" />
-                  휴대폰 번호 (연락처 필수)
-                </label>
-                <input
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="예: 010-1234-5678"
-                  required
-                  className="w-full px-3.5 py-2.5 rounded-lg bg-white text-slate-900 font-semibold text-sm border border-slate-200 focus:border-indigo-500 focus:outline-none"
-                />
-              </div>
-
               <div>
                 <label className="block text-[11px] font-semibold text-slate-300 mb-1">비밀번호 (6자리 이상)</label>
                 <input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="비밀번호 설정"
                   required
                   className="w-full px-3.5 py-2.5 rounded-lg bg-white text-slate-900 font-semibold text-sm"
                 />
@@ -651,47 +619,29 @@ ${itemsText}--------------------------------
                   type="password"
                   value={passwordConfirm}
                   onChange={(e) => setPasswordConfirm(e.target.value)}
-                  placeholder="비밀번호 재입력"
                   required
                   className="w-full px-3.5 py-2.5 rounded-lg bg-white text-slate-900 font-semibold text-sm"
                 />
               </div>
 
-              {/* 약관 및 고지 동의 */}
               <div className="pt-2">
-                <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2.5">
+                <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
                   <div className="flex items-start gap-2.5">
                     <input
                       type="checkbox"
                       id="privacyCheck"
                       checked={agreePrivacy}
                       onChange={(e) => setAgreePrivacy(e.target.checked)}
-                      className="mt-0.5 w-4 h-4 rounded text-indigo-600 cursor-pointer"
+                      className="mt-0.5 w-4 h-4 rounded text-indigo-600"
                     />
-                    <label htmlFor="privacyCheck" className="text-xs text-slate-200 font-medium cursor-pointer leading-relaxed">
-                      [필수] 연락처·개인정보 수집 및 <span className="text-amber-400 font-bold">오픈베타 이용·유료화 사전고지</span>에 동의합니다.
+                    <label htmlFor="privacyCheck" className="text-xs text-slate-200 font-medium cursor-pointer">
+                      [필수] 개인정보 수집 및 운행일지 저장에 동의합니다.
                     </label>
                   </div>
-                  
-                  <div className="text-[11px] text-slate-400 pl-6 leading-normal space-y-0.5">
-                    <div className="text-indigo-300 flex items-center gap-1">
-                      <Phone className="w-3 h-3" /> 휴대폰 번호는 본인 확인 및 청구문자용으로 안전 보관
-                    </div>
-                    <div className="text-emerald-400 flex items-center gap-1">
-                      <Smartphone className="w-3 h-3" /> 송금 계좌는 서버 저장 없이 기기에만 보관
-                    </div>
-                    <div className="text-amber-300/80 flex items-center gap-1">
-                      <Sparkles className="w-3 h-3" /> 베타 종료 후 유료 전환 가능 (동의 없는 자동결제 없음)
-                    </div>
-                  </div>
-
-                  <div className="text-right pt-0.5">
-                    <button 
-                      type="button" 
-                      onClick={() => setShowPrivacyModal(true)} 
-                      className="text-xs text-indigo-400 hover:text-indigo-300 underline font-semibold cursor-pointer inline-flex items-center gap-0.5"
-                    >
-                      약관 및 유료화 고지 전문보기 <ChevronRight className="w-3.5 h-3.5" />
+                  <div className="flex items-center justify-between text-[11px] text-slate-400 pl-6">
+                    <span className="text-emerald-400">계좌는 기기 로컬에만 보관됩니다.</span>
+                    <button type="button" onClick={() => setShowPrivacyModal(true)} className="text-indigo-400 underline font-semibold">
+                      전문보기
                     </button>
                   </div>
                 </div>
@@ -710,77 +660,23 @@ ${itemsText}--------------------------------
           )}
         </div>
 
-        {/* 개인정보 처리방침 및 고지 모달 */}
         {showPrivacyModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
             <div className="w-full max-w-lg bg-[#0E1424] border border-slate-800 rounded-2xl p-6 shadow-2xl relative">
-              <button 
-                onClick={() => setShowPrivacyModal(false)} 
-                className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 cursor-pointer"
-              >
+              <button onClick={() => setShowPrivacyModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-1">
                 <X className="w-5 h-5" />
               </button>
-
-              <div className="flex items-center gap-2 mb-3">
-                <ShieldCheck className="w-5 h-5 text-indigo-400" />
-                <h3 className="text-sm font-bold text-white">서비스 이용약관 및 개인정보 처리방침</h3>
-              </div>
-
-              <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 text-xs text-slate-300 space-y-3.5 max-h-[380px] overflow-y-auto leading-relaxed">
-                <div>
-                  <h4 className="font-bold text-white mb-1">1. 수집하는 개인정보 항목 및 저장 방식</h4>
-                  <p className="text-slate-400">
-                    - <strong className="text-indigo-300">클라우드(서버) 저장 필수 항목:</strong> 로그인 이메일, <span className="text-white font-bold underline">휴대폰 번호(연락처)</span>, 암호화된 비밀번호, 탁송 운행 기록(일자, 시간, 출발지, 도착지, 탁송료, 대납 주유비, 대납 경비, 팁)<br />
-                    - <strong className="text-emerald-300">기기 로컬(단말기) 저장 항목:</strong> 기사 송금 계좌번호 및 영수증 사진은 외부 서버로 전송되지 않으며, 사용자 본인의 스마트폰/PC 웹 브라우저(localStorage)에만 안전하게 보관됩니다.
-                  </p>
-                </div>
-
-                <div>
-                  <h4 className="font-bold text-white mb-1">2. 개인정보 수집 및 이용 목적</h4>
-                  <p className="text-slate-400">
-                    - 기사 회원 본인 식별 및 로그인 상태 유지<br />
-                    - 정산 청구문자 기사 연락처 자동 기재 및 중요 공지 발송<br />
-                    - 운행 일지 및 수입·지출 데이터의 클라우드 영구 저장 및 기기 간 동기화
-                  </p>
-                </div>
-
-                <div>
-                  <h4 className="font-bold text-white mb-1">3. 보유 및 이용 기간</h4>
-                  <p className="text-slate-400">
-                    - 회원 탈퇴 시 또는 서비스 종료 시까지 안전하게 보관되며, 사용자 탈퇴 요청 시 지체 없이 파기됩니다.
-                  </p>
-                </div>
-
-                <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
-                  <h4 className="font-bold text-amber-300 mb-1 flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                    4. 오픈 베타 운영 및 향후 유료 멤버십 전환 고지
-                  </h4>
-                  <p className="text-slate-300 leading-relaxed text-[11px]">
-                    1) 본 서비스(JunDriver)는 현재 기능 안정화 및 고도화를 위한 <strong>오픈 베타 테스트(Open Beta)</strong> 기간으로 무료 운영됩니다.<br />
-                    2) 베타 테스트 기간이 종료되면 서비스의 전부 또는 일부 기능이 <strong>유료 회원제 및 구독 모델</strong>로 전환될 수 있습니다.<br />
-                    3) 베타 종료 후 <strong>사용자의 명시적 신청 없는 자동 결제는 일체 발생하지 않습니다.</strong> 유료 전환을 원하지 않으실 경우 언제든 자유롭게 탈퇴가 가능합니다.<br />
-                    4) 회사는 베타 기간 중 활동 실적, 피드백 기여도 등에 따라 회원을 선별하여 <strong>우수회원 등급 부여, 평생 무료/할인 혜택 등 차등 혜택</strong>을 제공할 수 있습니다.
-                  </p>
-                </div>
-
-                <div>
-                  <h4 className="font-bold text-white mb-1">5. 동의를 거부할 권리</h4>
-                  <p className="text-slate-400">
-                    귀하는 본 동의를 거부할 권리가 있습니다. 단, 본 조항은 서비스 제공을 위한 필수 요건이므로 거부 시 가입이 제한됩니다.
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-4">
-                <button
-                  type="button"
-                  onClick={() => { setAgreePrivacy(true); setShowPrivacyModal(false); }}
-                  className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl cursor-pointer shadow-md transition-all"
-                >
-                  위 내용을 모두 확인하였으며 동의합니다
-                </button>
-              </div>
+              <h3 className="text-sm font-bold text-white mb-3">개인정보 수집 및 이용 방침</h3>
+              <p className="text-xs text-slate-300 leading-relaxed mb-4">
+                탁송 운행 기록 및 주유비 청구 내역을 클라우드에 안전하게 보관합니다. 송금용 계좌 정보 및 영수증 사진은 외부 서버로 전송되지 않고 본인의 스마트폰/PC 로컬 브라우저에만 독립 보관됩니다.
+              </p>
+              <button
+                type="button"
+                onClick={() => { setAgreePrivacy(true); setShowPrivacyModal(false); }}
+                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl"
+              >
+                확인 및 동의
+              </button>
             </div>
           </div>
         )}
@@ -789,8 +685,6 @@ ${itemsText}--------------------------------
   }
 
   // 2. 메인 대시보드
-  const userPhone = session?.user?.user_metadata?.phone;
-
   return (
     <div className="min-h-screen bg-[#070B14] text-slate-100 font-sans pb-20 selection:bg-indigo-500 selection:text-white">
       {/* 상단 헤더 */}
@@ -812,10 +706,7 @@ ${itemsText}--------------------------------
               className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700/70 hover:border-indigo-500 transition-all text-xs text-slate-200 cursor-pointer"
             >
               <User className="w-3.5 h-3.5 text-indigo-400" />
-              <div className="text-left max-w-[150px] truncate">
-                <span className="block truncate font-medium">{session.user.email}</span>
-                {userPhone && <span className="block text-[10px] text-slate-400 font-mono">{userPhone}</span>}
-              </div>
+              <span className="font-medium max-w-[140px] truncate">{session.user.email}</span>
             </button>
 
             <button
@@ -1068,7 +959,7 @@ ${itemsText}--------------------------------
                     </div>
                   </div>
 
-                  {/* 대납 주유비 & 대납 추가경비 */}
+                  {/* 대납 주유비 & 대납 추가경비 (100% 회수금) */}
                   <div className="p-3.5 rounded-xl bg-slate-900 border border-indigo-500/30 space-y-3">
                     <div>
                       <label className="text-xs font-bold text-indigo-300 flex items-center gap-1.5 mb-1">
@@ -1133,7 +1024,7 @@ ${itemsText}--------------------------------
                     )}
                   </div>
 
-                  {/* 순수 수입용 팁 */}
+                  {/* 순수 수입용 팁 (청구문자에 미포함) */}
                   <div>
                     <label className="block text-[11px] font-semibold text-emerald-400 mb-1 flex items-center gap-1">
                       <Coins className="w-3.5 h-3.5" />
@@ -1718,7 +1609,7 @@ ${itemsText}--------------------------------
             </div>
 
             <textarea
-              rows={10}
+              rows={9}
               value={claimMessageText}
               onChange={(e) => setClaimMessageText(e.target.value)}
               className="w-full p-3.5 rounded-xl bg-white text-slate-950 font-medium text-xs border border-slate-200 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 leading-relaxed font-mono"
