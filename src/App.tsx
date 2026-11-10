@@ -346,7 +346,7 @@ export default function App() {
     if (withGross) { total += r.grossAmount; itemsText += `* 탁송운임: ${r.grossAmount.toLocaleString()}원\n`; }
     if (withFuel && r.fuelAmount > 0) { total += r.fuelAmount; itemsText += `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원\n`; }
     if (withExtra && r.extraExpenseAmount > 0) { total += r.extraExpenseAmount; itemsText += `* 대납 추가경비: ${r.extraExpenseAmount.toLocaleString()}원\n`; }
-    return `[탁송 정산 요청]\n* 운행일자: ${r.date}\n* 운행구간: ${r.departure} ➔ ${r.destination}\n${itemsText}--------------------------------\n* 총 청구금액: ${total.toLocaleString()}원\n* 입금계좌: ${primaryAccount.bankName} ${primaryAccount.accountNumber} (${primaryAccount.holder})${driverPhone ? `\n* 탁송기사: ${driverName} (${driverPhone})` : ''}\n\n확인 후 빠른 입금 부탁드립니다. 감사합니다.`;
+    return `[탁송 정산 요청]\n* 운행일자: ${r.date}\n* 운행구간: ${r.departure} ? ${r.destination}\n${itemsText}--------------------------------\n* 총 청구금액: ${total.toLocaleString()}원\n* 입금계좌: ${primaryAccount.bankName} ${primaryAccount.accountNumber} (${primaryAccount.holder})${driverPhone ? `\n* 탁송기사: ${driverName} (${driverPhone})` : ''}\n\n확인 후 빠른 입금 부탁드립니다. 감사합니다.`;
   };
 
   const handleToggleInclude = (type: 'gross' | 'fuel' | 'extra') => {
@@ -504,7 +504,7 @@ export default function App() {
                   filteredRecords.map((r) => (
                     <div key={r.id} className="bg-slate-900 border border-slate-800 p-3.5 rounded-xl flex items-center justify-between hover:border-slate-700 transition-colors">
                       <div>
-                        <div className="font-bold text-white text-sm">{r.departure} ➔ {r.destination}</div>
+                        <div className="font-bold text-white text-sm">{r.departure} ? {r.destination}</div>
                         <div className="text-[11px] text-slate-400 mt-1">{r.date} | 운임: <span className="text-slate-200">{r.grossAmount.toLocaleString()}원</span> | 순수익: <span className="text-emerald-400">+{r.netAmount.toLocaleString()}원</span></div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -535,7 +535,7 @@ export default function App() {
                   <div key={r.id} className="bg-slate-900 border border-slate-700 rounded-xl p-4 flex flex-col justify-between">
                     <div>
                       <div className="flex justify-between items-start mb-2"><span className="px-2 py-0.5 bg-rose-500/20 text-rose-300 text-[10px] font-bold rounded">청구 대기</span><span className="text-[10px] text-slate-400 font-mono">{r.date}</span></div>
-                      <div className="font-bold text-white text-sm mb-1">{r.departure} ➔ {r.destination}</div>
+                      <div className="font-bold text-white text-sm mb-1">{r.departure} ? {r.destination}</div>
                       <div className="text-xs text-slate-400 mt-2 space-y-0.5">
                         <div className="flex justify-between"><span>탁송운임</span><span className="text-white">{r.grossAmount.toLocaleString()}원</span></div>
                         {r.fuelAmount > 0 && <div className="flex justify-between"><span>대납 주유비</span><span className="text-white">{r.fuelAmount.toLocaleString()}원</span></div>}
