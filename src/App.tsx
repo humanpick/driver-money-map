@@ -32,8 +32,7 @@ import {
   AlertTriangle,
   MessageSquare,
   Check,
-  Edit2,
-  Coins
+  Edit2
 } from 'lucide-react';
 
 // Supabase 클라이언트 초기화
@@ -51,12 +50,10 @@ interface DrivingRecord {
   grossAmount: number; // 탁송료
   feeRate: number; // 수수료율
   fuelAmount: number; // 대납 주유비
-  extraExpenseAmount: number; // 대납 추가경비 (통행료/세차비/주차비 등)
-  tipAmount: number; // 순수 팁/수고비 (청구문자 미포함, 기사 순익 가산)
   receiptImage?: string; // 영수증
   isPaid: boolean; // 입금 여부
-  netAmount: number; // 순수입: (탁송료 - 수수료) + 팁
-  totalClaimAmount: number; // 총 청구 가능액: 탁송료 + 대납 주유비 + 대납 추가경비
+  netAmount: number; // 순수입 (탁송료 - 수수료)
+  totalClaimAmount: number; // 총 청구액 (탁송료 + 주유비)
 }
 
 interface ExpenseRecord {
@@ -88,10 +85,10 @@ export default function App() {
   const [authError, setAuthError] = useState('');
   const [authSuccess, setAuthSuccess] = useState('');
 
-  // 탭 상태
+  // 탭 상태: records(운행일지), claims(청구문자 관리), expense(경비장부), wallet(송금계좌)
   const [activeTab, setActiveTab] = useState<'records' | 'claims' | 'expense' | 'wallet'>('records');
 
-  // 날짜 필터 상태
+  // 날짜 필터 상태 (기본: 오늘 날짜)
   const [selectedDate, setSelectedDate] = useState<string>('2026-11-09');
   const [filterAllDates, setFilterAllDates] = useState<boolean>(false);
 
@@ -107,12 +104,11 @@ export default function App() {
   // 영수증 사진 확대 모달 상태
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
-  // 청구 문자 전용 모달 및 3대 항목 선택 상태
+  // 청구 문자 전용 모달 및 개별 항목 선택 상태
   const [claimModalOpen, setClaimModalOpen] = useState(false);
   const [selectedClaimRecord, setSelectedClaimRecord] = useState<DrivingRecord | null>(null);
   const [includeGross, setIncludeGross] = useState(true);
   const [includeFuel, setIncludeFuel] = useState(true);
-  const [includeExtra, setIncludeExtra] = useState(true);
   const [claimMessageText, setClaimMessageText] = useState('');
 
   // 파일 입력 ref
@@ -130,11 +126,9 @@ export default function App() {
       grossAmount: 85000,
       feeRate: 20,
       fuelAmount: 50000,
-      extraExpenseAmount: 8400, // 통행료 등
-      tipAmount: 5000, // 순수 팁
       isPaid: false,
-      netAmount: 73000, // (85000 * 0.8) + 5000 = 73000
-      totalClaimAmount: 143400, // 85000 + 50000 + 8400 = 143400
+      netAmount: 68000,
+      totalClaimAmount: 135000,
     },
     {
       id: '2',
@@ -146,8 +140,6 @@ export default function App() {
       grossAmount: 65000,
       feeRate: 20,
       fuelAmount: 30000,
-      extraExpenseAmount: 0,
-      tipAmount: 0,
       isPaid: false,
       netAmount: 52000,
       totalClaimAmount: 95000,
@@ -196,8 +188,6 @@ export default function App() {
   const [newGross, setNewGross] = useState('');
   const [newFeeRate, setNewFeeRate] = useState('20');
   const [newFuel, setNewFuel] = useState('');
-  const [newExtraExpense, setNewExtraExpense] = useState('');
-  const [newTip, setNewTip] = useState('');
   const [receiptImage, setReceiptImage] = useState<string>('');
 
   // 지출 입력 폼 상태
@@ -325,18 +315,15 @@ export default function App() {
     }
   };
 
-  // 운행 등록 핸들러 (팁은 순익 가산, 추가경비는 청구액 가산)
+  // 운행 등록 핸들러
   const handleAddRecord = (e: React.FormEvent) => {
     e.preventDefault();
     const gross = Number(newGross) || 0;
     const feeRate = Number(newFeeRate) || 0;
     const fuel = Number(newFuel) || 0;
-    const extraExp = Number(newExtraExpense) || 0;
-    const tip = Number(newTip) || 0;
-
     const feeAmount = gross * (feeRate / 100);
-    const net = gross - feeAmount + tip;
-    const claimTotal = gross + fuel + extraExp;
+    const net = gross - feeAmount;
+    const claimTotal = gross + fuel;
 
     const newRecord: DrivingRecord = {
       id: Date.now().toString(),
@@ -348,8 +335,6 @@ export default function App() {
       grossAmount: gross,
       feeRate,
       fuelAmount: fuel,
-      extraExpenseAmount: extraExp,
-      tipAmount: tip,
       receiptImage: receiptImage || undefined,
       isPaid: false,
       netAmount: Math.round(net),
@@ -361,8 +346,6 @@ export default function App() {
     setNewDestination('');
     setNewGross('');
     setNewFuel('');
-    setNewExtraExpense('');
-    setNewTip('');
     setReceiptImage('');
   };
 
@@ -374,20 +357,15 @@ export default function App() {
     const gross = Number(editingRecord.grossAmount) || 0;
     const feeRate = Number(editingRecord.feeRate) || 0;
     const fuel = Number(editingRecord.fuelAmount) || 0;
-    const extraExp = Number(editingRecord.extraExpenseAmount) || 0;
-    const tip = Number(editingRecord.tipAmount) || 0;
-
     const feeAmount = gross * (feeRate / 100);
-    const net = gross - feeAmount + tip;
-    const claimTotal = gross + fuel + extraExp;
+    const net = gross - feeAmount;
+    const claimTotal = gross + fuel;
 
     const updated: DrivingRecord = {
       ...editingRecord,
       grossAmount: gross,
       feeRate,
       fuelAmount: fuel,
-      extraExpenseAmount: extraExp,
-      tipAmount: tip,
       netAmount: Math.round(net),
       totalClaimAmount: Math.round(claimTotal),
     };
@@ -401,8 +379,8 @@ export default function App() {
     setRecords(records.map(r => r.id === id ? { ...r, isPaid: !r.isPaid } : r));
   };
 
-  // 청구 문자 템플릿 실시간 동적 생성 함수 (3대 항목: 탁송료 / 주유비 / 대납추가경비)
-  const buildClaimText = (r: DrivingRecord, withGross: boolean, withFuel: boolean, withExtra: boolean) => {
+  // 청구 문자 템플릿 실시간 동적 생성 함수
+  const buildClaimText = (r: DrivingRecord, withGross: boolean, withFuel: boolean) => {
     const primaryAccount = accounts[0] || { bankName: '은행명', accountNumber: '계좌번호', holder: '예금주' };
     
     let total = 0;
@@ -416,12 +394,14 @@ export default function App() {
       total += r.fuelAmount;
       itemsText += `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (영수증 첨부)\n`;
     }
-    if (withExtra && r.extraExpenseAmount > 0) {
-      total += r.extraExpenseAmount;
-      itemsText += `* 대납 추가경비: ${r.extraExpenseAmount.toLocaleString()}원 (통행료/세차비 등)\n`;
-    }
 
-    return `[탁송 정산 요청]
+    const title = withGross && withFuel && r.fuelAmount > 0
+      ? '[탁송료 및 주유비 정산 요청]'
+      : withFuel && r.fuelAmount > 0 && !withGross
+      ? '[대납 주유비 정산 요청]'
+      : '[탁송료 정산 요청]';
+
+    return `${title}
 * 운행일자: ${r.date}
 * 운행구간: ${r.departure} ➔ ${r.destination}
 ${itemsText}--------------------------------
@@ -436,22 +416,19 @@ ${itemsText}--------------------------------
     setSelectedClaimRecord(r);
     setIncludeGross(true);
     setIncludeFuel(r.fuelAmount > 0);
-    setIncludeExtra(r.extraExpenseAmount > 0);
-    setClaimMessageText(buildClaimText(r, true, r.fuelAmount > 0, r.extraExpenseAmount > 0));
+    setClaimMessageText(buildClaimText(r, true, r.fuelAmount > 0));
     setClaimModalOpen(true);
   };
 
   // 체크박스 클릭 토글
-  const handleToggleInclude = (type: 'gross' | 'fuel' | 'extra') => {
+  const handleToggleInclude = (type: 'gross' | 'fuel') => {
     if (!selectedClaimRecord) return;
     const newGross = type === 'gross' ? !includeGross : includeGross;
     const newFuel = type === 'fuel' ? !includeFuel : includeFuel;
-    const newExtra = type === 'extra' ? !includeExtra : includeExtra;
 
     setIncludeGross(newGross);
     setIncludeFuel(newFuel);
-    setIncludeExtra(newExtra);
-    setClaimMessageText(buildClaimText(selectedClaimRecord, newGross, newFuel, newExtra));
+    setClaimMessageText(buildClaimText(selectedClaimRecord, newGross, newFuel));
   };
 
   // 수정한 문자 복사
@@ -501,10 +478,10 @@ ${itemsText}--------------------------------
     setHolder('');
   };
 
-  // 미수금 통계 (대납 주유비 + 대납 경비 포함)
+  // 미수금 통계
   const unpaidRecords = records.filter(r => !r.isPaid);
   const totalUnpaidAmount = unpaidRecords.reduce((acc, cur) => acc + cur.totalClaimAmount, 0);
-  const totalUnpaidReimbursements = unpaidRecords.reduce((acc, cur) => acc + cur.fuelAmount + cur.extraExpenseAmount, 0);
+  const totalUnpaidFuel = unpaidRecords.reduce((acc, cur) => acc + cur.fuelAmount, 0);
 
   // 월간 집계
   const currentMonthPrefix = selectedDate.substring(0, 7);
@@ -518,6 +495,10 @@ ${itemsText}--------------------------------
   // 일자별 필터
   const filteredRecords = filterAllDates ? records : records.filter((r) => r.date === selectedDate);
   const filteredExpenses = filterAllDates ? expenses : expenses.filter((e) => e.date === selectedDate);
+  const dailyGross = filteredRecords.reduce((acc, cur) => acc + cur.grossAmount, 0);
+  const dailyNet = filteredRecords.reduce((acc, cur) => acc + cur.netAmount, 0);
+  const dailyExpense = filteredExpenses.reduce((acc, cur) => acc + cur.amount, 0);
+  const dailyProfit = dailyNet - dailyExpense;
 
   // 1. 미로그인 뷰
   if (!session) {
@@ -735,7 +716,7 @@ ${itemsText}--------------------------------
                 <div className="text-xl font-extrabold text-white mt-0.5">
                   총 {totalUnpaidAmount.toLocaleString()}원{' '}
                   <span className="text-xs font-normal text-rose-300 ml-1">
-                    (사비 대납 경비 {totalUnpaidReimbursements.toLocaleString()}원 포함)
+                    (사비 대납 주유비 {totalUnpaidFuel.toLocaleString()}원 포함)
                   </span>
                 </div>
               </div>
@@ -772,13 +753,13 @@ ${itemsText}--------------------------------
               </div>
             </div>
             <div>
-              <div className="text-[11px] text-slate-400 mb-0.5">당월 탁송 순수입 (팁 포함)</div>
+              <div className="text-[11px] text-slate-400 mb-0.5">당월 탁송 순수입</div>
               <div className="text-xl lg:text-2xl font-extrabold text-indigo-300">
                 {monthlyNet.toLocaleString()}<span className="text-xs font-normal text-slate-400 ml-1">원</span>
               </div>
             </div>
             <div>
-              <div className="text-[11px] text-slate-400 mb-0.5">당월 본인 경비 지출</div>
+              <div className="text-[11px] text-slate-400 mb-0.5">당월 경비 지출</div>
               <div className="text-xl lg:text-2xl font-extrabold text-rose-400">
                 -{monthlyExpense.toLocaleString()}<span className="text-xs font-normal text-slate-400 ml-1">원</span>
               </div>
@@ -954,35 +935,18 @@ ${itemsText}--------------------------------
                     </div>
                   </div>
 
-                  {/* 대납 주유비 & 대납 추가경비 (100% 회수금) */}
-                  <div className="p-3.5 rounded-xl bg-slate-900 border border-indigo-500/30 space-y-3">
-                    <div>
-                      <label className="text-xs font-bold text-indigo-300 flex items-center gap-1.5 mb-1">
-                        <Fuel className="w-3.5 h-3.5 text-indigo-400" />
-                        대납 주유/충전비 (회수금)
-                      </label>
-                      <input
-                        type="number"
-                        placeholder="사비 선결제 금액 (없으면 0)"
-                        value={newFuel}
-                        onChange={(e) => setNewFuel(e.target.value)}
-                        className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-bold text-xs"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-bold text-sky-300 flex items-center gap-1.5 mb-1">
-                        <Receipt className="w-3.5 h-3.5 text-sky-400" />
-                        대납 추가경비 (통행료/세차비/주차비)
-                      </label>
-                      <input
-                        type="number"
-                        placeholder="선결제한 추가 경비 (없으면 0)"
-                        value={newExtraExpense}
-                        onChange={(e) => setNewExtraExpense(e.target.value)}
-                        className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-bold text-xs"
-                      />
-                    </div>
+                  <div className="p-3.5 rounded-xl bg-slate-900 border border-indigo-500/30 space-y-2.5">
+                    <label className="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
+                      <Fuel className="w-4 h-4 text-indigo-400" />
+                      대납 주유/충전비 (100% 회수금)
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="사비 선결제 금액 (없으면 0)"
+                      value={newFuel}
+                      onChange={(e) => setNewFuel(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-bold text-xs"
+                    />
 
                     <div className="pt-1">
                       <input
@@ -1003,9 +967,9 @@ ${itemsText}--------------------------------
                     </div>
 
                     {receiptImage && (
-                      <div className="relative p-1 bg-slate-950 rounded-lg border border-slate-800 flex items-center justify-between">
+                      <div className="relative mt-2 p-1 bg-slate-950 rounded-lg border border-slate-800 flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <img src={receiptImage} alt="영수증" className="w-9 h-9 object-cover rounded" />
+                          <img src={receiptImage} alt="영수증" className="w-10 h-10 object-cover rounded" />
                           <span className="text-[11px] text-emerald-400 font-semibold">영수증 등록됨</span>
                         </div>
                         <button
@@ -1017,21 +981,6 @@ ${itemsText}--------------------------------
                         </button>
                       </div>
                     )}
-                  </div>
-
-                  {/* 순수 수입용 팁 (청구문자에 절대 미반영) */}
-                  <div>
-                    <label className="block text-[11px] font-semibold text-emerald-400 mb-1 flex items-center gap-1">
-                      <Coins className="w-3.5 h-3.5" />
-                      손님 수고비 / 팁 (순수 기사 수익)
-                    </label>
-                    <input
-                      type="number"
-                      placeholder="청구문자 미포함, 내 순익에만 합산"
-                      value={newTip}
-                      onChange={(e) => setNewTip(e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
-                    />
                   </div>
 
                   <button
@@ -1068,7 +1017,7 @@ ${itemsText}--------------------------------
                               </div>
                               <div>
                                 <div className="text-sm font-bold text-white flex items-center gap-2">
-                                  <span>{r.departure}</span>
+                                <span>{r.departure}</span>
                                   <span className="text-indigo-400">➔</span>
                                   <span>{r.destination}</span>
                                 </div>
@@ -1091,13 +1040,11 @@ ${itemsText}--------------------------------
                             </button>
                           </div>
 
-                          <div className="pt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                            <div className="flex flex-wrap items-center gap-3 text-slate-400">
+                          <div className="pt-3 flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-3 text-slate-400">
                               <span>탁송료: <strong className="text-white">{r.grossAmount.toLocaleString()}원</strong></span>
                               {r.fuelAmount > 0 && <span className="text-indigo-300 font-semibold">주유비: {r.fuelAmount.toLocaleString()}원</span>}
-                              {r.extraExpenseAmount > 0 && <span className="text-sky-300 font-semibold">대납경비: {r.extraExpenseAmount.toLocaleString()}원</span>}
                               <span className="text-emerald-400 font-semibold">순익: +{r.netAmount.toLocaleString()}원</span>
-                              {r.tipAmount > 0 && <span className="text-emerald-300 text-[11px]">(팁 {r.tipAmount.toLocaleString()}원 포함)</span>}
                             </div>
 
                             <div className="flex items-center gap-2">
@@ -1111,6 +1058,7 @@ ${itemsText}--------------------------------
                                 </button>
                               )}
 
+                              {/* [수정 버튼] 복구 완료 */}
                               <button
                                 onClick={() => setEditingRecord(r)}
                                 className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-indigo-300 hover:text-white transition-all cursor-pointer"
@@ -1148,7 +1096,7 @@ ${itemsText}--------------------------------
                   미수금 정산 및 청구문자 전송 관리
                 </h3>
                 <p className="text-xs text-slate-400 mt-1">
-                  탁송운임, 대납 주유비, 대납 추가경비를 선택적으로 합산하여 맞춤 청구문자를 전송할 수 있습니다.
+                  탁송료와 주유비를 선택적으로 합산하여 맞춤 청구문자를 전송할 수 있습니다.
                 </p>
               </div>
               <div className="text-right">
@@ -1192,7 +1140,6 @@ ${itemsText}--------------------------------
                             <span>운행일: {r.date}</span>
                             <span>탁송료: {r.grossAmount.toLocaleString()}원</span>
                             {r.fuelAmount > 0 && <span className="text-indigo-300 font-semibold">대납 주유비: {r.fuelAmount.toLocaleString()}원</span>}
-                            {r.extraExpenseAmount > 0 && <span className="text-sky-300 font-semibold">대납 경비: {r.extraExpenseAmount.toLocaleString()}원</span>}
                             <span className="text-white font-bold">합산 청구액: {r.totalClaimAmount.toLocaleString()}원</span>
                           </div>
                         </div>
@@ -1464,7 +1411,7 @@ ${itemsText}--------------------------------
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-300 mb-1">탁송료(원)</label>
                   <input
@@ -1484,11 +1431,8 @@ ${itemsText}--------------------------------
                     className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
                   />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-[11px] font-semibold text-indigo-300 mb-1">대납 주유비</label>
+                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">대납 주유비</label>
                   <input
                     type="number"
                     value={editingRecord.fuelAmount}
@@ -1496,25 +1440,6 @@ ${itemsText}--------------------------------
                     className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
                   />
                 </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-sky-300 mb-1">대납 추가경비</label>
-                  <input
-                    type="number"
-                    value={editingRecord.extraExpenseAmount}
-                    onChange={(e) => setEditingRecord({ ...editingRecord, extraExpenseAmount: Number(e.target.value) })}
-                    className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-emerald-400 mb-1">팁/수고비 (순익 가산용)</label>
-                <input
-                  type="number"
-                  value={editingRecord.tipAmount}
-                  onChange={(e) => setEditingRecord({ ...editingRecord, tipAmount: Number(e.target.value) })}
-                  className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
-                />
               </div>
 
               <div className="pt-3 flex gap-2">
@@ -1537,7 +1462,7 @@ ${itemsText}--------------------------------
         </div>
       )}
 
-      {/* 청구 문자 3대 항목 선택 합산 및 편집 모달 */}
+      {/* 청구 문자 선택 합산 및 직접 편집 모달 */}
       {claimModalOpen && selectedClaimRecord && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
           <div className="w-full max-w-lg bg-[#0E1424] border border-slate-800 rounded-2xl p-6 shadow-2xl relative">
@@ -1553,29 +1478,28 @@ ${itemsText}--------------------------------
               <h3 className="text-sm font-bold text-white">정산 청구 항목 선택 및 문자 편집</h3>
             </div>
             <p className="text-xs text-slate-400 mb-4">
-              청구할 항목을 클릭해 선택하면 문구와 합산 금액이 실시간으로 변경됩니다. (팁은 포함되지 않음)
+              청구할 항목을 클릭해 선택하면 문구와 합산 금액이 실시간으로 변경됩니다.
             </p>
 
-            {/* 3대 항목 선택 바 */}
-            <div className="grid grid-cols-3 gap-2 mb-4 p-2.5 rounded-xl bg-slate-900 border border-slate-800">
+            <div className="grid grid-cols-2 gap-2.5 mb-4 p-3 rounded-xl bg-slate-900 border border-slate-800">
               <button
                 type="button"
                 onClick={() => handleToggleInclude('gross')}
-                className={`py-2 px-2.5 rounded-lg text-xs font-bold flex flex-col items-center justify-center border transition-all cursor-pointer ${
+                className={`py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-between border transition-all cursor-pointer ${
                   includeGross
                     ? 'bg-indigo-600/20 text-indigo-300 border-indigo-500/50'
                     : 'bg-slate-950 text-slate-500 border-slate-800'
                 }`}
               >
-                <span className="text-[10px] text-slate-400">탁송운임</span>
-                <span className="mt-0.5">{selectedClaimRecord.grossAmount.toLocaleString()}원</span>
+                <span>탁송운임</span>
+                <span>{selectedClaimRecord.grossAmount.toLocaleString()}원</span>
               </button>
 
               <button
                 type="button"
                 disabled={selectedClaimRecord.fuelAmount <= 0}
                 onClick={() => handleToggleInclude('fuel')}
-                className={`py-2 px-2.5 rounded-lg text-xs font-bold flex flex-col items-center justify-center border transition-all cursor-pointer ${
+                className={`py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-between border transition-all cursor-pointer ${
                   selectedClaimRecord.fuelAmount <= 0
                     ? 'opacity-40 cursor-not-allowed bg-slate-950 text-slate-600 border-slate-800'
                     : includeFuel
@@ -1583,24 +1507,8 @@ ${itemsText}--------------------------------
                     : 'bg-slate-950 text-slate-500 border-slate-800'
                 }`}
               >
-                <span className="text-[10px] text-slate-400">대납 주유비</span>
-                <span className="mt-0.5">{selectedClaimRecord.fuelAmount.toLocaleString()}원</span>
-              </button>
-
-              <button
-                type="button"
-                disabled={selectedClaimRecord.extraExpenseAmount <= 0}
-                onClick={() => handleToggleInclude('extra')}
-                className={`py-2 px-2.5 rounded-lg text-xs font-bold flex flex-col items-center justify-center border transition-all cursor-pointer ${
-                  selectedClaimRecord.extraExpenseAmount <= 0
-                    ? 'opacity-40 cursor-not-allowed bg-slate-950 text-slate-600 border-slate-800'
-                    : includeExtra
-                    ? 'bg-indigo-600/20 text-indigo-300 border-indigo-500/50'
-                    : 'bg-slate-950 text-slate-500 border-slate-800'
-                }`}
-              >
-                <span className="text-[10px] text-slate-400">대납 추가경비</span>
-                <span className="mt-0.5">{selectedClaimRecord.extraExpenseAmount.toLocaleString()}원</span>
+                <span>대납 주유비</span>
+                <span>{selectedClaimRecord.fuelAmount.toLocaleString()}원</span>
               </button>
             </div>
 
