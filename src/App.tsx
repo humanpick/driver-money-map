@@ -392,7 +392,7 @@ export default function App() {
     if (withGross) { total += r.grossAmount; itemsText += `* 탁송운임: ${r.grossAmount.toLocaleString()}원\n`; }
     if (withFuel && r.fuelAmount > 0) { total += r.fuelAmount; itemsText += `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원\n`; }
     if (withExtra && r.extraExpenseAmount > 0) { total += r.extraExpenseAmount; itemsText += `* 대납 추가경비: ${r.extraExpenseAmount.toLocaleString()}원\n`; }
-    return `[탁송 정산 요청]\n* 운행일자: ${r.date}\n* 운행구간: ${r.departure} ? ${r.destination}\n${itemsText}--------------------------------\n* 총 청구금액: ${total.toLocaleString()}원\n* 입금계좌: ${primaryAccount.bankName} ${primaryAccount.accountNumber} (${primaryAccount.holder})${driverPhone ? `\n* 탁송기사: ${driverName} (${driverPhone})` : ''}\n\n확인 후 빠른 입금 부탁드립니다. 감사합니다.`;
+    return `[탁송 정산 요청]\n* 운행일자: ${r.date}\n* 운행구간: ${r.departure} → ${r.destination}\n${itemsText}--------------------------------\n* 총 청구금액: ${total.toLocaleString()}원\n* 입금계좌: ${primaryAccount.bankName} ${primaryAccount.accountNumber} (${primaryAccount.holder})${driverPhone ? `\n* 탁송기사: ${driverName} (${driverPhone})` : ''}\n\n확인 후 빠른 입금 부탁드립니다. 감사합니다.`;
   };
 
   const handleToggleInclude = (type: 'gross' | 'fuel' | 'extra') => {
@@ -651,7 +651,7 @@ export default function App() {
                           <div className="flex items-start sm:items-center gap-3">
                             <div className="p-2 rounded-lg bg-[#8B5CF6]/10 text-[#8B5CF6] shrink-0"><MapPin className="w-4 h-4" /></div>
                             <div>
-                              <div className="text-sm font-bold text-white flex items-center gap-2"><span>{r.departure}</span><span className="text-[#8B5CF6]">?</span><span>{r.destination}</span></div>
+                              <div className="text-sm font-bold text-white flex items-center gap-1.5"><span>{r.departure}</span><ChevronRight className="w-4 h-4 text-[#8B5CF6]" /><span>{r.destination}</span></div>
                               <div className="flex items-center gap-3 text-xs text-slate-400 mt-1"><span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> {r.date}</span></div>
                             </div>
                           </div>
@@ -702,7 +702,7 @@ export default function App() {
                   <div key={r.id} className="bg-[#0B1120] border border-white/10 rounded-xl p-5 flex flex-col justify-between hover:border-[#8B5CF6]/50 transition-all">
                     <div>
                       <div className="flex justify-between items-start mb-2"><span className="px-2 py-0.5 bg-[#EC4899]/20 text-[#EC4899] text-[10px] font-bold rounded">청구 대기</span><span className="text-[10px] text-slate-400 font-mono">{r.date}</span></div>
-                      <div className="font-bold text-white text-sm mb-1">{r.departure} ? {r.destination}</div>
+                      <div className="font-bold text-white text-sm mb-1 flex items-center gap-1.5"><span>{r.departure}</span><ChevronRight className="w-3.5 h-3.5 text-[#8B5CF6]" /><span>{r.destination}</span></div>
                       <div className="text-xs text-slate-400 mt-3 space-y-1">
                         <div className="flex justify-between"><span>탁송운임</span><span className="text-white">{r.grossAmount.toLocaleString()}원</span></div>
                         {r.fuelAmount > 0 && <div className="flex justify-between"><span>대납 주유비</span><span className="text-white">{r.fuelAmount.toLocaleString()}원</span></div>}
