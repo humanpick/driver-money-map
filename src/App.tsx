@@ -43,7 +43,10 @@ import {
   Users,
   Download,
   Award,
-  Crown
+  Crown,
+  BookmarkPlus,
+  Radio,
+  Send
 } from 'lucide-react';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
@@ -121,6 +124,14 @@ interface MemberProfile {
   recordCount?: number;
 }
 
+interface NoticeItem {
+  id: string;
+  title: string;
+  content: string;
+  isActive: boolean;
+  updatedAt?: string;
+}
+
 export default function App() {
   const [session, setSession] = useState<any>(null);
   const [currentUserRole, setCurrentUserRole] = useState<'super_admin' | 'manager' | 'vip_driver' | 'user'>('user');
@@ -133,7 +144,6 @@ export default function App() {
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [agreePrivacy, setAgreePrivacy] = useState(false);
-  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState('');
   const [authSuccess, setAuthSuccess] = useState('');
@@ -144,7 +154,7 @@ export default function App() {
 
   // 탭 상태
   const [activeTab, setActiveTab] = useState<'records' | 'claims' | 'expense' | 'wallet' | 'admin'>('records');
-  const [adminSubTab, setAdminSubTab] = useState<'analytics' | 'members' | 'campaign'>('analytics');
+  const [adminSubTab, setAdminSubTab] = useState<'analytics' | 'members' | 'campaign'>('campaign');
 
   // 날짜 필터 상태
   const [selectedDate, setSelectedDate] = useState<string>('2026-11-10');
@@ -152,9 +162,6 @@ export default function App() {
 
   // 계정 보안 모달
   const [showProfileModal, setShowProfileModal] = useState(false);
-  const [newPassword, setNewPassword] = useState('');
-  const [pwdLoading, setPwdLoading] = useState(false);
-  const [pwdMessage, setPwdMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // 운행 일지 수정 모달
   const [editingRecord, setEditingRecord] = useState<DrivingRecord | null>(null);
@@ -171,28 +178,22 @@ export default function App() {
   const [includeExtra, setIncludeExtra] = useState(true);
   const [claimMessageText, setClaimMessageText] = useState('');
 
-  // 로딩 상태
-  const [dataLoading, setDataLoading] = useState(false);
-
   // 데이터 상태
   const [records, setRecords] = useState<DrivingRecord[]>([]);
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
 
-  // 공지 상태
-  const [announcement, setAnnouncement] = useState<{ title: string; content: string; isActive: boolean }>({
-    title: '오픈 베타 이벤트 안내',
-    content: '운행 일지를 10건 이상 등록하신 기사님께 모바일 주유권을 증정합니다!',
-    isActive: true,
-  });
+  // 공지사항 라이브러리 및 활성 공지 상태
+  const [activeNotice, setActiveNotice] = useState<NoticeItem | null>(null);
+  const [noticeList, setNoticeList] = useState<NoticeItem[]>([]);
+  const [inputNoticeTitle, setInputNoticeTitle] = useState('');
+  const [inputNoticeContent, setInputNoticeContent] = useState('');
+  const [editingNoticeId, setEditingNoticeId] = useState<string | null>(null);
+  const [noticeLoading, setNoticeLoading] = useState(false);
 
   // 관리자 전용 데이터 상태
   const [adminMemberList, setAdminMemberList] = useState<MemberProfile[]>([]);
   const [adminAllRecords, setAdminAllRecords] = useState<DrivingRecord[]>([]);
   const [adminSearchTerm, setAdminSearchTerm] = useState('');
-  const [noticeTitleInput, setNoticeTitleInput] = useState('');
-  const [noticeContentInput, setNoticeContentInput] = useState('');
-  const [noticeActiveInput, setNoticeActiveInput] = useState(true);
-  const [adminSavingNotice, setAdminSavingNotice] = useState(false);
 
   // 기사 계좌
   const [accounts, setAccounts] = useState<BankAccount[]>(() => {
@@ -233,23 +234,25 @@ export default function App() {
   const [expAmount, setExpAmount] = useState('');
   const [expMemo, setExpMemo] = useState('');
 
-  // 계좌 폼 상태
-  const [bankName, setBankName] = useState('');
-  const [accountNumber, setAccountNumber] = useState('');
-  const [holder, setHolder] = useState('');
-
-  const fetchAnnouncement = async () => {
+  // 공지사항 라이브러리 목록 로드
+  const fetchNotices = async () => {
     try {
-      const { data } = await supabase.from('announcements').select('*').eq('id', 'main_notice').maybeSingle();
-      if (data) {
-        setAnnouncement({
-          title: data.title,
-          content: data.content,
-          isActive: Boolean(data.is_active),
-        });
-        setNoticeTitleInput(data.title);
-        setNoticeContentInput(data.content);
-        setNoticeActiveInput(Boolean(data.is_active));
+      const { data, error } = await supabase
+        .from('announcements')
+        .select('*')
+        .order('updated_at', { ascending: false });
+
+      if (data && !error) {
+        const formatted: NoticeItem[] = data.map((d: any) => ({
+          id: d.id,
+          title: d.title,
+          content: d.content,
+          isActive: Boolean(d.is_active),
+          updatedAt: d.updated_at ? d.updated_at.substring(0, 16).replace('T', ' ') : '',
+        }));
+        setNoticeList(formatted);
+        const currentActive = formatted.find((n) => n.isActive);
+        setActiveNotice(currentActive || null);
       }
     } catch (e) {
       console.error(e);
@@ -257,7 +260,6 @@ export default function App() {
   };
 
   const fetchUserData = async (userId: string, userEmail: string) => {
-    setDataLoading(true);
     try {
       let role = 'user';
       if (userEmail.toLowerCase() === ADMIN_DEFAULT_EMAIL.toLowerCase()) {
@@ -275,6 +277,7 @@ export default function App() {
       }
       setCurrentUserRole(role as any);
 
+      // 운행 기록 로드
       const { data: recordsData } = await supabase
         .from('driving_records')
         .select('*')
@@ -302,6 +305,7 @@ export default function App() {
         );
       }
 
+      // 경비 로드
       const { data: expensesData } = await supabase
         .from('expenses')
         .select('*')
@@ -325,8 +329,6 @@ export default function App() {
       }
     } catch (err) {
       console.error(err);
-    } finally {
-      setDataLoading(false);
     }
   };
 
@@ -373,7 +375,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    fetchAnnouncement();
+    fetchNotices();
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -502,6 +504,94 @@ export default function App() {
     setActiveTab('records');
   };
 
+  // 공지 저장 (신규 등록 또는 수정)
+  const handleSaveNoticeTemplate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inputNoticeTitle.trim() || !inputNoticeContent.trim()) {
+      alert('제목과 내용을 모두 입력해 주세요.');
+      return;
+    }
+
+    setNoticeLoading(true);
+    const targetId = editingNoticeId || `notice_${Date.now()}`;
+
+    const { error } = await supabase.from('announcements').upsert({
+      id: targetId,
+      title: inputNoticeTitle.trim(),
+      content: inputNoticeContent.trim(),
+      is_active: editingNoticeId ? (noticeList.find(n => n.id === editingNoticeId)?.isActive || false) : false,
+      updated_at: new Date().toISOString(),
+    });
+
+    if (error) {
+      alert('저장 실패: ' + error.message);
+    } else {
+      alert(editingNoticeId ? '문구가 수정되었습니다.' : '새 공지 문구가 보관함에 저장되었습니다.');
+      setInputNoticeTitle('');
+      setInputNoticeContent('');
+      setEditingNoticeId(null);
+      fetchNotices();
+    }
+    setNoticeLoading(false);
+  };
+
+  // 공지 문구를 메인 배너로 즉시 활성화/송출
+  const handleActivateNotice = async (targetNotice: NoticeItem) => {
+    setNoticeLoading(true);
+    try {
+      // 1. 기존 모든 공지의 is_active를 false로 리셋
+      await supabase.from('announcements').update({ is_active: false }).neq('id', 'dummy');
+
+      // 2. 선택된 공지만 is_active를 true로 활성화
+      const { error } = await supabase
+        .from('announcements')
+        .update({ is_active: true, updated_at: new Date().toISOString() })
+        .eq('id', targetNotice.id);
+
+      if (error) {
+        alert('활성화 실패: ' + error.message);
+      } else {
+        alert(`[${targetNotice.title}] 문구가 메인 배너로 활성화되었습니다.`);
+        fetchNotices();
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setNoticeLoading(false);
+    }
+  };
+
+  // 메인 배너 끄기
+  const handleDeactivateAllNotices = async () => {
+    setNoticeLoading(true);
+    const { error } = await supabase.from('announcements').update({ is_active: false }).neq('id', 'dummy');
+    if (error) {
+      alert('해제 실패: ' + error.message);
+    } else {
+      alert('메인 배너 송출이 중단되었습니다.');
+      fetchNotices();
+    }
+    setNoticeLoading(false);
+  };
+
+  // 공지 문구 삭제
+  const handleDeleteNotice = async (id: string) => {
+    if (!window.confirm('이 공지 문구를 보관함에서 삭제하시겠습니까?')) return;
+    const { error } = await supabase.from('announcements').delete().eq('id', id);
+    if (error) {
+      alert('삭제 실패: ' + error.message);
+    } else {
+      fetchNotices();
+    }
+  };
+
+  // 공지 문구 불러오기
+  const handleLoadNoticeToForm = (n: NoticeItem) => {
+    setInputNoticeTitle(n.title);
+    setInputNoticeContent(n.content);
+    setEditingNoticeId(n.id);
+  };
+
   const handleAddRecord = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!session) return;
@@ -569,70 +659,6 @@ export default function App() {
     setNewTip('');
   };
 
-  const handleOpenEditModal = (r: DrivingRecord) => {
-    setEditingRecord(r);
-    setEditGross(formatNumberWithComma(r.grossAmount));
-    setEditFuel(formatNumberWithComma(r.fuelAmount));
-    setEditExtra(formatNumberWithComma(r.extraExpenseAmount));
-    setEditTip(formatNumberWithComma(r.tipAmount));
-  };
-
-  const handleUpdateRecord = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingRecord || !session) return;
-
-    const gross = cleanNumber(editGross);
-    const feeRate = cleanNumber(editingRecord.feeRate);
-    const fuel = cleanNumber(editFuel);
-    const extraExp = cleanNumber(editExtra);
-    const tip = cleanNumber(editTip);
-
-    const feeAmount = gross * (feeRate / 100);
-    const net = gross - feeAmount + tip;
-    const claimTotal = gross + fuel + extraExp;
-
-    const { error } = await supabase
-      .from('driving_records')
-      .update({
-        date: editingRecord.date,
-        start_time: editingRecord.startTime,
-        end_time: editingRecord.endTime,
-        departure: editingRecord.departure,
-        destination: editingRecord.destination,
-        gross_amount: gross,
-        fee_rate: feeRate,
-        fuel_amount: fuel,
-        extra_expense_amount: extraExp,
-        tip_amount: tip,
-        net_amount: Math.round(net),
-        total_claim_amount: Math.round(claimTotal),
-      })
-      .eq('id', editingRecord.id);
-
-    if (error) {
-      alert('수정 실패: ' + error.message);
-      return;
-    }
-
-    setRecords(
-      records.map((r) =>
-        r.id === editingRecord.id
-          ? {
-              ...editingRecord,
-              grossAmount: gross,
-              feeRate,
-              fuelAmount: fuel,
-              extraExpenseAmount: extraExp,
-              tipAmount: tip,
-              netAmount: Math.round(net),
-              totalClaimAmount: Math.round(claimTotal),
-            }
-          : r
-      )
-    );
-    setEditingRecord(null);
-  };
-
   const handleDeleteRecord = async (id: string) => {
     const { error } = await supabase.from('driving_records').delete().eq('id', id);
     if (error) {
@@ -696,156 +722,8 @@ ${itemsText}--------------------------------
     setClaimModalOpen(true);
   };
 
-  const handleToggleInclude = (type: 'gross' | 'fuel' | 'extra') => {
-    if (!selectedClaimRecord) return;
-    const newGross = type === 'gross' ? !includeGross : includeGross;
-    const newFuel = type === 'fuel' ? !includeFuel : includeFuel;
-    const newExtra = type === 'extra' ? !includeExtra : includeExtra;
-
-    setIncludeGross(newGross);
-    setIncludeFuel(newFuel);
-    setIncludeExtra(newExtra);
-    setClaimMessageText(buildClaimText(selectedClaimRecord, newGross, newFuel, newExtra));
-  };
-
-  const handleCopyClaimMessage = () => {
-    navigator.clipboard.writeText(claimMessageText);
-    alert('청구 문자가 복사되었습니다.');
-    setClaimModalOpen(false);
-  };
-
-  const getElapsedDays = (recordDate: string) => {
-    const today = new Date('2026-11-10');
-    const target = new Date(recordDate);
-    const diffTime = today.getTime() - target.getTime();
-    return Math.max(0, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
-  };
-
-  const handleAddExpense = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanAmt = cleanNumber(expAmount);
-    if (!cleanAmt || !session) return;
-    const expenseId = 'exp_' + Date.now().toString();
-
-    const insertPayload = {
-      id: expenseId,
-      user_id: session.user.id,
-      date: newDate,
-      category: expCategory,
-      amount: cleanAmt,
-      memo: expMemo,
-    };
-
-    const { error } = await supabase.from('expenses').insert([insertPayload]);
-    if (error) {
-      alert('경비 저장 실패: ' + error.message);
-      return;
-    }
-
-    setExpenses([{ id: expenseId, date: newDate, category: expCategory, amount: cleanAmt, memo: expMemo }, ...expenses]);
-    setExpAmount('');
-    setExpMemo('');
-  };
-
-  const handleDeleteExpense = async (id: string) => {
-    const { error } = await supabase.from('expenses').delete().eq('id', id);
-    if (error) {
-      alert('삭제 실패: ' + error.message);
-      return;
-    }
-    setExpenses(expenses.filter((e) => e.id !== id));
-  };
-
-  const handleAddAccount = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!bankName || !accountNumber) return;
-    setAccounts([...accounts, { id: Date.now().toString(), bankName, accountNumber, holder: holder || '본인' }]);
-    setBankName('');
-    setAccountNumber('');
-    setHolder('');
-  };
-
-  const handleUpdateMemberRole = async (memberId: string, newRole: string) => {
-    if (currentUserRole !== 'super_admin') {
-      alert('권한 변경은 최고 관리자만 가능합니다.');
-      return;
-    }
-    const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', memberId);
-    if (error) {
-      alert('변경 실패: ' + error.message);
-    } else {
-      alert('권한이 변경되었습니다.');
-      fetchAdminData();
-    }
-  };
-
-  const handleSaveAnnouncement = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAdminSavingNotice(true);
-    const { error } = await supabase.from('announcements').upsert({
-      id: 'main_notice',
-      title: noticeTitleInput,
-      content: noticeContentInput,
-      is_active: noticeActiveInput,
-      updated_at: new Date().toISOString(),
-    });
-
-    if (error) {
-      alert('공지 저장 실패: ' + error.message);
-    } else {
-      setAnnouncement({
-        title: noticeTitleInput,
-        content: noticeContentInput,
-        isActive: noticeActiveInput,
-      });
-      alert('공지사항이 반영되었습니다.');
-    }
-    setAdminSavingNotice(false);
-  };
-
-  const handleExportAdminCSV = () => {
-    if (adminAllRecords.length === 0) {
-      alert('데이터가 없습니다.');
-      return;
-    }
-    const headers = ['일자', '출발지', '도착지', '운임', '수수료율', '주유비', '경비', '순수익', '입금여부'];
-    const rows = adminAllRecords.map((r) => [
-      r.date,
-      `"${r.departure}"`,
-      `"${r.destination}"`,
-      r.grossAmount,
-      `${r.feeRate}%`,
-      r.fuelAmount,
-      r.extraExpenseAmount,
-      r.netAmount,
-      r.isPaid ? '입금완료' : '미입금',
-    ]);
-    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `JunDriver_전체운행_${selectedDate}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  // 통계 계산
   const unpaidRecords = records.filter((r) => !r.isPaid);
   const totalUnpaidAmount = unpaidRecords.reduce((acc, cur) => acc + cur.totalClaimAmount, 0);
-  const totalUnpaidReimbursements = unpaidRecords.reduce((acc, cur) => acc + cur.fuelAmount + cur.extraExpenseAmount, 0);
-
-  const currentMonthPrefix = selectedDate.substring(0, 7);
-  const monthlyRecords = records.filter((r) => r.date.startsWith(currentMonthPrefix));
-  const monthlyExpenses = expenses.filter((e) => e.date.startsWith(currentMonthPrefix));
-  const monthlyGross = monthlyRecords.reduce((acc, cur) => acc + cur.grossAmount, 0);
-  const monthlyNet = monthlyRecords.reduce((acc, cur) => acc + cur.netAmount, 0);
-  const monthlyExpense = monthlyExpenses.reduce((acc, cur) => acc + cur.amount, 0);
-  const monthlyProfit = monthlyNet - monthlyExpense;
-
-  const filteredRecords = filterAllDates ? records : records.filter((r) => r.date === selectedDate);
-  const filteredExpenses = filterAllDates ? expenses : expenses.filter((e) => e.date === selectedDate);
 
   const filteredAdminMembers = adminMemberList.filter(
     (m) =>
@@ -863,7 +741,6 @@ ${itemsText}--------------------------------
 
   const isAdminUser = currentUserRole === 'super_admin' || currentUserRole === 'manager';
 
-  // 1. 미로그인 첫 화면 (관리자 전용 문구 및 버튼 완전 제거)
   if (!session) {
     return (
       <div className="min-h-screen bg-[#070B14] text-slate-100 flex items-center justify-center p-4 font-sans relative">
@@ -1033,7 +910,6 @@ ${itemsText}--------------------------------
     );
   }
 
-  // 2. 메인 대시보드 화면
   const userName = session?.user?.user_metadata?.name || ADMIN_DEFAULT_NAME;
   const userPhone = formatPhoneNumber(session?.user?.user_metadata?.phone || ADMIN_DEFAULT_PHONE);
 
@@ -1081,13 +957,14 @@ ${itemsText}--------------------------------
       </header>
 
       <main className="max-w-[1400px] mx-auto px-4 lg:px-8 pt-6 space-y-6">
-        {announcement.isActive && activeTab !== 'admin' && (
-          <section className="bg-gradient-to-r from-indigo-950/40 via-purple-950/30 to-indigo-950/40 border border-indigo-500/30 rounded-2xl p-4 flex items-center justify-between">
+        {/* 활성 공지사항 배너 */}
+        {activeNotice && activeTab !== 'admin' && (
+          <section className="bg-gradient-to-r from-indigo-950/60 via-purple-950/40 to-indigo-950/60 border border-indigo-500/40 rounded-2xl p-4 flex items-center justify-between shadow-lg">
             <div className="flex items-center gap-3">
-              <Megaphone className="w-5 h-5 text-indigo-400 animate-bounce" />
+              <Megaphone className="w-5 h-5 text-indigo-400 animate-pulse shrink-0" />
               <div>
-                <div className="text-xs font-bold text-indigo-300">{announcement.title}</div>
-                <div className="text-xs text-slate-300">{announcement.content}</div>
+                <div className="text-xs font-extrabold text-indigo-300">{activeNotice.title}</div>
+                <div className="text-xs text-slate-200 mt-0.5">{activeNotice.content}</div>
               </div>
             </div>
           </section>
@@ -1171,161 +1048,55 @@ ${itemsText}--------------------------------
         {activeTab === 'admin' && isAdminUser && (
           <div className="space-y-6">
             <div className="flex gap-2 border-b border-slate-800 pb-2">
-              <button onClick={() => setAdminSubTab('analytics')} className={`px-3 py-1.5 rounded text-xs font-bold cursor-pointer ${adminSubTab === 'analytics' ? 'bg-amber-500 text-slate-950 font-extrabold' : 'bg-slate-900 text-slate-400'}`}>마케팅 통계</button>
+              <button onClick={() => setAdminSubTab('campaign')} className={`px-3 py-1.5 rounded text-xs font-bold cursor-pointer ${adminSubTab === 'campaign' ? 'bg-amber-500 text-slate-950 font-extrabold' : 'bg-slate-900 text-slate-400'}`}>공지/이벤트 문구보관함</button>
               <button onClick={() => setAdminSubTab('members')} className={`px-3 py-1.5 rounded text-xs font-bold cursor-pointer ${adminSubTab === 'members' ? 'bg-amber-500 text-slate-950 font-extrabold' : 'bg-slate-900 text-slate-400'}`}>회원 관리 ({adminMemberList.length}명)</button>
-              <button onClick={() => setAdminSubTab('campaign')} className={`px-3 py-1.5 rounded text-xs font-bold cursor-pointer ${adminSubTab === 'campaign' ? 'bg-amber-500 text-slate-950 font-extrabold' : 'bg-slate-900 text-slate-400'}`}>공지/이벤트</button>
+              <button onClick={() => setAdminSubTab('analytics')} className={`px-3 py-1.5 rounded text-xs font-bold cursor-pointer ${adminSubTab === 'analytics' ? 'bg-amber-500 text-slate-950 font-extrabold' : 'bg-slate-900 text-slate-400'}`}>마케팅 통계</button>
             </div>
 
-            {adminSubTab === 'analytics' && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="bg-[#0E1424] border border-slate-800 p-4 rounded-xl">
-                    <span className="text-xs text-slate-400">총 회원</span>
-                    <div className="text-2xl font-bold text-white mt-1">{adminMemberList.length}명</div>
-                  </div>
-                  <div className="bg-[#0E1424] border border-slate-800 p-4 rounded-xl">
-                    <span className="text-xs text-slate-400">총 운행</span>
-                    <div className="text-2xl font-bold text-indigo-400 mt-1">{adminAllRecords.length}건</div>
-                  </div>
-                  <div className="bg-[#0E1424] border border-slate-800 p-4 rounded-xl">
-                    <span className="text-xs text-slate-400">총 운임규모</span>
-                    <div className="text-2xl font-bold text-emerald-400 mt-1">{adminAllRecords.reduce((acc, cur) => acc + cur.grossAmount, 0).toLocaleString()}원</div>
-                  </div>
-                  <div className="bg-[#0E1424] border border-slate-800 p-4 rounded-xl">
-                    <span className="text-xs text-slate-400">대납 주유비</span>
-                    <div className="text-2xl font-bold text-amber-400 mt-1">{adminAllRecords.reduce((acc, cur) => acc + cur.fuelAmount, 0).toLocaleString()}원</div>
-                  </div>
-                </div>
-
-                <div className="bg-[#0E1424] border border-slate-800 p-5 rounded-xl">
-                  <h4 className="font-bold text-white mb-3">인기 운행 노선 TOP 5</h4>
-                  <div className="space-y-2">
-                    {topRoutes.map(([route, count], idx) => (
-                      <div key={route} className="flex justify-between p-3 bg-slate-900 rounded-lg text-xs">
-                        <span className="font-bold text-white">{idx + 1}. {route}</span>
-                        <span className="text-indigo-400 font-mono">{count}회</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {adminSubTab === 'members' && (
-              <div className="bg-[#0E1424] border border-slate-800 p-5 rounded-xl space-y-3">
-                <input
-                  type="text"
-                  placeholder="회원 검색..."
-                  value={adminSearchTerm}
-                  onChange={(e) => setAdminSearchTerm(e.target.value)}
-                  className="px-3 py-2 bg-white text-slate-900 rounded text-xs w-full max-w-xs"
-                />
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-900 text-slate-400">
-                      <tr>
-                        <th className="p-2.5">이름</th>
-                        <th className="p-2.5">전화번호</th>
-                        <th className="p-2.5">이메일</th>
-                        <th className="p-2.5">권한</th>
-                        <th className="p-2.5 text-right">권한 변경</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800">
-                      {filteredAdminMembers.map((m) => (
-                        <tr key={m.id}>
-                          <td className="p-2.5 text-white font-bold">{m.name}</td>
-                          <td className="p-2.5">{formatPhoneNumber(m.phone)}</td>
-                          <td className="p-2.5">{m.email}</td>
-                          <td className="p-2.5">{m.role}</td>
-                          <td className="p-2.5 text-right">
-                            <select
-                              value={m.role}
-                              onChange={(e) => handleUpdateMemberRole(m.id, e.target.value)}
-                              className="bg-slate-900 border border-slate-700 text-white rounded px-2 py-1"
-                            >
-                              <option value="user">일반 기사</option>
-                              <option value="vip_driver">우수 기사</option>
-                              <option value="manager">운영 직원</option>
-                              <option value="super_admin">최고 관리자</option>
-                            </select>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
+            {/* 개편된 공지/이벤트 문구 보관함 */}
             {adminSubTab === 'campaign' && (
-              <div className="bg-[#0E1424] border border-slate-800 p-5 rounded-xl">
-                <form onSubmit={handleSaveAnnouncement} className="space-y-3 max-w-md">
-                  <input
-                    type="text"
-                    value={noticeTitleInput}
-                    onChange={(e) => setNoticeTitleInput(e.target.value)}
-                    placeholder="공지 제목"
-                    required
-                    className="w-full px-3 py-2 bg-white text-slate-900 rounded text-xs"
-                  />
-                  <textarea
-                    rows={3}
-                    value={noticeContentInput}
-                    onChange={(e) => setNoticeContentInput(e.target.value)}
-                    placeholder="공지 내용"
-                    required
-                    className="w-full px-3 py-2 bg-white text-slate-900 rounded text-xs"
-                  />
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id="act"
-                      checked={noticeActiveInput}
-                      onChange={(e) => setNoticeActiveInput(e.target.checked)}
-                      className="w-4 h-4 rounded text-indigo-600"
-                    />
-                    <label htmlFor="act" className="text-xs text-white">공지 활성화</label>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* 문구 작성 및 수정 폼 */}
+                <div className="bg-[#0E1424] border border-slate-800 p-5 rounded-xl space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-bold text-white text-sm flex items-center gap-1.5">
+                      <BookmarkPlus className="w-4 h-4 text-indigo-400" />
+                      {editingNoticeId ? '문구 수정하기' : '새 공지/이벤트 문구 저장'}
+                    </h4>
+                    {editingNoticeId && (
+                      <button
+                        onClick={() => { setEditingNoticeId(null); setInputNoticeTitle(''); setInputNoticeContent(''); }}
+                        className="text-[11px] text-slate-400 hover:text-white"
+                      >
+                        신규 작성으로 전환
+                      </button>
+                    )}
                   </div>
-                  <button type="submit" disabled={adminSavingNotice} className="px-4 py-2 bg-indigo-600 text-white font-bold rounded text-xs cursor-pointer">
-                    {adminSavingNotice ? '저장 중...' : '공지 저장'}
-                  </button>
-                </form>
-              </div>
-            )}
-          </div>
-        )}
-      </main>
 
-      {/* 청구 문자 모달 */}
-      {claimModalOpen && selectedClaimRecord && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="w-full max-w-lg bg-[#0E1424] border border-slate-800 rounded-2xl p-6">
-            <h3 className="text-sm font-bold text-white mb-2">정산 청구 문자 전송</h3>
-            <textarea
-              rows={8}
-              value={claimMessageText}
-              onChange={(e) => setClaimMessageText(e.target.value)}
-              className="w-full p-3 bg-white text-slate-900 rounded text-xs font-mono mb-4"
-            />
-            <div className="flex gap-2">
-              <button onClick={() => setClaimModalOpen(false)} className="flex-1 py-2 bg-slate-800 text-slate-300 rounded text-xs cursor-pointer">닫기</button>
-              <button onClick={handleCopyClaimMessage} className="flex-1 py-2 bg-indigo-600 text-white font-bold rounded text-xs cursor-pointer">복사하기</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 프로필 모달 */}
-      {showProfileModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
-          <div className="w-full max-w-sm bg-[#0E1424] border border-slate-800 rounded-2xl p-6">
-            <h3 className="text-sm font-bold text-white mb-3">계정 정보</h3>
-            <p className="text-xs text-slate-400 mb-4">{session.user.email}</p>
-            <button onClick={() => setShowProfileModal(false)} className="w-full py-2 bg-slate-800 text-white rounded text-xs cursor-pointer">닫기</button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+                  <form onSubmit={handleSaveNoticeTemplate} className="space-y-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">공지 제목 (이벤트명)</label>
+                      <input
+                        type="text"
+                        value={inputNoticeTitle}
+                        onChange={(e) => setInputNoticeTitle(e.target.value)}
+                        placeholder="예: 🎁 신규 회원 주유권 증정 이벤트"
+                        required
+                        className="w-full px-3 py-2 bg-white text-slate-900 font-semibold rounded text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">공지 본문 내용</label>
+                      <textarea
+                        rows={4}
+                        value={inputNoticeContent}
+                        onChange={(e) => setInputNoticeContent(e.target.value)}
+                        placeholder="기사님들에게 안내할 상세 혜택이나 주의사항을 입력하세요."
+                        required
+                        className="w-full px-3 py-2 bg-white text-slate-900 rounded text-xs"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={noticeLoading}
+                      className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg text-xs cursor
