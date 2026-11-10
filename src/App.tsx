@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import { useRegisterSW } from 'virtual:pwa-register/react';
 import {
   Wallet, Calendar, Clock, MapPin, TrendingUp, DollarSign, FileText, User, LogOut,
   KeyRound, X, CheckCircle2, AlertCircle, PlusCircle, CreditCard, Receipt, Trash2,
@@ -62,6 +63,15 @@ interface MemberProfile { id: string; email: string; name: string; phone: string
 interface NoticeItem { id: string; title: string; content: string; isActive: boolean; updatedAt?: string; }
 
 export default function App() {
+  // PWA 업데이트 상태 관리
+  const {
+    needRefresh: [needRefresh, setNeedRefresh],
+    updateServiceWorker,
+  } = useRegisterSW({
+    onRegistered(r) { console.log('SW Registered:', r); },
+    onRegisterError(error) { console.log('SW registration error', error); },
+  });
+
   const [session, setSession] = useState<any>(null);
   const [currentUserRole, setCurrentUserRole] = useState<string>('user');
 
@@ -362,7 +372,7 @@ export default function App() {
   
   const handleAddAccount = (e: React.FormEvent) => {
     e.preventDefault(); if (!bankName || !accountNumber) return;
-    setAccounts([...accounts, { id: Date.now().toString(), bankName, accountNumber, holder: holder || '본인' }]);
+    setAccounts([...accounts, { id: Date.now().toString(), bankName, accountNumber, holder: holder || '김탁송' }]);
     setBankName(''); setAccountNumber(''); setHolder('');
   };
   const handleDeleteAccount = (id: string) => { setAccounts(accounts.filter(a => a.id !== id)); };
@@ -550,8 +560,24 @@ export default function App() {
   const userName = session?.user?.user_metadata?.name || ADMIN_DEFAULT_NAME;
 
   return (
-    <div className="min-h-screen bg-[#0B1120] text-slate-100 pb-20">
+    <div className="min-h-screen bg-[#0B1120] text-slate-100 pb-20 relative">
       {injectStyles()}
+      
+      {/* PWA 업데이트 팝업 알림 (최상단/하단 오버레이) */}
+      {needRefresh && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] glass-card border border-[#8B5CF6]/50 p-5 rounded-2xl shadow-[0_0_20px_rgba(139,92,246,0.3)] flex flex-col items-center gap-3 w-[90%] max-w-sm fade-in-text">
+          <div className="flex items-center gap-2">
+            <RefreshCw className="w-5 h-5 text-[#8B5CF6] animate-spin" />
+            <span className="text-sm font-bold text-white">새로운 버전이 출시되었습니다!</span>
+          </div>
+          <p className="text-[11px] text-[#38BDF8] text-center font-medium">안정적인 최신 기능 사용을 위해 앱을 업데이트 해주세요.</p>
+          <div className="flex gap-2 w-full mt-2">
+            <button onClick={() => setNeedRefresh(false)} className="flex-1 py-2.5 bg-[#0B1120] border border-white/10 text-slate-300 text-xs font-bold rounded-lg hover:bg-white/5 transition-colors cursor-pointer">나중에</button>
+            <button onClick={() => updateServiceWorker(true)} className="flex-1 py-2.5 hp-primary-btn text-white text-xs font-bold rounded-lg shadow-[0_4px_12px_rgba(139,92,246,0.4)] cursor-pointer">지금 업데이트</button>
+          </div>
+        </div>
+      )}
+
       <header className="sticky top-0 z-30 glass-card border-b-0 border-white/5 px-4 lg:px-8 py-3">
         <div className="max-w-[1400px] mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2.5">
