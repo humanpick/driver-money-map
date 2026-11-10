@@ -36,8 +36,14 @@ import {
   Phone,
   RefreshCw,
   UserX,
-  Lock,
-  BotOff
+  BotOff,
+  ShieldAlert,
+  BarChart3,
+  Megaphone,
+  Users,
+  Download,
+  Award,
+  Crown
 } from 'lucide-react';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
@@ -58,8 +64,21 @@ const cleanNumber = (val: string | number): number => {
   return Number(String(val).replace(/,/g, '')) || 0;
 };
 
+// 표시용 휴대폰 하이픈 포맷터 (숫자만 저장된 번호를 010-XXXX-XXXX 형태로 변환)
+const formatPhoneNumber = (val: string) => {
+  if (!val) return '';
+  const num = val.replace(/[^0-9]/g, '');
+  if (num.length === 11) {
+    return num.replace(/(\d{3})(\d{4})(\d{4})/, '$1-$2-$3');
+  } else if (num.length === 10) {
+    return num.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3');
+  }
+  return num;
+};
+
 interface DrivingRecord {
   id: string;
+  userId?: string;
   date: string;
   startTime: string;
   endTime: string;
@@ -90,8 +109,19 @@ interface BankAccount {
   holder: string;
 }
 
+interface MemberProfile {
+  id: string;
+  email: string;
+  name: string;
+  phone: string;
+  role: 'super_admin' | 'manager' | 'vip_driver' | 'user';
+  createdAt: string;
+  recordCount?: number;
+}
+
 export default function App() {
   const [session, setSession] = useState<any>(null);
+  const [currentUserRole, setCurrentUserRole] = useState<'super_admin' | 'manager' | 'vip_driver' | 'user'>('user');
   
   // 인증 관련 상태
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
@@ -106,12 +136,13 @@ export default function App() {
   const [authError, setAuthError] = useState('');
   const [authSuccess, setAuthSuccess] = useState('');
 
-  // 3중 봇 방지 상태 (허니팟 + 인터랙션 캡차)
-  const [honeypot, setHoneypot] = useState(''); // 1. 허니팟 (사람 눈엔 안 보임)
-  const [captchaVerified, setCaptchaVerified] = useState(false); // 2. 인터랙티브 보안 체크
+  // 3중 봇 방지 상태
+  const [honeypot, setHoneypot] = useState('');
+  const [captchaVerified, setCaptchaVerified] = useState(false);
 
-  // 탭 상태
-  const [activeTab, setActiveTab] = useState<'records' | 'claims' | 'expense' | 'wallet'>('records');
+  // 탭 상태 (admin 탭 추가)
+  const [activeTab, setActiveTab] = useState<'records' | 'claims' | 'expense' | 'wallet' | 'admin'>('records');
+  const [adminSubTab, setAdminSubTab] = useState<'analytics' | 'members' | 'campaign'>('analytics');
 
   // 날짜 필터 상태
   const [selectedDate, setSelectedDate] = useState<string>('2026-11-10');
@@ -146,6 +177,22 @@ export default function App() {
   // DB 연동 데이터 상태
   const [records, setRecords] = useState<DrivingRecord[]>([]);
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
+
+  // 실시간 공지/이벤트 배너 상태
+  const [announcement, setAnnouncement] = useState<{ title: string; content: string; isActive: boolean }>({
+    title: '오픈 베타 이벤트 안내',
+    content: '운행 일지를 10건 이상 등록하신 기사님께 모바일 주유권을 증정합니다!',
+    isActive: true,
+  });
+
+  // 관리자 전용 상태
+  const [adminMemberList, setAdminMemberList] = useState<MemberProfile[]>([]);
+  const [adminAllRecords, setAdminAllRecords] = useState<DrivingRecord[]>([]);
+  const [adminSearchTerm, setAdminSearchTerm] = useState('');
+  const [noticeTitleInput, setNoticeTitleInput] = useState('');
+  const [noticeContentInput, setNoticeContentInput] = useState('');
+  const [noticeActiveInput, setNoticeActiveInput] = useState(true);
+  const [adminSavingNotice, setAdminSavingNotice] = useState(false);
 
   // 로컬 기기 저장 계좌
   const [accounts, setAccounts] = useState<BankAccount[]>(() => {
@@ -191,8 +238,142 @@ export default function App() {
   const [accountNumber, setAccountNumber] = useState('');
   const [holder, setHolder] = useState('');
 
+  // 공지사항 로드
+  const fetchAnnouncement = async () => {
+    try {
+      const { data } = await supabase.from('announcements').select('*').eq('id', 'main_notice').maybeSingle();
+      if (data) {
+        setAnnouncement({
+          title: data.title,
+          content: data.content,
+          isActive: Boolean(data.is_active),
+        });
+        setNoticeTitleInput(data.title);
+        setNoticeContentInput(data.content);
+        setNoticeActiveInput(Boolean(data.is_active));
+      }
+    } catch (e) {
+      console.error('공지 로드 오류:', e);
+    }
+  };
+
+  // 관리자 권한 확인 및 유저 데이터 불러오기
+  const fetchUserData = async (userId: string) => {
+    setDataLoading(true);
+    try {
+      // 1. 프로필 및 Role 조회
+      const { data: profile } = await supabase.from('profiles').select('role').eq('id', userId).maybeSingle();
+      const role = profile?.role || 'user';
+      setCurrentUserRole(role);
+
+      // 2. 운행 일지 로드
+      const { data: recordsData } = await supabase
+        .from('driving_records')
+        .select('*')
+        .eq('user_id', userId)
+        .order('date', { ascending: false });
+
+      if (recordsData) {
+        setRecords(
+          recordsData.map((r: any) => ({
+            id: r.id,
+            date: r.date,
+            startTime: r.start_time || '-',
+            endTime: r.end_time || '-',
+            departure: r.departure,
+            destination: r.destination,
+            grossAmount: Number(r.gross_amount),
+            feeRate: Number(r.fee_rate),
+            fuelAmount: Number(r.fuel_amount),
+            extraExpenseAmount: Number(r.extra_expense_amount),
+            tipAmount: Number(r.tip_amount),
+            isPaid: Boolean(r.is_paid),
+            netAmount: Number(r.net_amount),
+            totalClaimAmount: Number(r.total_claim_amount),
+          }))
+        );
+      }
+
+      // 3. 경비 로드
+      const { data: expensesData } = await supabase
+        .from('expenses')
+        .select('*')
+        .eq('user_id', userId)
+        .order('date', { ascending: false });
+
+      if (expensesData) {
+        setExpenses(
+          expensesData.map((e: any) => ({
+            id: e.id,
+            date: e.date,
+            category: e.category,
+            amount: Number(e.amount),
+            memo: e.memo || '',
+          }))
+        );
+      }
+
+      // 4. 관리자일 경우 전체 데이터 로드
+      if (role === 'super_admin' || role === 'manager') {
+        fetchAdminData();
+      }
+    } catch (err) {
+      console.error('데이터 통신 실패:', err);
+    } finally {
+      setDataLoading(false);
+    }
+  };
+
+  // 관리자 전용 데이터(전체 회원, 전체 운행) 로드
+  const fetchAdminData = async () => {
+    try {
+      const { data: profiles } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
+      const { data: allRecs } = await supabase.from('driving_records').select('*');
+
+      if (profiles && allRecs) {
+        const mappedMembers: MemberProfile[] = profiles.map((p: any) => {
+          const userRecCount = allRecs.filter((r: any) => r.user_id === p.id).length;
+          return {
+            id: p.id,
+            email: p.email,
+            name: p.name,
+            phone: p.phone,
+            role: p.role || 'user',
+            createdAt: p.created_at ? p.created_at.substring(0, 10) : '-',
+            recordCount: userRecCount,
+          };
+        });
+        setAdminMemberList(mappedMembers);
+
+        setAdminAllRecords(
+          allRecs.map((r: any) => ({
+            id: r.id,
+            userId: r.user_id,
+            date: r.date,
+            startTime: r.start_time || '-',
+            endTime: r.end_time || '-',
+            departure: r.departure,
+            destination: r.destination,
+            grossAmount: Number(r.gross_amount),
+            feeRate: Number(r.fee_rate),
+            fuelAmount: Number(r.fuel_amount),
+            extraExpenseAmount: Number(r.extra_expense_amount),
+            tipAmount: Number(r.tip_amount),
+            isPaid: Boolean(r.is_paid),
+            netAmount: Number(r.net_amount),
+            totalClaimAmount: Number(r.total_claim_amount),
+          }))
+        );
+      }
+    } catch (e) {
+      console.error('관리자 데이터 로드 실패:', e);
+    }
+  };
+
   // Supabase 세션 감지
   useEffect(() => {
+    fetchAnnouncement();
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user?.user_metadata?.is_deleted) {
         alert('탈퇴 신청된 계정입니다. (30일 유예 기간 후 완전 파기됩니다.)');
@@ -220,70 +401,12 @@ export default function App() {
       } else {
         setRecords([]);
         setExpenses([]);
+        setCurrentUserRole('user');
       }
     });
 
     return () => subscription.unsubscribe();
   }, []);
-
-  // Supabase DB에서 데이터 불러오기
-  const fetchUserData = async (userId: string) => {
-    setDataLoading(true);
-    try {
-      const { data: recordsData, error: recordsError } = await supabase
-        .from('driving_records')
-        .select('*')
-        .eq('user_id', userId)
-        .order('date', { ascending: false });
-
-      if (recordsError) {
-        console.error('운행 일지 로드 오류:', recordsError);
-      } else if (recordsData) {
-        setRecords(
-          recordsData.map((r: any) => ({
-            id: r.id,
-            date: r.date,
-            startTime: r.start_time || '-',
-            endTime: r.end_time || '-',
-            departure: r.departure,
-            destination: r.destination,
-            grossAmount: Number(r.gross_amount),
-            feeRate: Number(r.fee_rate),
-            fuelAmount: Number(r.fuel_amount),
-            extraExpenseAmount: Number(r.extra_expense_amount),
-            tipAmount: Number(r.tip_amount),
-            isPaid: Boolean(r.is_paid),
-            netAmount: Number(r.net_amount),
-            totalClaimAmount: Number(r.total_claim_amount),
-          }))
-        );
-      }
-
-      const { data: expensesData, error: expensesError } = await supabase
-        .from('expenses')
-        .select('*')
-        .eq('user_id', userId)
-        .order('date', { ascending: false });
-
-      if (expensesError) {
-        console.error('경비 로드 오류:', expensesError);
-      } else if (expensesData) {
-        setExpenses(
-          expensesData.map((e: any) => ({
-            id: e.id,
-            date: e.date,
-            category: e.category,
-            amount: Number(e.amount),
-            memo: e.memo || '',
-          }))
-        );
-      }
-    } catch (err) {
-      console.error('데이터 통신 실패:', err);
-    } finally {
-      setDataLoading(false);
-    }
-  };
 
   // 로그인 핸들러
   const handleLogin = async (e: React.FormEvent) => {
@@ -306,23 +429,20 @@ export default function App() {
     setAuthLoading(false);
   };
 
-  // 회원가입 핸들러 (3중 보안: 허니팟 + 캡차 + 휴대폰 중복방지)
+  // 회원가입 핸들러 (3중 보안)
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthLoading(true);
     setAuthError('');
     setAuthSuccess('');
 
-    // [방어 1] 허니팟 트랩: 숨겨진 인풋에 값이 채워져 있으면 자동 봇으로 판별하고 즉시 차단
     if (honeypot.trim() !== '') {
-      console.warn('Bot detected via honeypot.');
       setAuthLoading(false);
       return;
     }
 
-    // [방어 2] 봇 방지 인증(인터랙션 캡차) 통과 여부 검증
     if (!captchaVerified) {
-      setAuthError('보안 확인(인간 인증 체크)을 완료해 주세요.');
+      setAuthError('보안 확인(로봇 인증 체크)을 완료해 주세요.');
       setAuthLoading(false);
       return;
     }
@@ -336,8 +456,8 @@ export default function App() {
       return;
     }
 
-    if (cleanPhone.length < 10) {
-      setAuthError('올바른 휴대폰 번호 10~11자리를 입력해 주세요.');
+    if (cleanPhone.length < 10 || cleanPhone.length > 11) {
+      setAuthError('휴대폰 번호는 하이픈(-) 없이 숫자만 10~11자리 입력해 주세요.');
       setAuthLoading(false);
       return;
     }
@@ -360,8 +480,8 @@ export default function App() {
       return;
     }
 
-    // [방어 3] 휴대폰 번호 중복 사전 조회 (동일 번호 대량 생성 차단)
-    const { data: existingProfile, error: checkError } = await supabase
+    // 휴대폰 번호 중복 사전 조회
+    const { data: existingProfile } = await supabase
       .from('profiles')
       .select('id')
       .eq('phone', cleanPhone)
@@ -373,18 +493,17 @@ export default function App() {
       return;
     }
 
-    // Supabase 계정 생성
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: {
           name: trimmedName,
-          phone: phone.trim(),
+          phone: cleanPhone,
           privacy_policy_agreed: true,
           privacy_policy_agreed_at: new Date().toISOString(),
           beta_terms_agreed: true,
-          terms_version: 'v1.6_anti_bot_triple',
+          terms_version: 'v1.8_admin_ready',
         },
       },
     });
@@ -392,7 +511,6 @@ export default function App() {
     if (error) {
       setAuthError('가입 실패: ' + error.message);
     } else {
-      // profiles 테이블에 고유 정보 기록 (휴대폰 중복 방지 저장소)
       if (data.user) {
         await supabase.from('profiles').insert([
           {
@@ -400,6 +518,7 @@ export default function App() {
             email: email,
             name: trimmedName,
             phone: cleanPhone,
+            role: 'user',
           },
         ]);
       }
@@ -418,6 +537,7 @@ export default function App() {
     await supabase.auth.signOut();
     setShowProfileModal(false);
     setShowWithdrawConfirm(false);
+    setActiveTab('records');
   };
 
   const handleChangePassword = async (e: React.FormEvent) => {
@@ -439,7 +559,7 @@ export default function App() {
     setPwdLoading(false);
   };
 
-  // 회원 탈퇴 핸들러 (30일 유예 소프트 삭제)
+  // 회원 탈퇴 핸들러 (30일 유예)
   const handleWithdrawAccount = async () => {
     setWithdrawLoading(true);
     const now = new Date();
@@ -460,7 +580,7 @@ export default function App() {
       return;
     }
 
-    alert('회원 탈퇴가 접수되었습니다.\n개인정보보호 및 분쟁 방지 정책에 따라 30일의 유예 기간 후 모든 운행 기록과 계정이 영구 삭제됩니다.\n그동안 이용해 주셔서 감사합니다.');
+    alert('회원 탈퇴가 접수되었습니다.\n30일의 유예 기간 후 모든 운행 기록과 계정이 영구 삭제됩니다.\n이용해 주셔서 감사합니다.');
     await supabase.auth.signOut();
     setSession(null);
     setShowProfileModal(false);
@@ -538,7 +658,7 @@ export default function App() {
     setNewTip('');
   };
 
-  // 수정 모달 열기 핸들러
+  // 수정 모달 열기
   const handleOpenEditModal = (r: DrivingRecord) => {
     setEditingRecord(r);
     setEditGross(formatNumberWithComma(r.grossAmount));
@@ -547,7 +667,7 @@ export default function App() {
     setEditTip(formatNumberWithComma(r.tipAmount));
   };
 
-  // 운행 기록 수정 저장 핸들러
+  // 운행 기록 수정 저장
   const handleUpdateRecord = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingRecord || !session) return;
@@ -600,7 +720,7 @@ export default function App() {
     setEditingRecord(null);
   };
 
-  // 운행 기록 삭제 핸들러
+  // 운행 기록 삭제
   const handleDeleteRecord = async (id: string) => {
     const { error } = await supabase.from('driving_records').delete().eq('id', id);
     if (error) {
@@ -624,10 +744,11 @@ export default function App() {
     setRecords(records.map((r) => (r.id === id ? { ...r, isPaid: newStatus } : r)));
   };
 
-  // 청구 문자 템플릿 생성
+  // 청구 문자 생성
   const buildClaimText = (r: DrivingRecord, withGross: boolean, withFuel: boolean, withExtra: boolean) => {
     const primaryAccount = accounts[0] || { bankName: '은행명', accountNumber: '계좌번호', holder: '예금주' };
-    const driverPhone = session?.user?.user_metadata?.phone || '';
+    const rawPhone = session?.user?.user_metadata?.phone || '';
+    const driverPhone = formatPhoneNumber(rawPhone);
     const driverName = session?.user?.user_metadata?.name || '';
     
     let total = 0;
@@ -751,6 +872,90 @@ ${itemsText}--------------------------------
     setHolder('');
   };
 
+  // ----------------------------------------
+  // 관리자 전용 로직 (회원 권한 변경, 공지 저장, 엑셀 CSV 다운로드)
+  // ----------------------------------------
+  const handleUpdateMemberRole = async (memberId: string, newRole: string) => {
+    if (currentUserRole !== 'super_admin') {
+      alert('권한 승계 및 변경은 최고 관리자(super_admin)만 가능합니다.');
+      return;
+    }
+
+    const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', memberId);
+    if (error) {
+      alert('권한 변경 실패: ' + error.message);
+    } else {
+      alert('회원 권한이 성공적으로 변경되었습니다.');
+      fetchAdminData();
+    }
+  };
+
+  const handleSaveAnnouncement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAdminSavingNotice(true);
+
+    const { error } = await supabase.from('announcements').upsert({
+      id: 'main_notice',
+      title: noticeTitleInput,
+      content: noticeContentInput,
+      is_active: noticeActiveInput,
+      updated_at: new Date().toISOString(),
+    });
+
+    if (error) {
+      alert('공지 저장 실패: ' + error.message);
+    } else {
+      setAnnouncement({
+        title: noticeTitleInput,
+        content: noticeContentInput,
+        isActive: noticeActiveInput,
+      });
+      alert('전체 기사용 공지/이벤트 배너가 실시간 갱신되었습니다!');
+    }
+    setAdminSavingNotice(false);
+  };
+
+  // 관리자 전체 운행 데이터 CSV 다운로드
+  const handleExportAdminCSV = () => {
+    if (adminAllRecords.length === 0) {
+      alert('내보낼 운행 데이터가 없습니다.');
+      return;
+    }
+
+    const headers = ['일자', '출발지', '도착지', '탁송운임', '수수료율', '대납주유비', '대납경비', '순수익', '입금여부'];
+    const rows = adminAllRecords.map((r) => [
+      r.date,
+      `"${r.departure}"`,
+      `"${r.destination}"`,
+      r.grossAmount,
+      `${r.feeRate}%`,
+      r.fuelAmount,
+      r.extraExpenseAmount,
+      r.netAmount,
+      r.isPaid ? '입금완료' : '미입금',
+    ]);
+
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `JunDriver_전체운행데이터_${selectedDate}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // 인기 노선 TOP 5 통계 계산
+  const routeCounts: { [key: string]: number } = {};
+  adminAllRecords.forEach((r) => {
+    const route = `${r.departure.trim()} ➔ ${r.destination.trim()}`;
+    routeCounts[route] = (routeCounts[route] || 0) + 1;
+  });
+  const topRoutes = Object.entries(routeCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
+
   // 미수금 통계
   const unpaidRecords = records.filter((r) => !r.isPaid);
   const totalUnpaidAmount = unpaidRecords.reduce((acc, cur) => acc + cur.totalClaimAmount, 0);
@@ -768,6 +973,16 @@ ${itemsText}--------------------------------
   // 일자별 필터
   const filteredRecords = filterAllDates ? records : records.filter((r) => r.date === selectedDate);
   const filteredExpenses = filterAllDates ? expenses : expenses.filter((e) => e.date === selectedDate);
+
+  // 관리자 회원 검색 필터링
+  const filteredAdminMembers = adminMemberList.filter(
+    (m) =>
+      m.name.toLowerCase().includes(adminSearchTerm.toLowerCase()) ||
+      m.phone.includes(adminSearchTerm) ||
+      m.email.toLowerCase().includes(adminSearchTerm.toLowerCase())
+  );
+
+  const isAdminUser = currentUserRole === 'super_admin' || currentUserRole === 'manager';
 
   // 1. 미로그인 뷰
   if (!session) {
@@ -843,8 +1058,6 @@ ${itemsText}--------------------------------
             </form>
           ) : (
             <form onSubmit={handleSignUp} className="space-y-3">
-              
-              {/* [방어 1] 허니팟 함정 필드 (사람 눈에는 완전 숨김 처리, 봇만 입력) */}
               <div className="hidden" aria-hidden="true" style={{ display: 'none' }}>
                 <input
                   type="text"
@@ -882,15 +1095,17 @@ ${itemsText}--------------------------------
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold text-indigo-300 mb-1 flex items-center gap-1">
-                    <Phone className="w-3 h-3 text-indigo-400" /> 휴대폰 번호
+                    <Phone className="w-3 h-3 text-indigo-400" /> 휴대폰 번호 (- 제외)
                   </label>
                   <input
                     type="tel"
+                    inputMode="numeric"
                     value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="010-1234-5678"
+                    onChange={(e) => setPhone(e.target.value.replace(/[^0-9]/g, ''))}
+                    placeholder="01012345678"
+                    maxLength={11}
                     required
-                    className="w-full px-3.5 py-2 rounded-lg bg-white text-slate-900 font-semibold text-sm"
+                    className="w-full px-3.5 py-2 rounded-lg bg-white text-slate-900 font-semibold text-sm border border-slate-200 focus:border-indigo-500 focus:outline-none"
                   />
                 </div>
               </div>
@@ -920,7 +1135,6 @@ ${itemsText}--------------------------------
                 </div>
               </div>
 
-              {/* [방어 2] 스마트 봇 차단 인증 카드 (클라우드플레어 스타일 인터랙션) */}
               <div className="pt-1">
                 <div
                   onClick={() => setCaptchaVerified(!captchaVerified)}
@@ -964,7 +1178,7 @@ ${itemsText}--------------------------------
                       <Phone className="w-2.5 h-2.5" /> 1인 1계정 원칙 준수 (중복 번호 가입 차단)
                     </div>
                     <div className="text-amber-300/80 flex items-center gap-1">
-                      <Sparkles className="w-2.5 h-2.5" /> 탈퇴 시 30일 유예 후 자동 영구 파기 (자동결제 없음)
+                      <Sparkles className="w-2.5 h-2.5" /> 탈퇴 시 30일 유예 후 자동 영구 파기
                     </div>
                   </div>
 
@@ -1013,7 +1227,7 @@ ${itemsText}--------------------------------
                 <div>
                   <h4 className="font-bold text-white mb-1">1. 수집하는 개인정보 항목 및 목적</h4>
                   <p className="text-slate-400">
-                    - <strong>수집 항목:</strong> 로그인 이메일, 성명(이름), 휴대폰 번호, 암호화된 비밀번호, 탁송 운행 기록<br />
+                    - <strong>수집 항목:</strong> 로그인 이메일, 성명(이름), 휴대폰 번호(숫자), 암호화된 비밀번호, 탁송 운행 기록<br />
                     - <strong>이용 목적:</strong> 본인 식별, 1인 1계정 중복 방지, 청구문자 기사 정보 자동 기재, 서비스 공지 발송
                   </p>
                 </div>
@@ -1024,9 +1238,8 @@ ${itemsText}--------------------------------
                     2. 회원 탈퇴 및 데이터 자동 파기 정책 (30일 유예)
                   </h4>
                   <p className="text-slate-300 leading-relaxed text-[11px]">
-                    1) 회원은 앱 내 [계정 설정 ➔ 회원 탈퇴] 메뉴를 통해 언제든 탈퇴를 요청할 수 있습니다.<br />
-                    2) 부정 이용 방지 및 정산 분쟁 방지를 위해 탈퇴 신청 즉시 계정은 비활성화되며, <strong>탈퇴 신청일로부터 30일간 보관 후 시스템에서 자동으로 영구 삭제(파기)</strong>됩니다.<br />
-                    3) 30일 유예 기간이 경과하면 복구가 불가능합니다.
+                    1) 회원은 언제든 탈퇴를 요청할 수 있습니다.<br />
+                    2) 부정 이용 방지를 위해 <strong>탈퇴 신청일로부터 30일간 보관 후 시스템에서 자동으로 영구 삭제</strong>됩니다.
                   </p>
                 </div>
 
@@ -1036,9 +1249,8 @@ ${itemsText}--------------------------------
                     3. 오픈 베타 운영 및 향후 유료 멤버십 전환 고지
                   </h4>
                   <p className="text-slate-300 leading-relaxed text-[11px]">
-                    1) 본 서비스(JunDriver)는 현재 기능 안정화 및 고도화를 위한 오픈 베타 테스트 기간으로 무료 운영됩니다.<br />
-                    2) 베타 테스트 기간이 종료되면 서비스의 전부 또는 일부 기능이 유료 멤버십으로 전환될 수 있습니다.<br />
-                    3) 베타 종료 후 사용자의 명시적 신청 없는 자동 결제는 절대 발생하지 않습니다.
+                    1) 오픈 베타 기간 동안 전면 무료로 제공됩니다.<br />
+                    2) 유료 전환 시 사용자의 명시적 신청 없는 자동 결제는 절대 발생하지 않습니다.
                   </p>
                 </div>
               </div>
@@ -1061,7 +1273,8 @@ ${itemsText}--------------------------------
 
   // 2. 메인 대시보드
   const userName = session?.user?.user_metadata?.name || '기사';
-  const userPhone = session?.user?.user_metadata?.phone;
+  const rawUserPhone = session?.user?.user_metadata?.phone;
+  const userPhone = formatPhoneNumber(rawUserPhone);
 
   return (
     <div className="min-h-screen bg-[#070B14] text-slate-100 font-sans pb-20 selection:bg-indigo-500 selection:text-white">
@@ -1079,6 +1292,24 @@ ${itemsText}--------------------------------
           </div>
 
           <div className="flex items-center gap-2">
+            {/* 관리자 계정에게만 노출되는 상단 관제탑 버튼 */}
+            {isAdminUser && (
+              <button
+                onClick={() => {
+                  fetchAdminData();
+                  setActiveTab('admin');
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === 'admin'
+                    ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/20'
+                    : 'bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20'
+                }`}
+              >
+                <Crown className="w-3.5 h-3.5" />
+                <span>관리자 관제탑</span>
+              </button>
+            )}
+
             <button
               onClick={() => { setShowProfileModal(true); setPwdMessage(null); setNewPassword(''); setShowWithdrawConfirm(false); }}
               className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700/70 hover:border-indigo-500 transition-all text-xs text-slate-200 cursor-pointer"
@@ -1104,8 +1335,28 @@ ${itemsText}--------------------------------
       {/* 본문 컨테이너 */}
       <main className="max-w-[1400px] mx-auto px-4 lg:px-8 pt-6 space-y-6">
         
+        {/* 관리자가 설정한 실시간 공지/이벤트 배너 */}
+        {announcement.isActive && activeTab !== 'admin' && (
+          <section className="bg-gradient-to-r from-indigo-950/40 via-purple-950/30 to-indigo-950/40 border border-indigo-500/30 rounded-2xl p-4 shadow-lg flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 shrink-0">
+                <Megaphone className="w-4 h-4 animate-bounce" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
+                  <span className="px-1.5 py-0.2 rounded bg-indigo-500/20 text-[10px] font-extrabold border border-indigo-500/30">
+                    공지
+                  </span>
+                  {announcement.title}
+                </div>
+                <div className="text-xs text-slate-300 mt-0.5 leading-relaxed">{announcement.content}</div>
+              </div>
+            </div>
+          </section>
+        )}
+
         {/* 미수금 알림 배너 */}
-        {totalUnpaidAmount > 0 && (
+        {totalUnpaidAmount > 0 && activeTab !== 'admin' && (
           <section className="bg-gradient-to-r from-rose-950/40 via-slate-900 to-rose-950/40 border border-rose-500/40 rounded-2xl p-4 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex items-center gap-3.5">
               <div className="w-10 h-10 rounded-xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400 shrink-0 animate-pulse">
@@ -1136,60 +1387,62 @@ ${itemsText}--------------------------------
           </section>
         )}
 
-        {/* 최상단 월 누적 결산 바 */}
-        <section className="bg-gradient-to-r from-[#0E1424] via-[#121B30] to-[#0E1424] border border-indigo-500/30 rounded-2xl p-5 shadow-xl">
-          <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-800/80">
-            <div className="flex items-center gap-2">
-              <CalendarDays className="w-4 h-4 text-indigo-400" />
-              <h2 className="text-xs font-bold text-slate-200 tracking-wide uppercase">
-                {currentMonthPrefix.replace('-', '년 ')}월 총 누적 결산
-              </h2>
-            </div>
-            <div className="flex items-center gap-2">
-              {dataLoading && (
-                <span className="text-[10px] text-slate-400 flex items-center gap-1">
-                  <RefreshCw className="w-3 h-3 animate-spin text-indigo-400" /> 동기화 중...
+        {/* 최상단 월 누적 결산 바 (일반 탭에서만 출력) */}
+        {activeTab !== 'admin' && (
+          <section className="bg-gradient-to-r from-[#0E1424] via-[#121B30] to-[#0E1424] border border-indigo-500/30 rounded-2xl p-5 shadow-xl">
+            <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-800/80">
+              <div className="flex items-center gap-2">
+                <CalendarDays className="w-4 h-4 text-indigo-400" />
+                <h2 className="text-xs font-bold text-slate-200 tracking-wide uppercase">
+                  {currentMonthPrefix.replace('-', '년 ')}월 총 누적 결산
+                </h2>
+              </div>
+              <div className="flex items-center gap-2">
+                {dataLoading && (
+                  <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                    <RefreshCw className="w-3 h-3 animate-spin text-indigo-400" /> 동기화 중...
+                  </span>
+                )}
+                <span className="text-[11px] font-semibold text-indigo-400 bg-indigo-500/10 px-2.5 py-0.5 rounded-full border border-indigo-500/20">
+                  월간 집계 ({monthlyRecords.length}회 운행)
                 </span>
-              )}
-              <span className="text-[11px] font-semibold text-indigo-400 bg-indigo-500/10 px-2.5 py-0.5 rounded-full border border-indigo-500/20">
-                월간 집계 ({monthlyRecords.length}회 운행)
-              </span>
+              </div>
             </div>
-          </div>
 
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div>
-              <div className="text-[11px] text-slate-400 mb-0.5">당월 순수 탁송매출</div>
-              <div className="text-xl lg:text-2xl font-extrabold text-white">
-                {monthlyGross.toLocaleString()}<span className="text-xs font-normal text-slate-400 ml-1">원</span>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div>
+                <div className="text-[11px] text-slate-400 mb-0.5">당월 순수 탁송매출</div>
+                <div className="text-xl lg:text-2xl font-extrabold text-white">
+                  {monthlyGross.toLocaleString()}<span className="text-xs font-normal text-slate-400 ml-1">원</span>
+                </div>
+              </div>
+              <div>
+                <div className="text-[11px] text-slate-400 mb-0.5">당월 탁송 순수입 (팁 포함)</div>
+                <div className="text-xl lg:text-2xl font-extrabold text-indigo-300">
+                  {monthlyNet.toLocaleString()}<span className="text-xs font-normal text-slate-400 ml-1">원</span>
+                </div>
+              </div>
+              <div>
+                <div className="text-[11px] text-slate-400 mb-0.5">당월 본인 경비 지출</div>
+                <div className="text-xl lg:text-2xl font-extrabold text-rose-400">
+                  -{monthlyExpense.toLocaleString()}<span className="text-xs font-normal text-slate-400 ml-1">원</span>
+                </div>
+              </div>
+              <div>
+                <div className="text-[11px] text-slate-400 mb-0.5">당월 실수령액</div>
+                <div className="text-xl lg:text-2xl font-extrabold text-emerald-400">
+                  {monthlyProfit.toLocaleString()}<span className="text-xs font-normal text-slate-400 ml-1">원</span>
+                </div>
               </div>
             </div>
-            <div>
-              <div className="text-[11px] text-slate-400 mb-0.5">당월 탁송 순수입 (팁 포함)</div>
-              <div className="text-xl lg:text-2xl font-extrabold text-indigo-300">
-                {monthlyNet.toLocaleString()}<span className="text-xs font-normal text-slate-400 ml-1">원</span>
-              </div>
-            </div>
-            <div>
-              <div className="text-[11px] text-slate-400 mb-0.5">당월 본인 경비 지출</div>
-              <div className="text-xl lg:text-2xl font-extrabold text-rose-400">
-                -{monthlyExpense.toLocaleString()}<span className="text-xs font-normal text-slate-400 ml-1">원</span>
-              </div>
-            </div>
-            <div>
-              <div className="text-[11px] text-slate-400 mb-0.5">당월 실수령액</div>
-              <div className="text-xl lg:text-2xl font-extrabold text-emerald-400">
-                {monthlyProfit.toLocaleString()}<span className="text-xs font-normal text-slate-400 ml-1">원</span>
-              </div>
-            </div>
-          </div>
-        </section>
+          </section>
+        )}
 
         {/* 탭 네비게이션 */}
-        <div className="flex gap-2 border-b border-slate-800 pb-2">
+        <div className="flex gap-2 border-b border-slate-800 pb-2 overflow-x-auto">
           <button
             onClick={() => setActiveTab('records')}
-            className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer ${
+            className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer shrink-0 ${
               activeTab === 'records' ? 'bg-indigo-600 text-white' : 'bg-slate-900/60 text-slate-400 hover:text-white'
             }`}
           >
@@ -1198,7 +1451,7 @@ ${itemsText}--------------------------------
           </button>
           <button
             onClick={() => setActiveTab('claims')}
-            className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer relative ${
+            className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer relative shrink-0 ${
               activeTab === 'claims' ? 'bg-indigo-600 text-white' : 'bg-slate-900/60 text-slate-400 hover:text-white'
             }`}
           >
@@ -1212,7 +1465,7 @@ ${itemsText}--------------------------------
           </button>
           <button
             onClick={() => setActiveTab('expense')}
-            className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer ${
+            className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer shrink-0 ${
               activeTab === 'expense' ? 'bg-indigo-600 text-white' : 'bg-slate-900/60 text-slate-400 hover:text-white'
             }`}
           >
@@ -1221,13 +1474,28 @@ ${itemsText}--------------------------------
           </button>
           <button
             onClick={() => setActiveTab('wallet')}
-            className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer ${
+            className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer shrink-0 ${
               activeTab === 'wallet' ? 'bg-indigo-600 text-white' : 'bg-slate-900/60 text-slate-400 hover:text-white'
             }`}
           >
             <CreditCard className="w-3.5 h-3.5" />
             기사 송금 계좌
           </button>
+
+          {isAdminUser && (
+            <button
+              onClick={() => {
+                fetchAdminData();
+                setActiveTab('admin');
+              }}
+              className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer ml-auto shrink-0 ${
+                activeTab === 'admin' ? 'bg-amber-500 text-slate-950 font-extrabold' : 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30'
+              }`}
+            >
+              <Crown className="w-3.5 h-3.5" />
+              관제탑 (관리자)
+            </button>
+          )}
         </div>
 
         {/* TAB 1: 운행 일지 */}
@@ -1348,7 +1616,6 @@ ${itemsText}--------------------------------
                     </div>
                   </div>
 
-                  {/* 대납 주유비 & 대납 추가경비 */}
                   <div className="p-3.5 rounded-xl bg-slate-900 border border-indigo-500/30 space-y-3">
                     <div>
                       <label className="text-xs font-bold text-indigo-300 flex items-center gap-1.5 mb-1">
@@ -1381,7 +1648,6 @@ ${itemsText}--------------------------------
                     </div>
                   </div>
 
-                  {/* 순수 수입용 팁 */}
                   <div>
                     <label className="block text-[11px] font-semibold text-emerald-400 mb-1 flex items-center gap-1">
                       <Coins className="w-3.5 h-3.5" />
@@ -1734,9 +2000,284 @@ ${itemsText}--------------------------------
             </div>
           </div>
         )}
+
+        {/* 👑 TAB 5: 관리자 전용 관제탑 (Admin Console) */}
+        {activeTab === 'admin' && isAdminUser && (
+          <div className="space-y-6 animate-fadeIn">
+            
+            {/* 관리자 헤더 & 서브 탭 */}
+            <div className="bg-[#0E1424]/90 border border-amber-500/40 rounded-2xl p-5 shadow-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
+                  <ShieldAlert className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-lg font-extrabold text-white">JunDriver 마케팅 & 운영 관제탑</h2>
+                    <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 text-[10px] font-extrabold border border-amber-500/30">
+                      {currentUserRole === 'super_admin' ? '최고 관리자 (Super Admin)' : '운영 매니저 (Manager)'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">전체 기사 가입 현황, 인기 운행 노선 마케팅 통계 및 실시간 공지/이벤트를 제어합니다.</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleExportAdminCSV}
+                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all"
+                >
+                  <Download className="w-3.5 h-3.5 text-indigo-400" />
+                  전체 운행 CSV 백업
+                </button>
+                <button
+                  onClick={fetchAdminData}
+                  className="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
+                  title="새로고침"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* 관리자 서브 탭 버튼 */}
+            <div className="flex gap-2 border-b border-slate-800 pb-2">
+              <button
+                onClick={() => setAdminSubTab('analytics')}
+                className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer ${
+                  adminSubTab === 'analytics' ? 'bg-amber-500 text-slate-950 font-extrabold' : 'bg-slate-900 text-slate-400'
+                }`}
+              >
+                <BarChart3 className="w-3.5 h-3.5" />
+                마케팅 & 운행 통계
+              </button>
+              <button
+                onClick={() => setAdminSubTab('members')}
+                className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer ${
+                  adminSubTab === 'members' ? 'bg-amber-500 text-slate-950 font-extrabold' : 'bg-slate-900 text-slate-400'
+                }`}
+              >
+                <Users className="w-3.5 h-3.5" />
+                회원 관리 & 권한 승계 ({adminMemberList.length}명)
+              </button>
+              <button
+                onClick={() => setAdminSubTab('campaign')}
+                className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer ${
+                  adminSubTab === 'campaign' ? 'bg-amber-500 text-slate-950 font-extrabold' : 'bg-slate-900 text-slate-400'
+                }`}
+              >
+                <Megaphone className="w-3.5 h-3.5" />
+                실시간 공지/이벤트 배너 설정
+              </button>
+            </div>
+
+            {/* SUB 1: 마케팅 통계 & 인기 노선 */}
+            {adminSubTab === 'analytics' && (
+              <div className="space-y-6">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="bg-[#0E1424]/90 border border-slate-800 rounded-xl p-4">
+                    <span className="text-[11px] text-slate-400 block mb-1">총 가입 회원 수</span>
+                    <span className="text-2xl font-extrabold text-white">{adminMemberList.length}명</span>
+                  </div>
+                  <div className="bg-[#0E1424]/90 border border-slate-800 rounded-xl p-4">
+                    <span className="text-[11px] text-slate-400 block mb-1">플랫폼 총 운행 건수</span>
+                    <span className="text-2xl font-extrabold text-indigo-400">{adminAllRecords.length}건</span>
+                  </div>
+                  <div className="bg-[#0E1424]/90 border border-slate-800 rounded-xl p-4">
+                    <span className="text-[11px] text-slate-400 block mb-1">플랫폼 총 탁송 운임 규모</span>
+                    <span className="text-2xl font-extrabold text-emerald-400">
+                      {adminAllRecords.reduce((acc, cur) => acc + cur.grossAmount, 0).toLocaleString()}원
+                    </span>
+                  </div>
+                  <div className="bg-[#0E1424]/90 border border-slate-800 rounded-xl p-4">
+                    <span className="text-[11px] text-slate-400 block mb-1">기사 대납 주유비 누적</span>
+                    <span className="text-2xl font-extrabold text-amber-400">
+                      {adminAllRecords.reduce((acc, cur) => acc + cur.fuelAmount, 0).toLocaleString()}원
+                    </span>
+                  </div>
+                </div>
+
+                {/* 인기 운행 노선 TOP 5 */}
+                <div className="bg-[#0E1424]/80 border border-slate-800 rounded-xl p-5">
+                  <h3 className="text-sm font-bold text-white mb-1 flex items-center gap-2">
+                    <Award className="w-4 h-4 text-amber-400" />
+                    기사님들이 가장 많이 달린 황금 노선 TOP 5 (마케팅 타깃팅)
+                  </h3>
+                  <p className="text-xs text-slate-400 mb-4">해당 구간의 제휴 주유소나 복귀 셔틀 정보를 이벤트로 제공하면 가입 전환율이 급상승합니다.</p>
+
+                  {topRoutes.length === 0 ? (
+                    <div className="py-8 text-center text-slate-500 text-xs">아직 집계된 운행 노선이 없습니다.</div>
+                  ) : (
+                    <div className="space-y-3">
+                      {topRoutes.map(([route, count], idx) => {
+                        const percent = Math.round((count / (adminAllRecords.length || 1)) * 100);
+                        return (
+                          <div key={route} className="bg-slate-900/80 p-3.5 rounded-xl border border-slate-800/80 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <span className={`w-6 h-6 rounded-lg flex items-center justify-center font-extrabold text-xs ${
+                                idx === 0 ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-300'
+                              }`}>
+                                {idx + 1}
+                              </span>
+                              <span className="text-sm font-bold text-white">{route}</span>
+                            </div>
+                            <div className="flex items-center gap-4">
+                              <div className="w-32 bg-slate-800 rounded-full h-2 overflow-hidden hidden sm:block">
+                                <div className="bg-indigo-500 h-2 rounded-full" style={{ width: `${percent}%` }} />
+                              </div>
+                              <span className="text-xs font-mono font-bold text-indigo-400">{count}회 ({percent}%)</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* SUB 2: 회원 관리 & 권한 승계 */}
+            {adminSubTab === 'members' && (
+              <div className="bg-[#0E1424]/80 border border-slate-800 rounded-xl p-5 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="text-sm font-bold text-white flex items-center gap-2">
+                    <Users className="w-4 h-4 text-amber-400" />
+                    가입 기사 목록 ({filteredAdminMembers.length}명)
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="이름, 연락처 뒷자리, 이메일 검색..."
+                    value={adminSearchTerm}
+                    onChange={(e) => setAdminSearchTerm(e.target.value)}
+                    className="px-3.5 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs border border-slate-300 w-full sm:w-64"
+                  />
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-900 text-slate-400 uppercase font-bold border-b border-slate-800">
+                      <tr>
+                        <th className="py-3 px-3">기사 성함</th>
+                        <th className="py-3 px-3">휴대폰 번호</th>
+                        <th className="py-3 px-3">이메일</th>
+                        <th className="py-3 px-3">가입일</th>
+                        <th className="py-3 px-3">운행 등록수</th>
+                        <th className="py-3 px-3">현재 권한</th>
+                        <th className="py-3 px-3 text-right">권한 변경 (업무 승계)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60 text-slate-200">
+                      {filteredAdminMembers.map((m) => (
+                        <tr key={m.id} className="hover:bg-slate-900/40">
+                          <td className="py-3 px-3 font-bold text-white flex items-center gap-1.5">
+                            {m.name}
+                            {m.role === 'super_admin' && <Crown className="w-3.5 h-3.5 text-amber-400" />}
+                          </td>
+                          <td className="py-3 px-3 font-mono">{formatPhoneNumber(m.phone)}</td>
+                          <td className="py-3 px-3 text-slate-400">{m.email}</td>
+                          <td className="py-3 px-3 text-slate-400">{m.createdAt}</td>
+                          <td className="py-3 px-3 font-bold text-indigo-400">{m.recordCount}건</td>
+                          <td className="py-3 px-3">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold border ${
+                              m.role === 'super_admin'
+                                ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                                : m.role === 'manager'
+                                ? 'bg-sky-500/20 text-sky-300 border-sky-500/30'
+                                : 'bg-slate-800 text-slate-400 border-slate-700'
+                            }`}>
+                              {m.role}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-right">
+                            {currentUserRole === 'super_admin' ? (
+                              <select
+                                value={m.role}
+                                onChange={(e) => handleUpdateMemberRole(m.id, e.target.value)}
+                                className="px-2 py-1 rounded bg-slate-900 text-slate-200 text-xs border border-slate-700 cursor-pointer"
+                              >
+                                <option value="user">일반 기사 (user)</option>
+                                <option value="vip_driver">우수 기사 (vip_driver)</option>
+                                <option value="manager">운영 직원 (manager)</option>
+                                <option value="super_admin">최고 관리자 (super_admin)</option>
+                              </select>
+                            ) : (
+                              <span className="text-[10px] text-slate-500">변경 권한 없음</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* SUB 3: 공지 & 이벤트 실시간 제어 */}
+            {adminSubTab === 'campaign' && (
+              <div className="bg-[#0E1424]/80 border border-slate-800 rounded-xl p-5 space-y-4">
+                <div>
+                  <h3 className="text-sm font-bold text-white mb-1 flex items-center gap-2">
+                    <Megaphone className="w-4 h-4 text-indigo-400" />
+                    전체 기사 대시보드 공지 & 이벤트 배너 제어
+                  </h3>
+                  <p className="text-xs text-slate-400">여기서 수정한 내용은 앱 재배포 없이 모든 기사님의 메인 화면에 즉시 노출됩니다.</p>
+                </div>
+
+                <form onSubmit={handleSaveAnnouncement} className="space-y-4 max-w-xl">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">공지/이벤트 제목</label>
+                    <input
+                      type="text"
+                      value={noticeTitleInput}
+                      onChange={(e) => setNoticeTitleInput(e.target.value)}
+                      required
+                      placeholder="예: [오픈 베타 이벤트] 11월 10콜 달성 시 주유권 증정"
+                      className="w-full px-3.5 py-2.5 rounded-lg bg-white text-slate-900 font-semibold text-xs border border-slate-300"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">상세 내용 문구</label>
+                    <textarea
+                      rows={3}
+                      value={noticeContentInput}
+                      onChange={(e) => setNoticeContentInput(e.target.value)}
+                      required
+                      placeholder="기사님들에게 전달할 구체적인 안내 문구를 작성하세요."
+                      className="w-full px-3.5 py-2.5 rounded-lg bg-white text-slate-900 font-medium text-xs border border-slate-300"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="noticeActiveCheck"
+                      checked={noticeActiveInput}
+                      onChange={(e) => setNoticeActiveInput(e.target.checked)}
+                      className="w-4 h-4 rounded text-indigo-600 cursor-pointer"
+                    />
+                    <label htmlFor="noticeActiveCheck" className="text-xs text-white font-semibold cursor-pointer">
+                      메인 화면에 공지 배너 즉시 띄우기 (활성화)
+                    </label>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={adminSavingNotice}
+                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all"
+                  >
+                    {adminSavingNotice ? '저장 및 반영 중...' : '공지사항 즉시 전파 (DB 갱신)'}
+                  </button>
+                </form>
+              </div>
+            )}
+
+          </div>
+        )}
+
       </main>
 
-      {/* 운행 일지 수정 팝업 모달 */}
+      {/* 운행 일지 수정 모달 */}
       {editingRecord && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
           <div className="w-full max-w-md bg-[#0E1424] border border-slate-800 rounded-2xl p-6 shadow-2xl relative">
@@ -1887,7 +2428,7 @@ ${itemsText}--------------------------------
         </div>
       )}
 
-      {/* 청구 문자 3대 항목 선택 합산 및 편집 모달 */}
+      {/* 청구 문자 전용 모달 */}
       {claimModalOpen && selectedClaimRecord && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
           <div className="w-full max-w-lg bg-[#0E1424] border border-slate-800 rounded-2xl p-6 shadow-2xl relative">
@@ -1980,7 +2521,7 @@ ${itemsText}--------------------------------
         </div>
       )}
 
-      {/* 계정 관리, 비밀번호 변경 및 회원 탈퇴 모달 */}
+      {/* 프로필 설정 모달 */}
       {showProfileModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn">
           <div className="w-full max-w-sm bg-[#0E1424] border border-slate-800 rounded-2xl p-6 shadow-2xl relative">
@@ -1993,7 +2534,6 @@ ${itemsText}--------------------------------
             </h3>
             <p className="text-xs text-slate-400 mb-4">{session.user.email}</p>
 
-            {/* 비밀번호 변경 폼 */}
             <form onSubmit={handleChangePassword} className="space-y-3 pb-5 border-b border-slate-800">
               <label className="block text-[11px] font-semibold text-slate-300">비밀번호 변경</label>
               <input
@@ -2010,7 +2550,6 @@ ${itemsText}--------------------------------
               </button>
             </form>
 
-            {/* 회원 탈퇴 영역 */}
             <div className="pt-4">
               {!showWithdrawConfirm ? (
                 <div className="flex items-center justify-between text-xs">
