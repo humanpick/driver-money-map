@@ -17,9 +17,11 @@ import {
   PlusCircle,
   CreditCard,
   Receipt,
+  BarChart3,
   Trash2,
   Copy,
   Car,
+  Edit2,
   Filter,
   RotateCcw,
   CalendarDays,
@@ -29,9 +31,9 @@ import {
   Fuel,
   Camera,
   Image as ImageIcon,
+  Send,
   AlertTriangle,
-  MessageSquare,
-  Check
+  MessageSquare
 } from 'lucide-react';
 
 // Supabase 클라이언트 초기화
@@ -46,13 +48,14 @@ interface DrivingRecord {
   endTime: string;
   departure: string;
   destination: string;
-  grossAmount: number; // 탁송료
-  feeRate: number; // 수수료율
-  fuelAmount: number; // 대납 주유비
-  receiptImage?: string; // 영수증
+  grossAmount: number;
+  feeRate: number;
+  tipAmount: number;
+  fuelAmount: number; // 선결제 주유비
+  receiptImage?: string; // 로컬 영수증 썸네일
   isPaid: boolean; // 입금 여부
-  netAmount: number; // 순수입 (탁송료 - 수수료)
-  totalClaimAmount: number; // 총 청구액 (탁송료 + 주유비)
+  netAmount: number;
+  totalClaimAmount: number;
 }
 
 interface ExpenseRecord {
@@ -84,8 +87,8 @@ export default function App() {
   const [authError, setAuthError] = useState('');
   const [authSuccess, setAuthSuccess] = useState('');
 
-  // 탭 상태: records(운행일지), claims(청구문자 관리), expense(경비장부), wallet(송금계좌)
-  const [activeTab, setActiveTab] = useState<'records' | 'claims' | 'expense' | 'wallet'>('records');
+  // 탭 상태
+  const [activeTab, setActiveTab] = useState<'records' | 'expense' | 'wallet' | 'analytics'>('records');
 
   // 날짜 필터 상태 (기본: 오늘 날짜)
   const [selectedDate, setSelectedDate] = useState<string>('2026-11-09');
@@ -107,7 +110,7 @@ export default function App() {
   // 파일 입력 ref
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 운행 기록 리스트 (팁 항목 제거)
+  // 운행 기록 리스트
   const [records, setRecords] = useState<DrivingRecord[]>([
     {
       id: '1',
@@ -118,10 +121,11 @@ export default function App() {
       destination: '인천 송도',
       grossAmount: 85000,
       feeRate: 20,
+      tipAmount: 5000,
       fuelAmount: 50000,
       isPaid: false,
-      netAmount: 68000,
-      totalClaimAmount: 135000,
+      netAmount: 73000,
+      totalClaimAmount: 140000,
     },
     {
       id: '2',
@@ -132,6 +136,7 @@ export default function App() {
       destination: '경기 평택',
       grossAmount: 65000,
       feeRate: 20,
+      tipAmount: 0,
       fuelAmount: 30000,
       isPaid: false,
       netAmount: 52000,
@@ -139,7 +144,7 @@ export default function App() {
     },
   ]);
 
-  // 경비 지출 리스트
+  // 지출 내역 리스트
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([
     {
       id: '1',
@@ -172,7 +177,7 @@ export default function App() {
     localStorage.setItem('jundriver_local_accounts', JSON.stringify(accounts));
   }, [accounts]);
 
-  // 운행 등록 폼 상태 (팁 제거)
+  // 운행 등록 폼 상태
   const [newDate, setNewDate] = useState('2026-11-09');
   const [newStartTime, setNewStartTime] = useState('');
   const [newEndTime, setNewEndTime] = useState('');
@@ -180,6 +185,7 @@ export default function App() {
   const [newDestination, setNewDestination] = useState('');
   const [newGross, setNewGross] = useState('');
   const [newFeeRate, setNewFeeRate] = useState('20');
+  const [newTip, setNewTip] = useState('');
   const [newFuel, setNewFuel] = useState('');
   const [receiptImage, setReceiptImage] = useState<string>('');
 
@@ -308,15 +314,16 @@ export default function App() {
     }
   };
 
-  // 운행 등록 핸들러 (탁송료 + 주유비만 계산)
+  // 운행 등록 핸들러
   const handleAddRecord = (e: React.FormEvent) => {
     e.preventDefault();
     const gross = Number(newGross) || 0;
     const feeRate = Number(newFeeRate) || 0;
+    const tip = Number(newTip) || 0;
     const fuel = Number(newFuel) || 0;
     const feeAmount = gross * (feeRate / 100);
-    const net = gross - feeAmount;
-    const claimTotal = gross + fuel;
+    const net = gross - feeAmount + tip;
+    const claimTotal = gross + fuel + tip;
 
     const newRecord: DrivingRecord = {
       id: Date.now().toString(),
@@ -327,6 +334,7 @@ export default function App() {
       destination: newDestination,
       grossAmount: gross,
       feeRate,
+      tipAmount: tip,
       fuelAmount: fuel,
       receiptImage: receiptImage || undefined,
       isPaid: false,
@@ -338,6 +346,7 @@ export default function App() {
     setNewDeparture('');
     setNewDestination('');
     setNewGross('');
+    setNewTip('');
     setNewFuel('');
     setReceiptImage('');
   };
@@ -347,14 +356,14 @@ export default function App() {
     setRecords(records.map(r => r.id === id ? { ...r, isPaid: !r.isPaid } : r));
   };
 
-  // 청구 문자 모달 열기 (jundriver 단어 및 팁 제외, 정갈한 실무 문구)
+  // 청구 문자 모달 열기 (기본 문구 자동 구성)
   const openClaimMessageModal = (r: DrivingRecord) => {
     const primaryAccount = accounts[0] || { bankName: '은행명', accountNumber: '계좌번호', holder: '예금주' };
-    const defaultText = `[탁송료 및 주유비 정산 요청]
+    const defaultText = `[JunDriver 탁송 정산 요청]
 * 운행일자: ${r.date}
 * 운행구간: ${r.departure} ➔ ${r.destination}
 * 탁송운임: ${r.grossAmount.toLocaleString()}원
-${r.fuelAmount > 0 ? `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (영수증 첨부)\n` : ''}--------------------------------
+${r.fuelAmount > 0 ? `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (영수증 별첨)\n` : ''}${r.tipAmount > 0 ? `* 추가운임/팁: ${r.tipAmount.toLocaleString()}원\n` : ''}--------------------------------
 * 총 청구금액: ${r.totalClaimAmount.toLocaleString()}원
 * 입금계좌: ${primaryAccount.bankName} ${primaryAccount.accountNumber} (${primaryAccount.holder})
 
@@ -364,10 +373,10 @@ ${r.fuelAmount > 0 ? `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (�
     setClaimModalOpen(true);
   };
 
-  // 수정한 문자 복사
+  // 수정한 문자 클립보드 복사
   const handleCopyClaimMessage = () => {
     navigator.clipboard.writeText(claimMessageText);
-    alert('청구 문자가 복사되었습니다.\n문자나 카카오톡에 붙여넣기 하세요!');
+    alert('수정된 정산 청구 문자가 복사되었습니다.\n문자나 카카오톡에 붙여넣기 하세요!');
     setClaimModalOpen(false);
   };
 
@@ -441,10 +450,15 @@ ${r.fuelAmount > 0 ? `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (�
         <div className="w-full max-w-[420px] bg-[#0E1424]/90 border border-slate-800/80 rounded-2xl p-7 backdrop-blur-xl shadow-2xl relative z-10">
           <div className="flex flex-col items-center mb-6">
             <div className="w-12 h-12 p-2.5 bg-slate-900 border border-slate-700/60 rounded-xl flex items-center justify-center shadow-inner mb-3">
-              <Car className="w-6 h-6 text-indigo-400" />
+              <Wallet className="w-6 h-6 text-indigo-400" />
             </div>
-            <h1 className="text-xl font-bold tracking-tight text-white">탁송 일지 & 주유비 정산</h1>
-            <p className="text-xs text-slate-400 mt-1">대납 주유비 및 미수금 완벽 관리</p>
+            <div className="flex items-center gap-1">
+              <h1 className="text-2xl font-bold tracking-tight text-white">JunDriver</h1>
+              <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
+                PRO
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 mt-1">탁송 주유비 & 미수금 완벽 관리 솔루션</p>
           </div>
 
           <div className="flex bg-slate-900/80 p-1 rounded-xl border border-slate-800 mb-5">
@@ -577,7 +591,7 @@ ${r.fuelAmount > 0 ? `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (�
               </button>
               <h3 className="text-sm font-bold text-white mb-3">개인정보 수집 및 이용 방침</h3>
               <p className="text-xs text-slate-300 leading-relaxed mb-4">
-                탁송 운행 기록 및 주유비 청구 내역을 클라우드에 안전하게 보관합니다. 송금용 계좌 정보 및 영수증 사진은 외부 서버로 전송되지 않고 본인의 스마트폰/PC 로컬 브라우저에만 독립 보관됩니다.
+                JunDriver는 탁송 운행 기록 및 주유비 청구 내역을 클라우드에 안전하게 보관합니다. 송금용 계좌 정보 및 영수증 사진은 외부로 전송되지 않고 본인의 스마트폰/PC 로컬 브라우저에만 독립 보관됩니다.
               </p>
               <button
                 type="button"
@@ -593,20 +607,22 @@ ${r.fuelAmount > 0 ? `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (�
     );
   }
 
-  // 2. 로그인 완료 메인 대시보드
+  // 2. 메인 대시보드
   return (
     <div className="min-h-screen bg-[#070B14] text-slate-100 font-sans pb-20 selection:bg-indigo-500 selection:text-white">
       {/* 상단 헤더 */}
       <header className="sticky top-0 z-30 bg-[#0E1424]/90 backdrop-blur-md border-b border-slate-800/80 px-4 lg:px-8 py-3">
         <div className="max-w-[1400px] mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center shadow-md">
               <Car className="w-4 h-4 text-white" />
             </div>
-            <span className="font-bold text-base text-white">탁송 매니저</span>
-            <span className="px-1.5 py-0.5 text-[10px] font-bold bg-indigo-500/20 text-indigo-400 rounded border border-indigo-500/30">
-              PRO
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-base text-white">JunDriver</span>
+              <span className="px-1.5 py-0.5 text-[10px] font-bold bg-indigo-500/20 text-indigo-400 rounded border border-indigo-500/30">
+                PRO
+              </span>
+            </div>
           </div>
 
           <div className="flex items-center gap-2.5">
@@ -621,7 +637,7 @@ ${r.fuelAmount > 0 ? `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (�
             <button
               onClick={handleLogout}
               title="로그아웃"
-              className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-rose-500/50 hover:bg-rose-500/10 text-slate-400 hover:text-rose-400 transition-all cursor-pointer"
+              className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-rose-500/50 hover:bg-rose-500/10 text-slate-400 hover:text-rose-400 transition-all"
             >
               <LogOut className="w-4 h-4" />
             </button>
@@ -632,7 +648,7 @@ ${r.fuelAmount > 0 ? `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (�
       {/* 메인 본문 컨테이너 */}
       <main className="max-w-[1400px] mx-auto px-4 lg:px-8 pt-6 space-y-6">
         
-        {/* 미수금 및 대납 주유비 알림 배너 */}
+        {/* 미수금 및 대납 주유비 경고 알림 바 */}
         {totalUnpaidAmount > 0 && (
           <section className="bg-gradient-to-r from-rose-950/40 via-slate-900 to-rose-950/40 border border-rose-500/40 rounded-2xl p-4 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex items-center gap-3.5">
@@ -649,18 +665,15 @@ ${r.fuelAmount > 0 ? `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (�
                 <div className="text-xl font-extrabold text-white mt-0.5">
                   총 {totalUnpaidAmount.toLocaleString()}원{' '}
                   <span className="text-xs font-normal text-rose-300 ml-1">
-                    (사비 대납 주유비 {totalUnpaidFuel.toLocaleString()}원 포함)
+                    (사비 선결제 주유비 {totalUnpaidFuel.toLocaleString()}원 포함)
                   </span>
                 </div>
               </div>
             </div>
 
-            <button
-              onClick={() => setActiveTab('claims')}
-              className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md cursor-pointer transition-all self-start md:self-auto"
-            >
-              <MessageSquare className="w-3.5 h-3.5" /> 청구문자 관리 바로가기
-            </button>
+            <div className="text-xs text-slate-400 flex items-center gap-2">
+              <span>운행 카드에서 [청구문자] 버튼을 눌러 내용을 확인·수정한 뒤 문자로 전송하세요.</span>
+            </div>
           </section>
         )}
 
@@ -706,35 +719,48 @@ ${r.fuelAmount > 0 ? `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (�
           </div>
         </section>
 
-        {/* 탭 네비게이션: '청구문자 관리' 독립 탭 신설 */}
+        {/* 일자별 조회 필터 바 */}
+        <div className="bg-[#0E1424]/90 border border-slate-800/90 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
+          <div className="flex items-center gap-2 text-white text-xs font-bold">
+            <Filter className="w-4 h-4 text-indigo-400" />
+            <span>조회 기준 일자:</span>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => { setSelectedDate(e.target.value); setFilterAllDates(false); }}
+              className="px-3 py-1.5 rounded-lg bg-white text-slate-900 font-bold text-xs"
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setFilterAllDates(!filterAllDates)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                filterAllDates ? 'bg-indigo-600 text-white' : 'bg-slate-900 text-slate-300 border border-slate-700'
+              }`}
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              {filterAllDates ? '전체 기간 조회 중' : '전체 내역 보기'}
+            </button>
+            <span className="text-xs text-slate-400">{filterAllDates ? '누적 전체' : `${selectedDate} 기준`}</span>
+          </div>
+        </div>
+
+        {/* 탭 네비게이션 */}
         <div className="flex gap-2 border-b border-slate-800 pb-2">
           <button
             onClick={() => setActiveTab('records')}
-            className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer ${
-              activeTab === 'records' ? 'bg-indigo-600 text-white' : 'bg-slate-900/60 text-slate-400 hover:text-white'
+            className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 ${
+              activeTab === 'records' ? 'bg-indigo-600 text-white' : 'bg-slate-900/60 text-slate-400'
             }`}
           >
             <Car className="w-3.5 h-3.5" />
-            운행 일지 등록 & 목록
-          </button>
-          <button
-            onClick={() => setActiveTab('claims')}
-            className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer relative ${
-              activeTab === 'claims' ? 'bg-indigo-600 text-white' : 'bg-slate-900/60 text-slate-400 hover:text-white'
-            }`}
-          >
-            <MessageSquare className="w-3.5 h-3.5" />
-            청구문자 (미수금 관리)
-            {unpaidRecords.length > 0 && (
-              <span className="ml-1 px-1.5 py-0.2 rounded-full bg-rose-500 text-white text-[10px] font-extrabold">
-                {unpaidRecords.length}
-              </span>
-            )}
+            탁송 운행 & 미수금 관리
           </button>
           <button
             onClick={() => setActiveTab('expense')}
-            className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer ${
-              activeTab === 'expense' ? 'bg-indigo-600 text-white' : 'bg-slate-900/60 text-slate-400 hover:text-white'
+            className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 ${
+              activeTab === 'expense' ? 'bg-indigo-600 text-white' : 'bg-slate-900/60 text-slate-400'
             }`}
           >
             <Receipt className="w-3.5 h-3.5" />
@@ -742,375 +768,309 @@ ${r.fuelAmount > 0 ? `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (�
           </button>
           <button
             onClick={() => setActiveTab('wallet')}
-            className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer ${
-              activeTab === 'wallet' ? 'bg-indigo-600 text-white' : 'bg-slate-900/60 text-slate-400 hover:text-white'
+            className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 ${
+              activeTab === 'wallet' ? 'bg-indigo-600 text-white' : 'bg-slate-900/60 text-slate-400'
             }`}
           >
             <CreditCard className="w-3.5 h-3.5" />
-            기사 송금 계좌
+            기사 송금 계좌 (기기 로컬)
+          </button>
+          <button
+            onClick={() => setActiveTab('analytics')}
+            className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 ${
+              activeTab === 'analytics' ? 'bg-indigo-600 text-white' : 'bg-slate-900/60 text-slate-400'
+            }`}
+          >
+            <BarChart3 className="w-3.5 h-3.5" />
+            수익 통계 요약
           </button>
         </div>
 
-        {/* TAB 1: 운행 일지 등록 & 목록 */}
+        {/* TAB 1: 운행 및 주유/미수금 일지 */}
         {activeTab === 'records' && (
-          <div className="space-y-6">
-            {/* 일자별 조회 필터 바 */}
-            <div className="bg-[#0E1424]/90 border border-slate-800/90 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
-              <div className="flex items-center gap-2 text-white text-xs font-bold">
-                <Filter className="w-4 h-4 text-indigo-400" />
-                <span>조회 기준 일자:</span>
-                <input
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => { setSelectedDate(e.target.value); setFilterAllDates(false); }}
-                  className="px-3 py-1.5 rounded-lg bg-white text-slate-900 font-bold text-xs"
-                />
-              </div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* 좌측: 운행 기록 등록 폼 */}
+            <div className="bg-[#0E1424]/80 border border-slate-800/80 rounded-xl p-5">
+              <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+                <PlusCircle className="w-4 h-4 text-indigo-400" />
+                새 운행 배차 등록
+              </h3>
+              <form onSubmit={handleAddRecord} className="space-y-3.5">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">운행 일자</label>
+                  <input
+                    type="date"
+                    value={newDate}
+                    onChange={(e) => setNewDate(e.target.value)}
+                    required
+                    className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
+                  />
+                </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setFilterAllDates(!filterAllDates)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
-                    filterAllDates ? 'bg-indigo-600 text-white' : 'bg-slate-900 text-slate-300 border border-slate-700'
-                  }`}
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  {filterAllDates ? '전체 기간 조회 중' : '전체 내역 보기'}
-                </button>
-                <span className="text-xs text-slate-400">{filterAllDates ? '누적 전체' : `${selectedDate} 기준`}</span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* 운행 등록 폼 (팁 제거, 탁송료+주유비만 심플 구성) */}
-              <div className="bg-[#0E1424]/80 border border-slate-800/80 rounded-xl p-5">
-                <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
-                  <PlusCircle className="w-4 h-4 text-indigo-400" />
-                  새 운행 배차 등록
-                </h3>
-                <form onSubmit={handleAddRecord} className="space-y-3.5">
+                <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">운행 일자</label>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">출발 시각</label>
                     <input
-                      type="date"
-                      value={newDate}
-                      onChange={(e) => setNewDate(e.target.value)}
+                      type="time"
+                      value={newStartTime}
+                      onChange={(e) => setNewStartTime(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">도착 시각</label>
+                    <input
+                      type="time"
+                      value={newEndTime}
+                      onChange={(e) => setNewEndTime(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">출발지</label>
+                    <input
+                      type="text"
+                      placeholder="예: 경기 광주"
+                      value={newDeparture}
+                      onChange={(e) => setNewDeparture(e.target.value)}
                       required
                       className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
                     />
                   </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">출발 시각</label>
-                      <input
-                        type="time"
-                        value={newStartTime}
-                        onChange={(e) => setNewStartTime(e.target.value)}
-                        className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">도착 시각</label>
-                      <input
-                        type="time"
-                        value={newEndTime}
-                        onChange={(e) => setNewEndTime(e.target.value)}
-                        className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
-                      />
-                    </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">도착지</label>
+                    <input
+                      type="text"
+                      placeholder="예: 인천 송도"
+                      value={newDestination}
+                      onChange={(e) => setNewDestination(e.target.value)}
+                      required
+                      className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
+                    />
                   </div>
+                </div>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">출발지</label>
-                      <input
-                        type="text"
-                        placeholder="예: 경기 광주"
-                        value={newDeparture}
-                        onChange={(e) => setNewDeparture(e.target.value)}
-                        required
-                        className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">도착지</label>
-                      <input
-                        type="text"
-                        placeholder="예: 인천 송도"
-                        value={newDestination}
-                        onChange={(e) => setNewDestination(e.target.value)}
-                        required
-                        className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
-                      />
-                    </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">탁송료(원)</label>
+                    <input
+                      type="number"
+                      placeholder="85000"
+                      value={newGross}
+                      onChange={(e) => setNewGross(e.target.value)}
+                      required
+                      className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
+                    />
                   </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">탁송료(원)</label>
-                      <input
-                        type="number"
-                        placeholder="85000"
-                        value={newGross}
-                        onChange={(e) => setNewGross(e.target.value)}
-                        required
-                        className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">수수료(%)</label>
-                      <input
-                        type="number"
-                        value={newFeeRate}
-                        onChange={(e) => setNewFeeRate(e.target.value)}
-                        className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
-                      />
-                    </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">수수료(%)</label>
+                    <input
+                      type="number"
+                      value={newFeeRate}
+                      onChange={(e) => setNewFeeRate(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
+                    />
                   </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">팁/기타(원)</label>
+                    <input
+                      type="number"
+                      placeholder="0"
+                      value={newTip}
+                      onChange={(e) => setNewTip(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
+                    />
+                  </div>
+                </div>
 
-                  {/* 대납 주유비 & 영수증 */}
-                  <div className="p-3.5 rounded-xl bg-slate-900 border border-indigo-500/30 space-y-2.5">
+                {/* 대납 주유비 & 갤러리 영수증 선택 */}
+                <div className="p-3.5 rounded-xl bg-slate-900 border border-indigo-500/30 space-y-2.5">
+                  <div className="flex items-center justify-between">
                     <label className="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
                       <Fuel className="w-4 h-4 text-indigo-400" />
                       대납 주유/충전비 (100% 회수금)
                     </label>
+                  </div>
+                  <input
+                    type="number"
+                    placeholder="선결제한 주유 금액 (예: 50000)"
+                    value={newFuel}
+                    onChange={(e) => setNewFuel(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-bold text-xs"
+                  />
+
+                  <div className="flex items-center justify-between pt-1">
                     <input
-                      type="number"
-                      placeholder="사비 선결제 금액 (없으면 0)"
-                      value={newFuel}
-                      onChange={(e) => setNewFuel(e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-bold text-xs"
+                      type="file"
+                      accept="image/*"
+                      ref={fileInputRef}
+                      onChange={handleImageChange}
+                      className="hidden"
                     />
-
-                    <div className="pt-1">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        ref={fileInputRef}
-                        onChange={handleImageChange}
-                        className="hidden"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="w-full py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs text-slate-200 font-medium flex items-center justify-center gap-2 cursor-pointer transition-all"
-                      >
-                        <Camera className="w-3.5 h-3.5 text-indigo-400" />
-                        {receiptImage ? '영수증 첨부 완료 (변경)' : '스마트폰 갤러리에서 영수증 선택'}
-                      </button>
-                    </div>
-
-                    {receiptImage && (
-                      <div className="relative mt-2 p-1 bg-slate-950 rounded-lg border border-slate-800 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <img src={receiptImage} alt="영수증" className="w-10 h-10 object-cover rounded" />
-                          <span className="text-[11px] text-emerald-400 font-semibold">영수증 등록됨</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setReceiptImage('')}
-                          className="text-slate-500 hover:text-rose-400 p-1"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="w-full py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-indigo-500 text-xs text-slate-200 font-medium flex items-center justify-center gap-2 cursor-pointer transition-all"
+                    >
+                      <Camera className="w-3.5 h-3.5 text-indigo-400" />
+                      {receiptImage ? '영수증 변경 (선택됨)' : '스마트폰 갤러리에서 영수증 선택'}
+                    </button>
                   </div>
 
-                  <button
-                    type="submit"
-                    className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-lg transition-all shadow-md cursor-pointer"
-                  >
-                    운행 등록 (미입금 상태로 저장)
-                  </button>
-                </form>
-              </div>
-
-              {/* 운행 일지 목록 */}
-              <div className="lg:col-span-2 bg-[#0E1424]/80 border border-slate-800/80 rounded-xl p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-indigo-400" />
-                    운행 일지 내역 ({filteredRecords.length}건)
-                  </h3>
-                  <span className="text-xs text-slate-400">{filterAllDates ? '전체 보기' : selectedDate}</span>
+                  {receiptImage && (
+                    <div className="relative mt-2 p-1 bg-slate-950 rounded-lg border border-slate-800 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <img src={receiptImage} alt="영수증" className="w-10 h-10 object-cover rounded" />
+                        <span className="text-[11px] text-emerald-400 font-semibold">영수증 첨부 완료</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setReceiptImage('')}
+                        className="text-slate-500 hover:text-rose-400 p-1"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
                 </div>
 
-                {filteredRecords.length === 0 ? (
-                  <div className="py-12 text-center text-slate-500 text-xs">해당 일자에 등록된 운행이 없습니다.</div>
-                ) : (
-                  <div className="space-y-3 max-h-[560px] overflow-y-auto pr-1">
-                    {filteredRecords.map((r) => {
-                      const elapsed = getElapsedDays(r.date);
-                      return (
-                        <div key={r.id} className="bg-slate-900/70 border border-slate-800 rounded-xl p-4">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800/80">
-                            <div className="flex items-start sm:items-center gap-3">
-                              <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-400 shrink-0">
-                                <MapPin className="w-4 h-4" />
+                <button
+                  type="submit"
+                  className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-lg transition-all shadow-md cursor-pointer"
+                >
+                  운행 일지 등록 (미입금 상태로 저장)
+                </button>
+              </form>
+            </div>
+
+            {/* 우측: 운행 목록 */}
+            <div className="lg:col-span-2 bg-[#0E1424]/80 border border-slate-800/80 rounded-xl p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-indigo-400" />
+                  운행 일지 및 정산 현황 ({filteredRecords.length}건)
+                </h3>
+                <span className="text-xs text-slate-400">{filterAllDates ? '전체 보기' : selectedDate}</span>
+              </div>
+
+              {filteredRecords.length === 0 ? (
+                <div className="py-12 text-center text-slate-500 text-xs">해당 일자에 등록된 운행이 없습니다.</div>
+              ) : (
+                <div className="space-y-3 max-h-[560px] overflow-y-auto pr-1">
+                  {filteredRecords.map((r) => {
+                    const elapsed = getElapsedDays(r.date);
+                    return (
+                      <div
+                        key={r.id}
+                        className={`bg-slate-900/70 border rounded-xl p-4 transition-all ${
+                          !r.isPaid ? 'border-amber-500/30 bg-amber-500/[0.02]' : 'border-slate-800'
+                        }`}
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800/80">
+                          <div className="flex items-start sm:items-center gap-3">
+                            <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-400 shrink-0">
+                              <MapPin className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <div className="text-sm font-bold text-white flex items-center gap-2">
+                                <span>{r.departure}</span>
+                                <span className="text-indigo-400">➔</span>
+                                <span>{r.destination}</span>
                               </div>
-                              <div>
-                                <div className="text-sm font-bold text-white flex items-center gap-2">
-                                  <span>{r.departure}</span>
-                                  <span className="text-indigo-400">➔</span>
-                                  <span>{r.destination}</span>
-                                </div>
-                                <div className="flex items-center gap-3 text-xs text-slate-400 mt-1">
-                                  <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> {r.date}</span>
-                                  <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {r.startTime} ~ {r.endTime}</span>
-                                </div>
+                              <div className="flex items-center gap-3 text-xs text-slate-400 mt-1">
+                                <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> {r.date}</span>
+                                <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {r.startTime} ~ {r.endTime}</span>
                               </div>
                             </div>
+                          </div>
 
+                          <div className="flex items-center gap-2">
                             <button
                               onClick={() => togglePaidStatus(r.id)}
                               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                                 r.isPaid
                                   ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                                  : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                                  : 'bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse'
                               }`}
                             >
-                              {r.isPaid ? <><CheckCircle2 className="w-3.5 h-3.5" /> 입금완료</> : <><AlertCircle className="w-3.5 h-3.5" /> 미입금 ({elapsed}일 경과)</>}
+                              {r.isPaid ? (
+                                <>
+                                  <CheckCircle2 className="w-3.5 h-3.5" /> 입금완료
+                                </>
+                              ) : (
+                                <>
+                                  <AlertCircle className="w-3.5 h-3.5" />
+                                  미입금 ({elapsed === 0 ? 'D-Day' : `${elapsed}일 경과`})
+                                </>
+                              )}
                             </button>
                           </div>
+                        </div>
 
-                          <div className="pt-3 flex items-center justify-between text-xs">
-                            <div className="flex items-center gap-3 text-slate-400">
-                              <span>탁송료: <strong className="text-white">{r.grossAmount.toLocaleString()}원</strong></span>
-                              {r.fuelAmount > 0 && <span className="text-indigo-300 font-semibold">주유비: {r.fuelAmount.toLocaleString()}원</span>}
-                              <span className="text-emerald-400 font-semibold">순익: +{r.netAmount.toLocaleString()}원</span>
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                              {r.receiptImage && (
-                                <button
-                                  onClick={() => setPreviewImage(r.receiptImage || null)}
-                                  className="p-1.5 rounded-lg bg-slate-800 text-indigo-400 cursor-pointer"
-                                  title="영수증 보기"
-                                >
-                                  <ImageIcon className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-                              <button
-                                onClick={() => setRecords(records.filter((item) => item.id !== r.id))}
-                                className="p-1.5 text-slate-500 hover:text-rose-400 cursor-pointer"
-                                title="삭제"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
+                        <div className="pt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                          <div className="flex flex-wrap items-center gap-3 text-slate-400">
+                            <span>탁송료: <strong className="text-white">{r.grossAmount.toLocaleString()}원</strong></span>
+                            {r.fuelAmount > 0 && (
+                              <span className="text-indigo-300 font-semibold flex items-center gap-1">
+                                <Fuel className="w-3 h-3" /> 주유비: {r.fuelAmount.toLocaleString()}원
+                              </span>
+                            )}
+                            <span className="text-emerald-400 font-semibold">순수입: +{r.netAmount.toLocaleString()}원</span>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
 
-        {/* TAB 2: 청구문자 (미수금 관리) 전용 탭 */}
-        {activeTab === 'claims' && (
-          <div className="bg-[#0E1424]/80 border border-slate-800/80 rounded-xl p-6 space-y-5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
-              <div>
-                <h3 className="text-base font-bold text-white flex items-center gap-2">
-                  <MessageSquare className="w-5 h-5 text-indigo-400" />
-                  미수금 정산 및 청구문자 전송 관리
-                </h3>
-                <p className="text-xs text-slate-400 mt-1">
-                  입금되지 않은 건들만 모아서 청구문자를 수정·복사하고, 입금 확인 시 원클릭 완료 처리합니다.
-                </p>
-              </div>
-              <div className="text-right">
-                <span className="text-xs text-slate-400 block">미수금 총액</span>
-                <span className="text-xl font-extrabold text-rose-400">{totalUnpaidAmount.toLocaleString()}원</span>
-              </div>
-            </div>
-
-            {unpaidRecords.length === 0 ? (
-              <div className="py-16 text-center text-slate-500 text-xs">
-                현재 미입금된 건이 없습니다. 모든 정산이 완료되었습니다!
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {unpaidRecords.map((r) => {
-                  const elapsed = getElapsedDays(r.date);
-                  const isUrgent = elapsed >= 3;
-                  return (
-                    <div
-                      key={r.id}
-                      className={`p-4 rounded-xl border transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 ${
-                        isUrgent
-                          ? 'bg-rose-950/20 border-rose-500/40 shadow-sm'
-                          : 'bg-slate-900/70 border-slate-800'
-                      }`}
-                    >
-                      <div className="flex items-start sm:items-center gap-3.5">
-                        <div className={`p-2 rounded-xl shrink-0 ${isUrgent ? 'bg-rose-500/20 text-rose-400 animate-pulse' : 'bg-amber-500/20 text-amber-400'}`}>
-                          <AlertTriangle className="w-5 h-5" />
-                        </div>
-                        <div>
                           <div className="flex items-center gap-2">
-                            <span className="text-sm font-bold text-white">{r.departure} ➔ {r.destination}</span>
-                            <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded border ${
-                              isUrgent ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-                            }`}>
-                              {elapsed === 0 ? '당일 미입금' : `${elapsed}일째 미입금`}
-                            </span>
-                          </div>
-                          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400 mt-1">
-                            <span>운행일: {r.date}</span>
-                            <span>탁송료: {r.grossAmount.toLocaleString()}원</span>
-                            {r.fuelAmount > 0 && <span className="text-indigo-300 font-semibold">대납 주유비: {r.fuelAmount.toLocaleString()}원</span>}
-                            <span className="text-white font-bold">청구 합계: {r.totalClaimAmount.toLocaleString()}원</span>
+                            <div className="text-right pr-2">
+                              <span className="text-[10px] text-slate-400 block">총 청구액</span>
+                              <span className="text-sm font-extrabold text-white">{r.totalClaimAmount.toLocaleString()}원</span>
+                            </div>
+
+                            {r.receiptImage && (
+                              <button
+                                onClick={() => setPreviewImage(r.receiptImage || null)}
+                                className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-indigo-400 transition-all cursor-pointer"
+                                title="영수증 사진 보기"
+                              >
+                                <ImageIcon className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+
+                            {/* 청구 문자 수정 및 복사 버튼 */}
+                            <button
+                              onClick={() => openClaimMessageModal(r)}
+                              className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1 shadow-md cursor-pointer"
+                              title="청구문자 확인 및 수정 복사"
+                            >
+                              <MessageSquare className="w-3 h-3" /> 청구문자
+                            </button>
+
+                            <button
+                              onClick={() => setRecords(records.filter((item) => item.id !== r.id))}
+                              className="p-1.5 text-slate-500 hover:text-rose-400"
+                              title="삭제"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
                           </div>
                         </div>
                       </div>
-
-                      <div className="flex items-center gap-2 self-end md:self-auto">
-                        {r.receiptImage && (
-                          <button
-                            onClick={() => setPreviewImage(r.receiptImage || null)}
-                            className="p-2 rounded-lg bg-slate-800 text-indigo-400 hover:bg-slate-700 transition-all cursor-pointer"
-                            title="주유 영수증 사진 확인"
-                          >
-                            <ImageIcon className="w-4 h-4" />
-                          </button>
-                        )}
-
-                        <button
-                          onClick={() => openClaimMessageModal(r)}
-                          className="px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md cursor-pointer transition-all"
-                        >
-                          <MessageSquare className="w-3.5 h-3.5" /> 청구문자 편집·복사
-                        </button>
-
-                        <button
-                          onClick={() => togglePaidStatus(r.id)}
-                          className="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1 cursor-pointer transition-all"
-                          title="입금 확인 시 클릭"
-                        >
-                          <Check className="w-3.5 h-3.5" /> 입금완료 처리
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
-        {/* TAB 3: 일반 경비 장부 */}
+        {/* TAB 2, 3, 4 동일 유지 */}
         {activeTab === 'expense' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="bg-[#0E1424]/80 border border-slate-800/80 rounded-xl p-5">
               <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
                 <PlusCircle className="w-4 h-4 text-rose-400" />
-                일반 경비 지출 등록
+                지출 내역 등록
               </h3>
               <form onSubmit={handleAddExpense} className="space-y-3.5">
                 <div>
@@ -1158,14 +1118,14 @@ ${r.fuelAmount > 0 ? `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (�
                     className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
                   />
                 </div>
-                <button type="submit" className="w-full py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-lg cursor-pointer">
-                  경비 등록
+                <button type="submit" className="w-full py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-lg">
+                  지출 등록
                 </button>
               </form>
             </div>
 
             <div className="lg:col-span-2 bg-[#0E1424]/80 border border-slate-800/80 rounded-xl p-5">
-              <h3 className="text-sm font-bold text-white mb-4">경비 지출 내역 ({filteredExpenses.length}건)</h3>
+              <h3 className="text-sm font-bold text-white mb-4">지출 내역 목록 ({filteredExpenses.length}건)</h3>
               <div className="space-y-2.5">
                 {filteredExpenses.map((exp) => (
                   <div key={exp.id} className="bg-slate-900/60 border border-slate-800/80 rounded-lg p-3.5 flex items-center justify-between">
@@ -1178,7 +1138,7 @@ ${r.fuelAmount > 0 ? `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (�
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="text-sm font-bold text-rose-400">-{exp.amount.toLocaleString()}원</span>
-                      <button onClick={() => setExpenses(expenses.filter((e) => e.id !== exp.id))} className="text-slate-500 hover:text-rose-400 p-1 cursor-pointer">
+                      <button onClick={() => setExpenses(expenses.filter((e) => e.id !== exp.id))} className="text-slate-500 hover:text-rose-400 p-1">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
@@ -1189,12 +1149,12 @@ ${r.fuelAmount > 0 ? `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (�
           </div>
         )}
 
-        {/* TAB 4: 기사 송금 계좌 */}
+        {/* TAB 3: 송금 계좌 */}
         {activeTab === 'wallet' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="bg-[#0E1424]/80 border border-slate-800/80 rounded-xl p-5">
-              <h3 className="text-sm font-bold text-white mb-2">정산 입금 계좌 추가</h3>
-              <p className="text-[11px] text-emerald-400 mb-4">계좌 정보는 외부 서버에 저장되지 않고 기기에만 안전하게 보관됩니다.</p>
+              <h3 className="text-sm font-bold text-white mb-2">송금용 계좌 추가</h3>
+              <p className="text-[11px] text-emerald-400 mb-4">계좌 정보는 기기 브라우저에만 안전하게 저장됩니다.</p>
               <form onSubmit={handleAddAccount} className="space-y-3.5">
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-300 mb-1">은행명</label>
@@ -1203,7 +1163,6 @@ ${r.fuelAmount > 0 ? `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (�
                     value={bankName}
                     onChange={(e) => setBankName(e.target.value)}
                     required
-                    placeholder="예: 신한은행"
                     className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
                   />
                 </div>
@@ -1214,7 +1173,6 @@ ${r.fuelAmount > 0 ? `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (�
                     value={accountNumber}
                     onChange={(e) => setAccountNumber(e.target.value)}
                     required
-                    placeholder="하이픈 포함 입력"
                     className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
                   />
                 </div>
@@ -1224,12 +1182,11 @@ ${r.fuelAmount > 0 ? `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (�
                     type="text"
                     value={holder}
                     onChange={(e) => setHolder(e.target.value)}
-                    placeholder="예금주 성함"
                     className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
                   />
                 </div>
-                <button type="submit" className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-lg cursor-pointer">
-                  현재 기기에 안전 저장
+                <button type="submit" className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-lg">
+                  계좌 저장
                 </button>
               </form>
             </div>
@@ -1250,12 +1207,35 @@ ${r.fuelAmount > 0 ? `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (�
                       >
                         <Copy className="w-3.5 h-3.5" /> 복사
                       </button>
-                      <button onClick={() => setAccounts(accounts.filter((a) => a.id !== acc.id))} className="p-1.5 text-slate-500 hover:text-rose-400 cursor-pointer">
+                      <button onClick={() => setAccounts(accounts.filter((a) => a.id !== acc.id))} className="p-1.5 text-slate-500 hover:text-rose-400">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 4: 통계 요약 */}
+        {activeTab === 'analytics' && (
+          <div className="bg-[#0E1424]/80 border border-slate-800/80 rounded-xl p-6">
+            <h3 className="text-base font-bold text-white mb-4">운행 및 정산 리포트</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
+                <span className="text-xs text-slate-400">총 운행 횟수</span>
+                <div className="text-xl font-bold text-white mt-1">{filteredRecords.length}회</div>
+              </div>
+              <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
+                <span className="text-xs text-slate-400">정산 완료율</span>
+                <div className="text-xl font-bold text-emerald-400 mt-1">
+                  {filteredRecords.length > 0 ? ((filteredRecords.filter(r => r.isPaid).length / filteredRecords.length) * 100).toFixed(1) : 0}%
+                </div>
+              </div>
+              <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
+                <span className="text-xs text-slate-400">미수금 총액</span>
+                <div className="text-xl font-bold text-rose-400 mt-1">{totalUnpaidAmount.toLocaleString()}원</div>
               </div>
             </div>
           </div>
@@ -1273,12 +1253,12 @@ ${r.fuelAmount > 0 ? `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (�
               <X className="w-5 h-5" />
             </button>
 
-            <div className="flex items-center gap-2.5 mb-2">
+            <div className="flex items-center gap-2.5 mb-3">
               <MessageSquare className="w-5 h-5 text-indigo-400" />
               <h3 className="text-sm font-bold text-white">정산 청구 문자 편집</h3>
             </div>
             <p className="text-xs text-slate-400 mb-4">
-              내용을 확인 및 수정한 후 복사하여 문자나 카카오톡으로 전송하세요.
+              상황에 맞게 문구를 자유롭게 수정한 후 복사하여 문자나 카카오톡으로 전송하세요.
             </p>
 
             <textarea
