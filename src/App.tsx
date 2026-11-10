@@ -87,9 +87,14 @@ export default function App() {
   const [pwdLoading, setPwdLoading] = useState(false);
   const [pwdMessage, setPwdMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // 운행내역 수정 상태
   const [editingRecord, setEditingRecord] = useState<DrivingRecord | null>(null);
-  const [editGross, setEditGross] = useState(''); const [editFuel, setEditFuel] = useState('');
-  const [editExtra, setEditExtra] = useState(''); const [editTip, setEditTip] = useState('');
+  const [editDeparture, setEditDeparture] = useState('');
+  const [editDestination, setEditDestination] = useState('');
+  const [editGross, setEditGross] = useState(''); 
+  const [editFuel, setEditFuel] = useState('');
+  const [editExtra, setEditExtra] = useState(''); 
+  const [editTip, setEditTip] = useState('');
 
   const [claimModalOpen, setClaimModalOpen] = useState(false);
   const [selectedClaimRecord, setSelectedClaimRecord] = useState<DrivingRecord | null>(null);
@@ -293,8 +298,13 @@ export default function App() {
   };
 
   const handleOpenEditModal = (r: DrivingRecord) => {
-    setEditingRecord(r); setEditGross(formatNumberWithComma(r.grossAmount)); setEditFuel(formatNumberWithComma(r.fuelAmount));
-    setEditExtra(formatNumberWithComma(r.extraExpenseAmount)); setEditTip(formatNumberWithComma(r.tipAmount));
+    setEditingRecord(r); 
+    setEditDeparture(r.departure);
+    setEditDestination(r.destination);
+    setEditGross(formatNumberWithComma(r.grossAmount)); 
+    setEditFuel(formatNumberWithComma(r.fuelAmount));
+    setEditExtra(formatNumberWithComma(r.extraExpenseAmount)); 
+    setEditTip(formatNumberWithComma(r.tipAmount));
   };
 
   const handleUpdateRecord = async (e: React.FormEvent) => {
@@ -305,11 +315,28 @@ export default function App() {
     const claimTotal = gross + fuel + extraExp;
 
     const { error } = await supabase.from('driving_records').update({
-      gross_amount: gross, fuel_amount: fuel, extra_expense_amount: extraExp, tip_amount: tip, net_amount: Math.round(net), total_claim_amount: Math.round(claimTotal)
+      departure: editDeparture,
+      destination: editDestination,
+      gross_amount: gross, 
+      fuel_amount: fuel, 
+      extra_expense_amount: extraExp, 
+      tip_amount: tip, 
+      net_amount: Math.round(net), 
+      total_claim_amount: Math.round(claimTotal)
     }).eq('id', editingRecord.id);
 
     if (!error) {
-      setRecords(records.map((r) => r.id === editingRecord.id ? { ...r, grossAmount: gross, fuelAmount: fuel, extraExpenseAmount: extraExp, tipAmount: tip, netAmount: Math.round(net), totalClaimAmount: Math.round(claimTotal) } : r));
+      setRecords(records.map((r) => r.id === editingRecord.id ? { 
+        ...r, 
+        departure: editDeparture,
+        destination: editDestination,
+        grossAmount: gross, 
+        fuelAmount: fuel, 
+        extraExpenseAmount: extraExp, 
+        tipAmount: tip, 
+        netAmount: Math.round(net), 
+        totalClaimAmount: Math.round(claimTotal) 
+      } : r));
       setEditingRecord(null);
     } else { alert('수정 실패: ' + error.message); }
   };
@@ -892,6 +919,10 @@ export default function App() {
           <div className="w-full max-w-sm glass-card rounded-2xl p-6 shadow-2xl relative">
             <div className="flex justify-between items-center mb-4"><h3 className="text-sm font-bold text-white">운행 내역 수정</h3><button onClick={() => setEditingRecord(null)} className="text-slate-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button></div>
             <form onSubmit={handleUpdateRecord} className="space-y-3.5">
+              <div className="grid grid-cols-2 gap-2">
+                <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">출발지</label><input type="text" value={editDeparture} onChange={(e) => setEditDeparture(e.target.value)} className="w-full px-3 py-2 rounded-lg" required /></div>
+                <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">도착지</label><input type="text" value={editDestination} onChange={(e) => setEditDestination(e.target.value)} className="w-full px-3 py-2 rounded-lg" required /></div>
+              </div>
               <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">운임(원)</label><input type="text" value={editGross} onChange={(e) => setEditGross(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" required /></div>
               <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">대납 주유비</label><input type="text" value={editFuel} onChange={(e) => setEditFuel(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" /></div>
               <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">통행료 등 추가경비</label><input type="text" value={editExtra} onChange={(e) => setEditExtra(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" /></div>
