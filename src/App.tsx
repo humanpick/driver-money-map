@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import {
   Wallet, Calendar, Clock, MapPin, TrendingUp, DollarSign, FileText, User, LogOut,
@@ -6,7 +6,7 @@ import {
   Copy, Car, Filter, RotateCcw, CalendarDays, ShieldCheck, ChevronRight, Smartphone,
   Fuel, AlertTriangle, MessageSquare, Check, Edit2, Coins, Sparkles, Phone,
   RefreshCw, UserX, BotOff, ShieldAlert, BarChart3, Megaphone, Users, Download,
-  Award, Crown, BookmarkPlus, Radio, Send, Building2, Camera, Image as ImageIcon
+  Award, Crown, BookmarkPlus, Radio, Send, Building2, Info
 } from 'lucide-react';
 
 // Supabase 클라이언트 초기화
@@ -15,7 +15,7 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const ADMIN_DEFAULT_EMAIL = 'beat4989@naver.com';
-const ADMIN_DEFAULT_NAME = '공민준'; 
+const ADMIN_DEFAULT_NAME = '홍길동'; 
 const ADMIN_DEFAULT_PHONE = '01091417586';
 
 const formatNumberWithComma = (val: string | number) => {
@@ -52,7 +52,6 @@ interface DrivingRecord {
   fuelAmount: number; 
   extraExpenseAmount: number; 
   tipAmount: number; 
-  receiptImage?: string; // 무료버전의 로컬 영수증 썸네일 기능 병합
   isPaid: boolean;
   netAmount: number; 
   totalClaimAmount: number;
@@ -66,17 +65,17 @@ export default function App() {
   const [session, setSession] = useState<any>(null);
   const [currentUserRole, setCurrentUserRole] = useState<string>('user');
 
-  // 인증
+  // 인증 상태
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState(''); const [name, setName] = useState(''); const [phone, setPhone] = useState('');
   const [password, setPassword] = useState(''); const [passwordConfirm, setPasswordConfirm] = useState('');
   const [agreePrivacy, setAgreePrivacy] = useState(false); 
-  const [showPrivacyModal, setShowPrivacyModal] = useState(false); // 무료버전 약관 모달 병합
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState(''); const [authSuccess, setAuthSuccess] = useState('');
   const [honeypot, setHoneypot] = useState(''); const [captchaVerified, setCaptchaVerified] = useState(false);
 
-  // 탭 및 필터 (analytics 추가)
+  // 탭 및 필터
   const [activeTab, setActiveTab] = useState<'records' | 'claims' | 'expense' | 'wallet' | 'analytics' | 'admin'>('records');
   const [adminSubTab, setAdminSubTab] = useState<'campaign' | 'members' | 'analytics'>('campaign');
   const [selectedDate, setSelectedDate] = useState<string>('2026-11-10');
@@ -99,18 +98,15 @@ export default function App() {
   const [includeExtra, setIncludeExtra] = useState(true);
   const [claimMessageText, setClaimMessageText] = useState('');
   
-  const [previewImage, setPreviewImage] = useState<string | null>(null); // 무료버전 영수증 미리보기
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // 데이터
+  // 데이터 상태
   const [records, setRecords] = useState<DrivingRecord[]>([]);
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
   const [accounts, setAccounts] = useState<BankAccount[]>(() => {
     try { const saved = localStorage.getItem('jundriver_local_accounts_merged'); if (saved) return JSON.parse(saved); } catch (e) { console.error(e); }
-    return [{ id: '1', bankName: '신한은행', accountNumber: '110-123-456789', holder: '김탁송' }];
+    return [{ id: '1', bankName: '신한은행', accountNumber: '110-123-456789', holder: '공민준' }];
   });
 
-  // 공지사항
+  // 공지사항 상태
   const [activeNotice, setActiveNotice] = useState<NoticeItem | null>(null);
   const [noticeList, setNoticeList] = useState<NoticeItem[]>([]);
   const [inputNoticeTitle, setInputNoticeTitle] = useState('');
@@ -118,17 +114,16 @@ export default function App() {
   const [editingNoticeId, setEditingNoticeId] = useState<string | null>(null);
   const [noticeLoading, setNoticeLoading] = useState(false);
 
-  // 관리자
+  // 관리자 상태
   const [adminMemberList, setAdminMemberList] = useState<MemberProfile[]>([]);
   const [adminAllRecords, setAdminAllRecords] = useState<DrivingRecord[]>([]);
   const [adminSearchTerm, setAdminSearchTerm] = useState('');
 
-  // 입력 폼
+  // 폼 입력 상태
   const [newDate, setNewDate] = useState('2026-11-10'); const [newStartTime, setNewStartTime] = useState(''); const [newEndTime, setNewEndTime] = useState('');
   const [newDeparture, setNewDeparture] = useState(''); const [newDestination, setNewDestination] = useState('');
   const [newGross, setNewGross] = useState(''); const [newFeeRate, setNewFeeRate] = useState('20');
   const [newFuel, setNewFuel] = useState(''); const [newExtraExpense, setNewExtraExpense] = useState(''); const [newTip, setNewTip] = useState('');
-  const [receiptImage, setReceiptImage] = useState<string>(''); // 무료버전 영수증
   
   const [expCategory, setExpCategory] = useState('대중교통'); const [expAmount, setExpAmount] = useState(''); const [expMemo, setExpMemo] = useState('');
   const [bankName, setBankName] = useState(''); const [accountNumber, setAccountNumber] = useState(''); const [holder, setHolder] = useState('');
@@ -163,7 +158,7 @@ export default function App() {
       setRecords(recordsData.map((r: any) => ({
         id: r.id, date: r.date, startTime: r.start_time || '-', endTime: r.end_time || '-', departure: r.departure, destination: r.destination,
         grossAmount: Number(r.gross_amount), feeRate: Number(r.fee_rate), fuelAmount: Number(r.fuel_amount), extraExpenseAmount: Number(r.extra_expense_amount),
-        tipAmount: Number(r.tip_amount), receiptImage: r.receipt_image || undefined, isPaid: Boolean(r.is_paid), netAmount: Number(r.net_amount), totalClaimAmount: Number(r.total_claim_amount),
+        tipAmount: Number(r.tip_amount), isPaid: Boolean(r.is_paid), netAmount: Number(r.net_amount), totalClaimAmount: Number(r.total_claim_amount),
       })));
     }
 
@@ -241,14 +236,6 @@ export default function App() {
     setPwdLoading(false);
   };
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const imageUrl = URL.createObjectURL(file);
-      setReceiptImage(imageUrl);
-    }
-  };
-
   const handleSaveNoticeTemplate = async (e: React.FormEvent) => {
     e.preventDefault(); if (!inputNoticeTitle.trim() || !inputNoticeContent.trim()) return;
     setNoticeLoading(true);
@@ -296,12 +283,12 @@ export default function App() {
     const payload = {
       id: recordId, user_id: session.user.id, date: newDate, start_time: newStartTime || '-', end_time: newEndTime || '-',
       departure: newDeparture, destination: newDestination, gross_amount: gross, fee_rate: feeRate, fuel_amount: fuel,
-      extra_expense_amount: extraExp, tip_amount: tip, receipt_image: receiptImage || null, is_paid: false, net_amount: Math.round(net), total_claim_amount: Math.round(claimTotal)
+      extra_expense_amount: extraExp, tip_amount: tip, is_paid: false, net_amount: Math.round(net), total_claim_amount: Math.round(claimTotal)
     };
     const { error } = await supabase.from('driving_records').insert([payload]);
     if (!error) {
-      setRecords([{ id: recordId, date: newDate, startTime: payload.start_time, endTime: payload.end_time, departure: newDeparture, destination: newDestination, grossAmount: gross, feeRate, fuelAmount: fuel, extraExpenseAmount: extraExp, tipAmount: tip, receiptImage: receiptImage || undefined, isPaid: false, netAmount: Math.round(net), totalClaimAmount: Math.round(claimTotal) }, ...records]);
-      setNewDeparture(''); setNewDestination(''); setNewGross(''); setNewFuel(''); setNewExtraExpense(''); setNewTip(''); setReceiptImage('');
+      setRecords([{ id: recordId, date: newDate, startTime: payload.start_time, endTime: payload.end_time, departure: newDeparture, destination: newDestination, grossAmount: gross, feeRate, fuelAmount: fuel, extraExpenseAmount: extraExp, tipAmount: tip, isPaid: false, netAmount: Math.round(net), totalClaimAmount: Math.round(claimTotal) }, ...records]);
+      setNewDeparture(''); setNewDestination(''); setNewGross(''); setNewFuel(''); setNewExtraExpense(''); setNewTip('');
     }
   };
 
@@ -375,7 +362,7 @@ export default function App() {
     const driverName = session?.user?.user_metadata?.name || ADMIN_DEFAULT_NAME;
     let total = 0; let itemsText = '';
     if (withGross) { total += r.grossAmount; itemsText += `* 탁송운임: ${r.grossAmount.toLocaleString()}원\n`; }
-    if (withFuel && r.fuelAmount > 0) { total += r.fuelAmount; itemsText += `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 ${r.receiptImage ? '(영수증 별첨)' : ''}\n`; }
+    if (withFuel && r.fuelAmount > 0) { total += r.fuelAmount; itemsText += `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원\n`; }
     if (withExtra && r.extraExpenseAmount > 0) { total += r.extraExpenseAmount; itemsText += `* 대납 추가경비: ${r.extraExpenseAmount.toLocaleString()}원\n`; }
     return `[탁송 정산 요청]\n* 운행일자: ${r.date}\n* 운행구간: ${r.departure} ? ${r.destination}\n${itemsText}--------------------------------\n* 총 청구금액: ${total.toLocaleString()}원\n* 입금계좌: ${primaryAccount.bankName} ${primaryAccount.accountNumber} (${primaryAccount.holder})${driverPhone ? `\n* 탁송기사: ${driverName} (${driverPhone})` : ''}\n\n확인 후 빠른 입금 부탁드립니다. 감사합니다.`;
   };
@@ -399,7 +386,7 @@ export default function App() {
   const totalUnpaidAmount = unpaidRecords.reduce((acc, cur) => acc + cur.totalClaimAmount, 0);
   const isAdminUser = currentUserRole === 'super_admin' || currentUserRole === 'manager';
 
-  // 통계용 (무료버전 기능 병합)
+  // 통계용
   const currentMonthPrefix = selectedDate.substring(0, 7);
   const monthlyRecords = records.filter((r) => r.date.startsWith(currentMonthPrefix));
   const monthlyExpenses = expenses.filter((e) => e.date.startsWith(currentMonthPrefix));
@@ -449,6 +436,14 @@ export default function App() {
         backdrop-filter: blur(12px);
         -webkit-backdrop-filter: blur(12px);
         border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      /* 툴팁/안내문구 애니메이션 효과 */
+      .fade-in-text {
+        animation: fadeIn 0.5s ease-in-out;
+      }
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(-5px); }
+        to { opacity: 1; transform: translateY(0); }
       }
     `}} />
   );
@@ -509,13 +504,13 @@ export default function App() {
           )}
         </div>
 
-        {/* 개인정보 약관 모달 (무료버전 병합) */}
+        {/* 약관 모달 */}
         {showPrivacyModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
             <div className="w-full max-w-lg glass-card rounded-2xl p-6 shadow-2xl relative z-20">
               <button onClick={() => setShowPrivacyModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 cursor-pointer"><X className="w-5 h-5" /></button>
               <h3 className="text-sm font-bold text-white mb-3">개인정보 수집 및 이용 방침</h3>
-              <p className="text-xs text-slate-300 leading-relaxed mb-4">JunDriver는 탁송 운행 기록 및 주유비 청구 내역을 클라우드에 안전하게 보관합니다. 송금용 계좌 정보 및 영수증 사진은 외부로 전송되지 않고 본인의 스마트폰/PC 로컬 브라우저에만 독립 보관됩니다.</p>
+              <p className="text-xs text-slate-300 leading-relaxed mb-4">JunDriver는 탁송 운행 기록 및 주유비 청구 내역을 클라우드에 안전하게 보관합니다. 송금용 계좌 정보 등은 외부로 전송되지 않고 본인의 스마트폰/PC 로컬 브라우저에만 독립 보관됩니다.</p>
               <button type="button" onClick={() => { setAgreePrivacy(true); setShowPrivacyModal(false); }} className="w-full py-2.5 hp-primary-btn font-bold text-xs rounded-xl cursor-pointer">확인 및 동의</button>
             </div>
           </div>
@@ -557,7 +552,7 @@ export default function App() {
 
         {/* 미입금 경고 바 */}
         {totalUnpaidAmount > 0 && activeTab !== 'admin' && (
-          <section className="bg-[#EC4899]/10 border border-[#EC4899]/40 rounded-2xl p-4 flex items-center justify-between shadow-[0_0_15px_rgba(236,72,153,0.1)]">
+          <section className="bg-[#EC4899]/10 border border-[#EC4899]/40 rounded-2xl p-4 flex items-center justify-between shadow-[0_0_15px_rgba(236,72,153,0.1)] fade-in-text">
             <div className="flex items-center gap-3"><AlertTriangle className="w-5 h-5 text-[#EC4899]" /><div><span className="text-xs font-bold text-[#EC4899]">미입금 내역 ({unpaidRecords.length}건) 회수 필요</span><div className="text-xl font-extrabold text-white">총 {totalUnpaidAmount.toLocaleString()}원</div></div></div>
             <button onClick={() => setActiveTab('claims')} className="px-4 py-2 hp-primary-btn rounded-xl text-xs font-bold cursor-pointer">청구 관리</button>
           </section>
@@ -574,9 +569,10 @@ export default function App() {
 
         {/* 1. 운행 일지 탭 */}
         {activeTab === 'records' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 fade-in-text">
             <div className="glass-card rounded-xl p-6 shadow-lg">
-              <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2"><PlusCircle className="w-4 h-4 text-[#8B5CF6]" />새 운행 배차 등록</h3>
+              <h3 className="text-sm font-bold text-white mb-1 flex items-center gap-2"><PlusCircle className="w-4 h-4 text-[#8B5CF6]" />새 운행 배차 등록</h3>
+              <p className="text-[11px] text-[#38BDF8] font-medium mb-4 ml-6">탁송 운임과 대납 비용을 기록하여 순수익을 계산합니다.</p>
               <form onSubmit={handleAddRecord} className="space-y-3.5">
                 <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">운행 일자</label><input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} required className="w-full px-3 py-2 rounded-lg" /></div>
                 <div className="grid grid-cols-2 gap-2">
@@ -589,33 +585,23 @@ export default function App() {
                 </div>
                 <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">기사 팁/추가운임 (선택)</label><input type="text" placeholder="5,000" value={newTip} onChange={(e) => setNewTip(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" /></div>
                 
-                {/* 대납 주유비 & 영수증 (무료버전 통합) */}
+                {/* 대납 주유비 & 대납 경비 */}
                 <div className="p-3.5 rounded-xl bg-white/5 border border-[#8B5CF6]/30 space-y-2.5">
                   <label className="text-xs font-bold text-[#8B5CF6] flex items-center gap-1.5"><Fuel className="w-4 h-4 text-[#8B5CF6]" />대납 주유/충전비 (100% 회수)</label>
                   <input type="text" placeholder="선결제한 주유 금액" value={newFuel} onChange={(e) => setNewFuel(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" />
-                  <div className="flex items-center justify-between pt-1">
-                    <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageChange} className="hidden" />
-                    <button type="button" onClick={() => fileInputRef.current?.click()} className="w-full py-2 px-3 rounded-lg bg-[#0B1120] hover:bg-white/10 border border-white/20 text-xs text-slate-200 font-medium flex items-center justify-center gap-2 cursor-pointer transition-all">
-                      <Camera className="w-3.5 h-3.5 text-[#38BDF8]" />{receiptImage ? '영수증 변경 (선택됨)' : '스마트폰 갤러리에서 영수증 선택'}
-                    </button>
-                  </div>
-                  {receiptImage && (
-                    <div className="relative mt-2 p-1.5 bg-[#0B1120] rounded-lg border border-white/20 flex items-center justify-between">
-                      <div className="flex items-center gap-2"><img src={receiptImage} alt="영수증" className="w-10 h-10 object-cover rounded" /><span className="text-[11px] text-[#38BDF8] font-semibold">영수증 첨부 완료</span></div>
-                      <button type="button" onClick={() => setReceiptImage('')} className="text-slate-500 hover:text-[#EC4899] p-1 cursor-pointer"><X className="w-4 h-4" /></button>
-                    </div>
-                  )}
                 </div>
-                
-                <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">통행료 등 추가 대납경비 (선택)</label><input type="text" placeholder="0" value={newExtraExpense} onChange={(e) => setNewExtraExpense(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" /></div>
+                <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">통행료 등 기타 대납경비 (선택)</label><input type="text" placeholder="0" value={newExtraExpense} onChange={(e) => setNewExtraExpense(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" /></div>
 
                 <button type="submit" className="w-full py-3 hp-primary-btn font-bold rounded-lg text-xs cursor-pointer mt-2">운행 일지 등록 (미입금 상태로 저장)</button>
               </form>
             </div>
             
             <div className="lg:col-span-2 glass-card rounded-xl p-6 shadow-lg">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
-                <h3 className="text-sm font-bold text-white flex items-center gap-2"><FileText className="w-4 h-4 text-[#8B5CF6]" />운행 일지 및 정산 현황 ({filteredRecords.length}건)</h3>
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-4 gap-3">
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2"><FileText className="w-4 h-4 text-[#8B5CF6]" />운행 일지 및 정산 현황 ({filteredRecords.length}건)</h3>
+                  <p className="text-[11px] text-[#38BDF8] font-medium mt-1 ml-6">등록된 운행 건들의 상태를 확인하고 관리할 수 있습니다.</p>
+                </div>
                 <div className="flex items-center gap-2">
                   <div className="flex items-center gap-2 bg-[#0B1120] px-3 py-1.5 rounded-lg border border-white/10">
                     <input type="checkbox" id="allDates" checked={filterAllDates} onChange={(e) => setFilterAllDates(e.target.checked)} className="w-3.5 h-3.5 rounded text-[#8B5CF6] cursor-pointer" />
@@ -627,7 +613,7 @@ export default function App() {
 
               <div className="space-y-3 max-h-[650px] overflow-y-auto pr-1">
                 {filteredRecords.length === 0 ? (
-                  <div className="text-center py-12 text-slate-500 text-xs">해당 일자에 등록된 운행이 없습니다.</div>
+                  <div className="text-center py-12 text-slate-500 text-xs">해당 조건에 등록된 운행이 없습니다.</div>
                 ) : (
                   filteredRecords.map((r) => {
                     const elapsed = getElapsedDays(r.date);
@@ -657,9 +643,6 @@ export default function App() {
                               <span className="text-[10px] text-slate-400 block">총 청구액</span>
                               <span className="text-sm font-extrabold text-white">{r.totalClaimAmount.toLocaleString()}원</span>
                             </div>
-                            {r.receiptImage && (
-                              <button onClick={() => setPreviewImage(r.receiptImage || null)} className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-[#38BDF8] transition-all cursor-pointer" title="영수증 사진 보기"><ImageIcon className="w-3.5 h-3.5" /></button>
-                            )}
                             <button onClick={() => handleOpenEditModal(r)} className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 transition-all cursor-pointer"><Edit2 className="w-3.5 h-3.5" /></button>
                             <button onClick={() => handleDeleteRecord(r.id)} className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 hover:text-[#EC4899] transition-all cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
                           </div>
@@ -675,17 +658,20 @@ export default function App() {
 
         {/* 2. 청구문자 탭 */}
         {activeTab === 'claims' && (
-          <div className="glass-card rounded-xl p-6 shadow-lg">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-white flex items-center gap-2"><MessageSquare className="w-4 h-4 text-[#8B5CF6]" />미입금 청구 대상 ({unpaidRecords.length}건)</h3>
-              <span className="text-xs font-bold text-[#EC4899]">총 미수금 {totalUnpaidAmount.toLocaleString()}원</span>
+          <div className="glass-card rounded-xl p-6 shadow-lg fade-in-text">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
+              <div>
+                <h3 className="text-sm font-bold text-white flex items-center gap-2"><MessageSquare className="w-4 h-4 text-[#8B5CF6]" />미입금 청구 대상 ({unpaidRecords.length}건)</h3>
+                <p className="text-[11px] text-[#38BDF8] font-medium mt-1 ml-6">미입금된 운행 건에 대해 정산 요청 문자를 자동으로 생성합니다.</p>
+              </div>
+              <span className="text-xs font-bold text-[#EC4899] bg-[#EC4899]/10 px-3 py-1.5 rounded-lg border border-[#EC4899]/30">총 미수금 {totalUnpaidAmount.toLocaleString()}원</span>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {unpaidRecords.length === 0 ? (
-                <div className="col-span-full text-center py-10 text-slate-500 text-xs">미입금 내역이 없습니다.</div>
+                <div className="col-span-full text-center py-10 text-slate-500 text-xs">현재 미입금 내역이 없습니다.</div>
               ) : (
                 unpaidRecords.map((r) => (
-                  <div key={r.id} className="bg-[#0B1120] border border-white/10 rounded-xl p-5 flex flex-col justify-between">
+                  <div key={r.id} className="bg-[#0B1120] border border-white/10 rounded-xl p-5 flex flex-col justify-between hover:border-[#8B5CF6]/50 transition-all">
                     <div>
                       <div className="flex justify-between items-start mb-2"><span className="px-2 py-0.5 bg-[#EC4899]/20 text-[#EC4899] text-[10px] font-bold rounded">청구 대기</span><span className="text-[10px] text-slate-400 font-mono">{r.date}</span></div>
                       <div className="font-bold text-white text-sm mb-1">{r.departure} ? {r.destination}</div>
@@ -708,9 +694,10 @@ export default function App() {
 
         {/* 3. 경비 장부 탭 */}
         {activeTab === 'expense' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="glass-card rounded-xl p-6 shadow-lg">
-              <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2"><PlusCircle className="w-4 h-4 text-[#EC4899]" />일반 경비 지출 등록</h3>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 fade-in-text">
+            <div className="glass-card rounded-xl p-6 shadow-lg h-fit">
+              <h3 className="text-sm font-bold text-white mb-1 flex items-center gap-2"><PlusCircle className="w-4 h-4 text-[#EC4899]" />일반 경비 지출 등록</h3>
+              <p className="text-[11px] text-[#38BDF8] font-medium mb-4 ml-6">교통비, 식대 등의 지출을 기록하여 실 수익을 정확히 파악하세요.</p>
               <form onSubmit={handleAddExpense} className="space-y-3.5">
                 <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">지출 일자</label><input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} required className="w-full px-3 py-2 rounded-lg" /></div>
                 <div>
@@ -720,8 +707,8 @@ export default function App() {
                   </select>
                 </div>
                 <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">지출 금액(원)</label><input type="text" placeholder="금액 입력" value={expAmount} onChange={(e) => setExpAmount(formatNumberWithComma(e.target.value))} required className="w-full px-3 py-2 rounded-lg text-right" /></div>
-                <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">상세 메모</label><input type="text" placeholder="경기K패스 복귀" value={expMemo} onChange={(e) => setExpMemo(e.target.value)} className="w-full px-3 py-2 rounded-lg" /></div>
-                <button type="submit" className="w-full py-3 bg-gradient-to-r from-[#EC4899] to-rose-600 hover:shadow-[0_6px_20px_rgba(236,72,153,0.5)] text-white font-bold rounded-lg text-xs cursor-pointer transition-all mt-2 border-0">경비 등록</button>
+                <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">상세 메모 (선택)</label><input type="text" placeholder="예: 경기K패스, 광역버스" value={expMemo} onChange={(e) => setExpMemo(e.target.value)} className="w-full px-3 py-2 rounded-lg" /></div>
+                <button type="submit" className="w-full py-3 bg-gradient-to-r from-[#EC4899] to-rose-600 hover:shadow-[0_6px_20px_rgba(236,72,153,0.5)] text-white font-bold rounded-lg text-xs cursor-pointer transition-all mt-2 border-0">경비 등록하기</button>
               </form>
             </div>
             <div className="lg:col-span-2 glass-card rounded-xl p-6 shadow-lg">
@@ -731,7 +718,7 @@ export default function App() {
                   <div className="text-center py-10 text-slate-500 text-xs">등록된 경비 지출이 없습니다.</div>
                 ) : (
                   expenses.map((e) => (
-                    <div key={e.id} className="bg-[#0B1120] border border-white/10 p-3.5 rounded-lg flex items-center justify-between">
+                    <div key={e.id} className="bg-[#0B1120] border border-white/10 p-4 rounded-lg flex items-center justify-between hover:border-white/20 transition-all">
                       <div><div className="flex items-center gap-2"><span className="px-2 py-0.5 bg-white/10 text-slate-300 rounded text-[10px] font-semibold">{e.category}</span><span className="text-sm text-white font-medium">{e.memo || '-'}</span></div><div className="text-xs text-slate-500 mt-1.5">{e.date}</div></div>
                       <div className="flex items-center gap-3"><span className="text-[#EC4899] font-bold text-sm">-{e.amount.toLocaleString()}원</span><button onClick={() => handleDeleteExpense(e.id)} className="text-slate-600 hover:text-[#EC4899] p-1 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button></div>
                     </div>
@@ -744,10 +731,10 @@ export default function App() {
 
         {/* 4. 계좌 관리 탭 */}
         {activeTab === 'wallet' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 fade-in-text">
             <div className="glass-card rounded-xl p-6 shadow-lg h-fit">
-              <h3 className="text-sm font-bold text-white mb-2 flex items-center gap-2"><CreditCard className="w-4 h-4 text-[#38BDF8]" />정산 입금용 계좌 추가</h3>
-              <p className="text-[11px] text-[#38BDF8] mb-4">계좌 정보는 기기 브라우저 로컬 스토리지에만 안전하게 저장됩니다.</p>
+              <h3 className="text-sm font-bold text-white mb-1 flex items-center gap-2"><CreditCard className="w-4 h-4 text-[#38BDF8]" />정산 입금용 계좌 추가</h3>
+              <p className="text-[11px] text-[#38BDF8] font-medium mb-4 ml-6">정산받을 계좌를 등록해두면 청구 문자 생성 시 자동으로 첨부됩니다. (기기 로컬에만 보관)</p>
               <form onSubmit={handleAddAccount} className="space-y-3.5">
                 <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">은행명</label><input type="text" placeholder="예: 신한은행" value={bankName} onChange={(e) => setBankName(e.target.value)} required className="w-full px-3 py-2 rounded-lg" /></div>
                 <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">계좌번호 (- 제외)</label><input type="text" placeholder="계좌번호 입력" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} required className="w-full px-3 py-2 rounded-lg font-mono" /></div>
@@ -757,13 +744,13 @@ export default function App() {
             </div>
             <div className="space-y-3">
               {accounts.map((acc, idx) => (
-                <div key={acc.id} className="relative bg-gradient-to-br from-[#0B1120] to-indigo-950/30 border border-[#8B5CF6]/30 rounded-xl p-6 overflow-hidden shadow-lg">
+                <div key={acc.id} className="relative bg-gradient-to-br from-[#0B1120] to-indigo-950/30 border border-[#8B5CF6]/30 rounded-xl p-6 overflow-hidden shadow-lg group hover:border-[#8B5CF6] transition-colors">
                   <div className="absolute top-0 right-0 p-4 opacity-10"><Building2 className="w-24 h-24" /></div>
                   <div className="relative z-10">
                     <div className="flex justify-between items-start mb-6"><span className="px-2 py-1 bg-[#8B5CF6]/20 text-[#8B5CF6] text-[10px] font-bold rounded uppercase">{idx === 0 ? '대표 계좌 (청구용)' : '보조 계좌'}</span><button onClick={() => handleDeleteAccount(acc.id)} className="text-slate-500 hover:text-[#EC4899] p-1 cursor-pointer"><Trash2 className="w-4 h-4" /></button></div>
                     <div className="text-2xl font-bold font-mono tracking-wider text-white mb-2">{acc.accountNumber}</div>
                     <div className="flex items-center gap-2 text-xs text-slate-300"><span className="font-bold">{acc.bankName}</span> <span className="text-slate-500">|</span> <span>예금주: {acc.holder}</span></div>
-                    <div className="mt-4"><button onClick={() => { navigator.clipboard.writeText(acc.accountNumber); alert('계좌번호가 복사되었습니다.'); }} className="px-3 py-1.5 rounded-lg bg-white/10 text-xs text-slate-200 flex items-center gap-1.5 cursor-pointer hover:bg-white/20"><Copy className="w-3.5 h-3.5" /> 복사</button></div>
+                    <div className="mt-4 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => { navigator.clipboard.writeText(acc.accountNumber); alert('계좌번호가 복사되었습니다.'); }} className="px-3 py-1.5 rounded-lg bg-white/10 text-xs text-slate-200 flex items-center gap-1.5 cursor-pointer hover:bg-white/20"><Copy className="w-3.5 h-3.5" /> 계좌번호 복사</button></div>
                   </div>
                 </div>
               ))}
@@ -771,39 +758,46 @@ export default function App() {
           </div>
         )}
 
-        {/* 5. 통계 요약 (무료버전 통합) */}
+        {/* 5. 통계 요약 탭 */}
         {activeTab === 'analytics' && (
-          <div className="space-y-6">
+          <div className="space-y-6 fade-in-text">
             <section className="bg-gradient-to-r from-[#0B1120] via-indigo-950/40 to-[#0B1120] border border-[#8B5CF6]/30 rounded-2xl p-6 shadow-xl">
-              <div className="flex items-center justify-between pb-3 mb-4 border-b border-white/10">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 mb-4 border-b border-white/10 gap-2">
                 <div className="flex items-center gap-2"><CalendarDays className="w-4 h-4 text-[#8B5CF6]" /><h2 className="text-xs font-bold text-slate-200 tracking-wide uppercase">{currentMonthPrefix.replace('-', '년 ')}월 총 누적 결산</h2></div>
                 <span className="text-[11px] font-semibold text-[#8B5CF6] bg-[#8B5CF6]/10 px-2.5 py-0.5 rounded-full border border-[#8B5CF6]/20">월간 집계 ({monthlyRecords.length}회 운행)</span>
               </div>
+              <p className="text-[11px] text-slate-400 mb-4">월별 총 매출과 실제 손에 남는 순수입 및 지출을 한눈에 파악할 수 있는 통계표입니다.</p>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <div><div className="text-[11px] text-slate-400 mb-1">당월 순수 탁송매출</div><div className="text-xl lg:text-2xl font-extrabold text-white">{monthlyGross.toLocaleString()}<span className="text-xs font-normal text-slate-400 ml-1">원</span></div></div>
                 <div><div className="text-[11px] text-slate-400 mb-1">당월 탁송 순수입</div><div className="text-xl lg:text-2xl font-extrabold text-[#38BDF8]">{monthlyNet.toLocaleString()}<span className="text-xs font-normal text-slate-400 ml-1">원</span></div></div>
                 <div><div className="text-[11px] text-slate-400 mb-1">당월 경비 지출</div><div className="text-xl lg:text-2xl font-extrabold text-[#EC4899]">-{monthlyExpense.toLocaleString()}<span className="text-xs font-normal text-slate-400 ml-1">원</span></div></div>
-                <div><div className="text-[11px] text-slate-400 mb-1">당월 실수령액</div><div className="text-xl lg:text-2xl font-extrabold text-[#38BDF8]">{monthlyProfit.toLocaleString()}<span className="text-xs font-normal text-slate-400 ml-1">원</span></div></div>
+                <div><div className="text-[11px] text-slate-400 mb-1">당월 실수령액 (예상)</div><div className="text-xl lg:text-2xl font-extrabold text-[#38BDF8]">{monthlyProfit.toLocaleString()}<span className="text-xs font-normal text-slate-400 ml-1">원</span></div></div>
               </div>
             </section>
             
             <div className="glass-card rounded-xl p-6">
-              <h3 className="text-sm font-bold text-white mb-4">전체 기간 누적 리포트</h3>
+              <h3 className="text-sm font-bold text-white mb-1">전체 기간 누적 리포트</h3>
+              <p className="text-[11px] text-[#38BDF8] font-medium mb-4">가입일로부터 전체 기간 동안의 운행 횟수와 미수금 총액 현황입니다.</p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="p-4 rounded-xl bg-[#0B1120] border border-white/10"><span className="text-xs text-slate-400">총 운행 횟수</span><div className="text-xl font-bold text-white mt-1">{records.length}회</div></div>
                 <div className="p-4 rounded-xl bg-[#0B1120] border border-white/10"><span className="text-xs text-slate-400">정산 완료율</span><div className="text-xl font-bold text-[#38BDF8] mt-1">{records.length > 0 ? ((records.filter(r => r.isPaid).length / records.length) * 100).toFixed(1) : 0}%</div></div>
-                <div className="p-4 rounded-xl bg-[#0B1120] border border-[#EC4899]/30"><span className="text-xs text-slate-400">미수금 총액</span><div className="text-xl font-bold text-[#EC4899] mt-1">{totalUnpaidAmount.toLocaleString()}원</div></div>
+                <div className="p-4 rounded-xl bg-[#0B1120] border border-[#EC4899]/30"><span className="text-xs text-slate-400">현재 미수금 총액</span><div className="text-xl font-bold text-[#EC4899] mt-1">{totalUnpaidAmount.toLocaleString()}원</div></div>
               </div>
             </div>
           </div>
         )}
 
-        {/* 6. 관제탑 관리자 화면 (최종버전 유지) */}
+        {/* 6. 관제탑 관리자 탭 */}
         {activeTab === 'admin' && isAdminUser && (
-          <div className="space-y-6">
+          <div className="space-y-6 fade-in-text">
+            <div className="mb-2">
+              <h3 className="text-sm font-bold text-[#38BDF8] flex items-center gap-2"><Crown className="w-5 h-5" />플랫폼 관리자 (관제탑)</h3>
+              <p className="text-[11px] text-slate-400 mt-1 ml-7">플랫폼 전체의 기사 현황, 데이터 추출 및 실시간 공지사항 송출을 관리하는 공간입니다.</p>
+            </div>
+            
             <div className="flex gap-2 border-b border-white/10 pb-2">
               <button onClick={() => setAdminSubTab('campaign')} className={`px-3 py-1.5 rounded text-xs font-bold cursor-pointer transition-colors ${adminSubTab === 'campaign' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#0B1120] text-slate-400 hover:text-white border border-white/10'}`}>공지/이벤트 문구보관함</button>
-              <button onClick={() => setAdminSubTab('members')} className={`px-3 py-1.5 rounded text-xs font-bold cursor-pointer transition-colors ${adminSubTab === 'members' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#0B1120] text-slate-400 hover:text-white border border-white/10'}`}>회원 관리 ({adminMemberList.length}명)</button>
+              <button onClick={() => setAdminSubTab('members')} className={`px-3 py-1.5 rounded text-xs font-bold cursor-pointer transition-colors ${adminSubTab === 'members' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#0B1120] text-slate-400 hover:text-white border border-white/10'}`}>회원 권한 관리 ({adminMemberList.length}명)</button>
               <button onClick={() => setAdminSubTab('analytics')} className={`px-3 py-1.5 rounded text-xs font-bold cursor-pointer transition-colors ${adminSubTab === 'analytics' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#0B1120] text-slate-400 hover:text-white border border-white/10'}`}>플랫폼 마케팅 통계</button>
             </div>
 
@@ -812,8 +806,8 @@ export default function App() {
                 <div className="glass-card p-6 rounded-xl space-y-4 h-fit">
                   <div className="flex items-center justify-between"><h4 className="font-bold text-white text-sm flex items-center gap-1.5"><BookmarkPlus className="w-4 h-4 text-[#8B5CF6]" />{editingNoticeId ? '문구 수정하기' : '새 공지 문구 저장'}</h4>{editingNoticeId && <button onClick={() => { setEditingNoticeId(null); setInputNoticeTitle(''); setInputNoticeContent(''); }} className="text-[11px] text-[#38BDF8] hover:text-white cursor-pointer">신규 작성</button>}</div>
                   <form onSubmit={handleSaveNoticeTemplate} className="space-y-3">
-                    <input type="text" value={inputNoticeTitle} onChange={(e) => setInputNoticeTitle(e.target.value)} placeholder="제목" required className="w-full px-3 py-2 rounded-lg text-xs" />
-                    <textarea rows={4} value={inputNoticeContent} onChange={(e) => setInputNoticeContent(e.target.value)} placeholder="내용" required className="w-full px-3 py-2 rounded-lg text-xs" />
+                    <input type="text" value={inputNoticeTitle} onChange={(e) => setInputNoticeTitle(e.target.value)} placeholder="제목 (예: 11월 프로모션 안내)" required className="w-full px-3 py-2 rounded-lg text-xs" />
+                    <textarea rows={4} value={inputNoticeContent} onChange={(e) => setInputNoticeContent(e.target.value)} placeholder="앱 최상단 배너에 노출될 내용" required className="w-full px-3 py-2 rounded-lg text-xs" />
                     <button type="submit" disabled={noticeLoading} className="w-full py-2.5 hp-primary-btn font-bold rounded-lg text-xs cursor-pointer">{noticeLoading ? '처리 중...' : editingNoticeId ? '수정 내용 저장' : '보관함에 저장하기'}</button>
                   </form>
                   {activeNotice && <div className="pt-3 border-t border-white/10"><button onClick={handleDeactivateAllNotices} disabled={noticeLoading} className="w-full py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-[#EC4899] text-xs font-semibold rounded-lg cursor-pointer">현재 메인 배너 송출 중단</button></div>}
@@ -839,14 +833,14 @@ export default function App() {
 
             {adminSubTab === 'members' && (
               <div className="glass-card p-6 rounded-xl space-y-4">
-                <input type="text" placeholder="이름/번호/이메일 검색..." value={adminSearchTerm} onChange={(e) => setAdminSearchTerm(e.target.value)} className="px-3 py-2 rounded-lg text-xs w-full max-w-xs" />
+                <input type="text" placeholder="회원 이름 / 전화번호 / 이메일 검색..." value={adminSearchTerm} onChange={(e) => setAdminSearchTerm(e.target.value)} className="px-3 py-2 rounded-lg text-xs w-full max-w-xs" />
                 <div className="overflow-x-auto rounded-lg border border-white/10">
                   <table className="w-full text-left text-xs whitespace-nowrap">
-                    <thead className="bg-[#0B1120] text-slate-400 border-b border-white/10"><tr><th className="p-3">이름</th><th className="p-3">전화번호</th><th className="p-3">이메일</th><th className="p-3">권한</th><th className="p-3 text-right">권한 변경</th></tr></thead>
+                    <thead className="bg-[#0B1120] text-slate-400 border-b border-white/10"><tr><th className="p-3">이름</th><th className="p-3">전화번호</th><th className="p-3">이메일</th><th className="p-3">가입일</th><th className="p-3">권한</th><th className="p-3 text-right">권한 변경</th></tr></thead>
                     <tbody className="divide-y divide-white/5">
                       {adminMemberList.filter(m => m.name.includes(adminSearchTerm) || m.phone.includes(adminSearchTerm) || m.email.includes(adminSearchTerm)).map((m) => (
                         <tr key={m.id} className="hover:bg-white/5">
-                          <td className="p-3 text-white font-bold">{m.name}</td><td className="p-3 font-mono text-[#38BDF8]">{formatPhoneNumber(m.phone)}</td><td className="p-3 text-slate-300">{m.email}</td>
+                          <td className="p-3 text-white font-bold">{m.name}</td><td className="p-3 font-mono text-[#38BDF8]">{formatPhoneNumber(m.phone)}</td><td className="p-3 text-slate-300">{m.email}</td><td className="p-3 text-slate-500 font-mono">{m.createdAt}</td>
                           <td className="p-3">
                             {m.role === 'super_admin' ? <span className="px-2 py-1 rounded text-[10px] font-bold bg-[#8B5CF6]/20 text-[#8B5CF6]">최고 관리자</span> :
                              m.role === 'manager' ? <span className="px-2 py-1 rounded text-[10px] font-bold bg-[#38BDF8]/20 text-[#38BDF8]">운영 직원</span> :
@@ -855,7 +849,7 @@ export default function App() {
                              <span className="px-2 py-1 rounded text-[10px] font-bold bg-white/10 text-slate-300">일반 기사</span>}
                           </td>
                           <td className="p-3 text-right">
-                            <select value={m.role} onChange={(e) => handleUpdateMemberRole(m.id, e.target.value)} className="bg-[#0B1120] border border-white/20 text-white rounded px-2 py-1.5 text-[11px] cursor-pointer outline-none">
+                            <select value={m.role} onChange={(e) => handleUpdateMemberRole(m.id, e.target.value)} className="bg-[#0B1120] border border-white/20 text-white rounded px-2 py-1.5 text-[11px] cursor-pointer outline-none focus:border-[#8B5CF6]">
                               <option value="user">일반 기사</option>
                               <option value="pro_driver">PRO 기사</option>
                               <option value="vip_driver">VIP 기사</option>
@@ -874,13 +868,13 @@ export default function App() {
             {adminSubTab === 'analytics' && (
               <div className="space-y-4">
                 <div className="flex justify-end mb-2">
-                  <button onClick={handleExportAdminCSV} className="px-3 py-2 bg-[#0B1120] hover:bg-white/10 border border-white/20 text-slate-300 text-xs font-bold rounded-lg cursor-pointer transition-colors flex items-center gap-1.5"><Download className="w-3.5 h-3.5" />전체 운행내역 CSV 엑셀 다운로드</button>
+                  <button onClick={handleExportAdminCSV} className="px-3 py-2 bg-[#0B1120] hover:bg-white/10 border border-white/20 text-slate-300 text-xs font-bold rounded-lg cursor-pointer transition-colors flex items-center gap-1.5"><Download className="w-3.5 h-3.5" />전체 기사 운행내역 CSV 다운로드</button>
                 </div>
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="glass-card p-5 rounded-xl"><span className="text-xs text-slate-400">총 가입 기사</span><div className="text-2xl font-bold text-white mt-1">{adminMemberList.length}명</div></div>
-                  <div className="glass-card p-5 rounded-xl"><span className="text-xs text-slate-400">누적 운행 건수</span><div className="text-2xl font-bold text-[#8B5CF6] mt-1">{adminAllRecords.length}건</div></div>
-                  <div className="glass-card p-5 rounded-xl"><span className="text-xs text-slate-400">플랫폼 총 거래액</span><div className="text-2xl font-bold text-[#38BDF8] mt-1">{adminAllRecords.reduce((acc, cur) => acc + cur.grossAmount, 0).toLocaleString()}원</div></div>
-                  <div className="glass-card p-5 rounded-xl"><span className="text-xs text-slate-400">누적 대납 주유비</span><div className="text-2xl font-bold text-[#EC4899] mt-1">{adminAllRecords.reduce((acc, cur) => acc + cur.fuelAmount, 0).toLocaleString()}원</div></div>
+                  <div className="glass-card p-5 rounded-xl"><span className="text-xs text-slate-400">플랫폼 총 가입 기사</span><div className="text-2xl font-bold text-white mt-1">{adminMemberList.length}명</div></div>
+                  <div className="glass-card p-5 rounded-xl"><span className="text-xs text-slate-400">누적 등록 운행 건수</span><div className="text-2xl font-bold text-[#8B5CF6] mt-1">{adminAllRecords.length}건</div></div>
+                  <div className="glass-card p-5 rounded-xl"><span className="text-xs text-slate-400">플랫폼 총 거래액 규모</span><div className="text-2xl font-bold text-[#38BDF8] mt-1">{adminAllRecords.reduce((acc, cur) => acc + cur.grossAmount, 0).toLocaleString()}원</div></div>
+                  <div className="glass-card p-5 rounded-xl"><span className="text-xs text-slate-400">총 대납 주유비 발생액</span><div className="text-2xl font-bold text-[#EC4899] mt-1">{adminAllRecords.reduce((acc, cur) => acc + cur.fuelAmount, 0).toLocaleString()}원</div></div>
                 </div>
               </div>
             )}
@@ -910,28 +904,17 @@ export default function App() {
           <div className="w-full max-w-lg glass-card rounded-2xl p-6 shadow-2xl relative">
             <button onClick={() => setClaimModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 cursor-pointer"><X className="w-5 h-5" /></button>
             <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2"><MessageSquare className="w-5 h-5 text-[#8B5CF6]" />정산 청구 문자 편집 및 복사</h3>
-            <p className="text-xs text-slate-400 mb-4">상황에 맞게 문구를 자유롭게 수정한 후 복사하여 전송하세요.</p>
+            <p className="text-xs text-slate-400 mb-4">운행 내역과 저장된 계좌 정보로 자동 생성된 문구입니다. 내용을 자유롭게 수정한 후 복사하여 송신하세요.</p>
             <div className="flex gap-4 mb-4 pb-4 border-b border-white/10">
               <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 cursor-pointer"><input type="checkbox" checked={includeGross} onChange={() => handleToggleInclude('gross')} className="rounded text-[#8B5CF6]" /> 기본 운임</label>
               <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 cursor-pointer"><input type="checkbox" checked={includeFuel} onChange={() => handleToggleInclude('fuel')} className="rounded text-[#8B5CF6]" disabled={selectedClaimRecord.fuelAmount === 0} /> 주유비</label>
               <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 cursor-pointer"><input type="checkbox" checked={includeExtra} onChange={() => handleToggleInclude('extra')} className="rounded text-[#8B5CF6]" disabled={selectedClaimRecord.extraExpenseAmount === 0} /> 추가경비</label>
             </div>
-            <textarea rows={10} value={claimMessageText} onChange={(e) => setClaimMessageText(e.target.value)} className="w-full p-4 rounded-xl text-xs font-mono mb-4 leading-relaxed" />
+            <textarea rows={10} value={claimMessageText} onChange={(e) => setClaimMessageText(e.target.value)} className="w-full p-4 rounded-xl text-xs font-mono mb-4 leading-relaxed bg-[#FFFFFF] text-[#000000] focus:shadow-[0_0_12px_#8B5CF6] focus:border-[#8B5CF6] transition-all outline-none" />
             <div className="flex gap-2">
               <button onClick={() => setClaimModalOpen(false)} className="flex-1 py-3 bg-[#0B1120] border border-white/10 hover:bg-white/10 text-white font-semibold rounded-lg text-xs cursor-pointer transition-colors">닫기</button>
-              <button onClick={() => { navigator.clipboard.writeText(claimMessageText); alert('수정된 정산 청구 문자가 복사되었습니다.'); setClaimModalOpen(false); }} className="flex-1 py-3 hp-primary-btn text-white font-bold rounded-lg text-xs cursor-pointer shadow-md flex items-center justify-center gap-1.5"><Copy className="w-3.5 h-3.5" />수정한 문구 복사하기</button>
+              <button onClick={() => { navigator.clipboard.writeText(claimMessageText); alert('수정된 정산 청구 문자가 복사되었습니다.'); setClaimModalOpen(false); }} className="flex-1 py-3 hp-primary-btn text-white font-bold rounded-lg text-xs cursor-pointer shadow-md flex items-center justify-center gap-1.5"><Copy className="w-3.5 h-3.5" />복사하기</button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* 영수증 원본 보기 모달 (무료버전 통합) */}
-      {previewImage && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
-          <div className="relative max-w-lg w-full bg-[#0B1120] border border-white/10 rounded-2xl p-4 shadow-2xl">
-            <button onClick={() => setPreviewImage(null)} className="absolute top-3 right-3 p-1.5 rounded-lg bg-black/60 text-white hover:bg-black/90 cursor-pointer"><X className="w-5 h-5" /></button>
-            <div className="text-xs font-bold text-slate-300 mb-3 flex items-center gap-2"><Receipt className="w-4 h-4 text-[#38BDF8]" /> 주유 영수증 사진 확인</div>
-            <div className="max-h-[70vh] overflow-auto flex items-center justify-center"><img src={previewImage} alt="영수증 원본" className="max-w-full h-auto rounded-lg" /></div>
           </div>
         </div>
       )}
