@@ -34,9 +34,7 @@ import {
   Coins,
   Sparkles,
   Phone,
-  RefreshCw,
-  UserX,
-  BotOff
+  RefreshCw
 } from 'lucide-react';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
@@ -55,18 +53,6 @@ const cleanNumber = (val: string | number): number => {
   if (typeof val === 'number') return val;
   if (!val) return 0;
   return Number(String(val).replace(/,/g, '')) || 0;
-};
-
-// 표시용 휴대폰 하이픈 포맷터 (숫자만 저장된 번호를 010-XXXX-XXXX 형태로 변환)
-const formatPhoneNumber = (val: string) => {
-  if (!val) return '';
-  const num = val.replace(/[^0-9]/g, '');
-  if (num.length === 11) {
-    return num.replace(/(\d{3})(\d{4})(\d{4})/, '$1-$2-$3');
-  } else if (num.length === 10) {
-    return num.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3');
-  }
-  return num;
 };
 
 interface DrivingRecord {
@@ -107,8 +93,7 @@ export default function App() {
   // 인증 관련 상태
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState(''); // 숫자만 입력
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [agreePrivacy, setAgreePrivacy] = useState(false);
@@ -117,24 +102,18 @@ export default function App() {
   const [authError, setAuthError] = useState('');
   const [authSuccess, setAuthSuccess] = useState('');
 
-  // 3중 봇 방지 상태 (허니팟 + 인터랙션 캡차)
-  const [honeypot, setHoneypot] = useState('');
-  const [captchaVerified, setCaptchaVerified] = useState(false);
-
   // 탭 상태
   const [activeTab, setActiveTab] = useState<'records' | 'claims' | 'expense' | 'wallet'>('records');
 
   // 날짜 필터 상태
-  const [selectedDate, setSelectedDate] = useState<string>('2026-11-10');
+  const [selectedDate, setSelectedDate] = useState<string>('2026-11-09');
   const [filterAllDates, setFilterAllDates] = useState<boolean>(false);
 
-  // 계정 보안 및 탈퇴 모달
+  // 계정 보안 모달
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [pwdLoading, setPwdLoading] = useState(false);
   const [pwdMessage, setPwdMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [showWithdrawConfirm, setShowWithdrawConfirm] = useState(false);
-  const [withdrawLoading, setWithdrawLoading] = useState(false);
 
   // 운행 일지 수정 모달 상태
   const [editingRecord, setEditingRecord] = useState<DrivingRecord | null>(null);
@@ -181,7 +160,7 @@ export default function App() {
   }, [accounts]);
 
   // 운행 등록 폼 상태
-  const [newDate, setNewDate] = useState('2026-11-10');
+  const [newDate, setNewDate] = useState('2026-11-09');
   const [newStartTime, setNewStartTime] = useState('');
   const [newEndTime, setNewEndTime] = useState('');
   const [newDeparture, setNewDeparture] = useState('');
@@ -205,12 +184,6 @@ export default function App() {
   // Supabase 세션 감지
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user?.user_metadata?.is_deleted) {
-        alert('탈퇴 신청된 계정입니다. (30일 유예 기간 후 완전 파기됩니다.)');
-        supabase.auth.signOut();
-        setSession(null);
-        return;
-      }
       setSession(session);
       if (session) {
         fetchUserData(session.user.id);
@@ -220,11 +193,6 @@ export default function App() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user?.user_metadata?.is_deleted) {
-        supabase.auth.signOut();
-        setSession(null);
-        return;
-      }
       setSession(session);
       if (session) {
         fetchUserData(session.user.id);
@@ -303,52 +271,26 @@ export default function App() {
     setAuthError('');
     setAuthSuccess('');
 
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
     if (error) {
       setAuthError('이메일 또는 비밀번호가 일치하지 않습니다.');
-    } else if (data.user?.user_metadata?.is_deleted) {
-      setAuthError('탈퇴 신청된 계정입니다. 30일 경과 후 데이터가 영구 파기됩니다.');
-      await supabase.auth.signOut();
     }
     setAuthLoading(false);
   };
 
-  // 회원가입 핸들러 (숫자만 입력된 휴대폰 번호 처리)
+  // 회원가입 핸들러
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthLoading(true);
     setAuthError('');
     setAuthSuccess('');
 
-    // [방어 1] 허니팟 트랩
-    if (honeypot.trim() !== '') {
-      console.warn('Bot detected via honeypot.');
-      setAuthLoading(false);
-      return;
-    }
-
-    // [방어 2] 봇 방지 인증 체크
-    if (!captchaVerified) {
-      setAuthError('보안 확인(로봇 인증 체크)을 완료해 주세요.');
-      setAuthLoading(false);
-      return;
-    }
-
-    const trimmedName = name.trim();
-    const cleanPhone = phone.replace(/[^0-9]/g, '');
-
-    if (!trimmedName) {
-      setAuthError('이름(성함)을 입력해 주세요.');
-      setAuthLoading(false);
-      return;
-    }
-
-    if (cleanPhone.length < 10 || cleanPhone.length > 11) {
-      setAuthError('휴대폰 번호는 하이픈(-) 없이 숫자만 10~11자리 입력해 주세요.');
+    if (!phone.trim()) {
+      setAuthError('휴대폰 번호를 입력해 주세요.');
       setAuthLoading(false);
       return;
     }
@@ -371,31 +313,16 @@ export default function App() {
       return;
     }
 
-    // [방어 3] 휴대폰 번호 중복 사전 조회
-    const { data: existingProfile } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('phone', cleanPhone)
-      .maybeSingle();
-
-    if (existingProfile) {
-      setAuthError('이미 해당 휴대폰 번호로 가입된 계정이 존재합니다. (1인 1계정 원칙)');
-      setAuthLoading(false);
-      return;
-    }
-
-    // Supabase 계정 생성 (phone 필드에 숫자만 저장)
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: {
-          name: trimmedName,
-          phone: cleanPhone,
+          phone: phone.trim(),
           privacy_policy_agreed: true,
           privacy_policy_agreed_at: new Date().toISOString(),
           beta_terms_agreed: true,
-          terms_version: 'v1.7_numeric_phone',
+          terms_version: 'v1.3_phone_verified',
         },
       },
     });
@@ -403,17 +330,6 @@ export default function App() {
     if (error) {
       setAuthError('가입 실패: ' + error.message);
     } else {
-      if (data.user) {
-        await supabase.from('profiles').insert([
-          {
-            id: data.user.id,
-            email: email,
-            name: trimmedName,
-            phone: cleanPhone,
-          },
-        ]);
-      }
-
       if (data.session) {
         setAuthSuccess('회원가입이 완료되었습니다.');
       } else {
@@ -427,7 +343,6 @@ export default function App() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setShowProfileModal(false);
-    setShowWithdrawConfirm(false);
   };
 
   const handleChangePassword = async (e: React.FormEvent) => {
@@ -447,35 +362,6 @@ export default function App() {
       setNewPassword('');
     }
     setPwdLoading(false);
-  };
-
-  // 회원 탈퇴 핸들러 (30일 유예 소프트 삭제)
-  const handleWithdrawAccount = async () => {
-    setWithdrawLoading(true);
-    const now = new Date();
-    const purgeDate = new Date();
-    purgeDate.setDate(now.getDate() + 30);
-
-    const { error } = await supabase.auth.updateUser({
-      data: {
-        is_deleted: true,
-        deleted_at: now.toISOString(),
-        scheduled_purge_at: purgeDate.toISOString(),
-      },
-    });
-
-    if (error) {
-      alert('탈퇴 처리 실패: ' + error.message);
-      setWithdrawLoading(false);
-      return;
-    }
-
-    alert('회원 탈퇴가 접수되었습니다.\n개인정보보호 및 분쟁 방지 정책에 따라 30일의 유예 기간 후 모든 운행 기록과 계정이 영구 삭제됩니다.\n그동안 이용해 주셔서 감사합니다.');
-    await supabase.auth.signOut();
-    setSession(null);
-    setShowProfileModal(false);
-    setShowWithdrawConfirm(false);
-    setWithdrawLoading(false);
   };
 
   // 운행 등록 핸들러
@@ -519,6 +405,7 @@ export default function App() {
 
     if (error) {
       alert('DB 저장 오류 발생: ' + error.message);
+      console.error('Insert error:', error);
       return;
     }
 
@@ -634,12 +521,10 @@ export default function App() {
     setRecords(records.map((r) => (r.id === id ? { ...r, isPaid: newStatus } : r)));
   };
 
-  // 청구 문자 템플릿 생성 (포맷팅된 휴대폰 번호 출력)
+  // 청구 문자 템플릿 생성
   const buildClaimText = (r: DrivingRecord, withGross: boolean, withFuel: boolean, withExtra: boolean) => {
     const primaryAccount = accounts[0] || { bankName: '은행명', accountNumber: '계좌번호', holder: '예금주' };
-    const rawPhone = session?.user?.user_metadata?.phone || '';
-    const driverPhone = formatPhoneNumber(rawPhone);
-    const driverName = session?.user?.user_metadata?.name || '';
+    const driverPhone = session?.user?.user_metadata?.phone || '';
     
     let total = 0;
     let itemsText = '';
@@ -662,7 +547,7 @@ export default function App() {
 * 운행구간: ${r.departure} ➔ ${r.destination}
 ${itemsText}--------------------------------
 * 총 청구금액: ${total.toLocaleString()}원
-* 입금계좌: ${primaryAccount.bankName} ${primaryAccount.accountNumber} (${primaryAccount.holder})${driverPhone ? `\n* 탁송기사: ${driverName} (${driverPhone})` : ''}
+* 입금계좌: ${primaryAccount.bankName} ${primaryAccount.accountNumber} (${primaryAccount.holder})${driverPhone ? `\n* 기사 연락처: ${driverPhone}` : ''}
 
 확인 후 빠른 입금 부탁드립니다. 감사합니다.`;
   };
@@ -695,7 +580,7 @@ ${itemsText}--------------------------------
   };
 
   const getElapsedDays = (recordDate: string) => {
-    const today = new Date('2026-11-10');
+    const today = new Date('2026-11-09');
     const target = new Date(recordDate);
     const diffTime = today.getTime() - target.getTime();
     return Math.max(0, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
@@ -802,14 +687,14 @@ ${itemsText}--------------------------------
           <div className="flex bg-slate-900/80 p-1 rounded-xl border border-slate-800 mb-5">
             <button
               type="button"
-              onClick={() => { setAuthMode('login'); setAuthError(''); setAuthSuccess(''); }}
+              onClick={() => setAuthMode('login')}
               className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${authMode === 'login' ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}
             >
               로그인
             </button>
             <button
               type="button"
-              onClick={() => { setAuthMode('signup'); setAuthError(''); setAuthSuccess(''); setCaptchaVerified(false); }}
+              onClick={() => setAuthMode('signup')}
               className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${authMode === 'signup' ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}
             >
               회원가입
@@ -853,113 +738,60 @@ ${itemsText}--------------------------------
               </button>
             </form>
           ) : (
-            <form onSubmit={handleSignUp} className="space-y-3">
-              
-              {/* [방어 1] 허니팟 트랩 */}
-              <div className="hidden" aria-hidden="true" style={{ display: 'none' }}>
-                <input
-                  type="text"
-                  name="user_website_trap"
-                  tabIndex={-1}
-                  autoComplete="off"
-                  value={honeypot}
-                  onChange={(e) => setHoneypot(e.target.value)}
-                />
-              </div>
-
+            <form onSubmit={handleSignUp} className="space-y-3.5">
               <div>
-                <label className="block text-[11px] font-semibold text-slate-300 mb-1">이메일 계정 (로그인 ID)</label>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1">이메일 계정 (ID)</label>
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="name@driver.com"
                   required
-                  className="w-full px-3.5 py-2 rounded-lg bg-white text-slate-900 font-semibold text-sm"
+                  className="w-full px-3.5 py-2.5 rounded-lg bg-white text-slate-900 font-semibold text-sm"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">이름 (성함)</label>
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="홍길동"
-                    required
-                    className="w-full px-3.5 py-2 rounded-lg bg-white text-slate-900 font-semibold text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-indigo-300 mb-1 flex items-center gap-1">
-                    <Phone className="w-3 h-3 text-indigo-400" /> 휴대폰 번호 (- 제외)
-                  </label>
-                  <input
-                    type="tel"
-                    inputMode="numeric"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value.replace(/[^0-9]/g, ''))}
-                    placeholder="01012345678"
-                    maxLength={11}
-                    required
-                    className="w-full px-3.5 py-2 rounded-lg bg-white text-slate-900 font-semibold text-sm border border-slate-200 focus:border-indigo-500 focus:outline-none"
-                  />
-                </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1 flex items-center gap-1">
+                  <Phone className="w-3.5 h-3.5 text-indigo-400" />
+                  휴대폰 번호 (연락처 필수)
+                </label>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="예: 010-1234-5678"
+                  required
+                  className="w-full px-3.5 py-2.5 rounded-lg bg-white text-slate-900 font-semibold text-sm border border-slate-200 focus:border-indigo-500 focus:outline-none"
+                />
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">비밀번호</label>
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="6자리 이상"
-                    required
-                    className="w-full px-3.5 py-2 rounded-lg bg-white text-slate-900 font-semibold text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">비밀번호 확인</label>
-                  <input
-                    type="password"
-                    value={passwordConfirm}
-                    onChange={(e) => setPasswordConfirm(e.target.value)}
-                    placeholder="재입력"
-                    required
-                    className="w-full px-3.5 py-2 rounded-lg bg-white text-slate-900 font-semibold text-sm"
-                  />
-                </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1">비밀번호 (6자리 이상)</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="비밀번호 설정"
+                  required
+                  className="w-full px-3.5 py-2.5 rounded-lg bg-white text-slate-900 font-semibold text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1">비밀번호 확인</label>
+                <input
+                  type="password"
+                  value={passwordConfirm}
+                  onChange={(e) => setPasswordConfirm(e.target.value)}
+                  placeholder="비밀번호 재입력"
+                  required
+                  className="w-full px-3.5 py-2.5 rounded-lg bg-white text-slate-900 font-semibold text-sm"
+                />
               </div>
 
-              {/* [방어 2] 스마트 봇 방지 인증 카드 */}
-              <div className="pt-1">
-                <div
-                  onClick={() => setCaptchaVerified(!captchaVerified)}
-                  className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
-                    captchaVerified
-                      ? 'bg-emerald-950/30 border-emerald-500/50 text-emerald-300'
-                      : 'bg-slate-900 border-slate-800 hover:border-slate-700 text-slate-300'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-all ${
-                      captchaVerified ? 'bg-emerald-500 border-emerald-400 text-white' : 'border-slate-600 bg-slate-800'
-                    }`}>
-                      {captchaVerified && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                    </div>
-                    <span className="text-xs font-semibold select-none">
-                      {captchaVerified ? '보안 인증 완료 (실제 사람 확인됨)' : '로봇이 아닙니다 (터치하여 인증)'}
-                    </span>
-                  </div>
-                  <BotOff className={`w-4 h-4 ${captchaVerified ? 'text-emerald-400' : 'text-slate-500'}`} />
-                </div>
-              </div>
-
-              <div className="pt-1">
-                <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
-                  <div className="flex items-start gap-2">
+              <div className="pt-2">
+                <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2.5">
+                  <div className="flex items-start gap-2.5">
                     <input
                       type="checkbox"
                       id="privacyCheck"
@@ -967,17 +799,20 @@ ${itemsText}--------------------------------
                       onChange={(e) => setAgreePrivacy(e.target.checked)}
                       className="mt-0.5 w-4 h-4 rounded text-indigo-600 cursor-pointer"
                     />
-                    <label htmlFor="privacyCheck" className="text-xs text-slate-200 font-medium cursor-pointer leading-tight">
-                      [필수] 개인정보 수집 및 <span className="text-amber-400 font-bold">오픈베타 이용·유료화 사전고지</span> 동의
+                    <label htmlFor="privacyCheck" className="text-xs text-slate-200 font-medium cursor-pointer leading-relaxed">
+                      [필수] 연락처·개인정보 수집 및 <span className="text-amber-400 font-bold">오픈베타 이용·유료화 사전고지</span>에 동의합니다.
                     </label>
                   </div>
                   
-                  <div className="text-[10px] text-slate-400 pl-6 leading-tight space-y-0.5">
+                  <div className="text-[11px] text-slate-400 pl-6 leading-normal space-y-0.5">
                     <div className="text-indigo-300 flex items-center gap-1">
-                      <Phone className="w-2.5 h-2.5" /> 1인 1계정 원칙 준수 (중복 번호 가입 차단)
+                      <Phone className="w-3 h-3" /> 휴대폰 번호는 본인 확인 및 청구문자용으로 안전 보관
+                    </div>
+                    <div className="text-emerald-400 flex items-center gap-1">
+                      <Smartphone className="w-3 h-3" /> 송금 계좌는 서버 저장 없이 기기에만 보관
                     </div>
                     <div className="text-amber-300/80 flex items-center gap-1">
-                      <Sparkles className="w-2.5 h-2.5" /> 탈퇴 시 30일 유예 후 자동 영구 파기 (자동결제 없음)
+                      <Sparkles className="w-3 h-3" /> 베타 종료 후 유료 전환 가능 (동의 없는 자동결제 없음)
                     </div>
                   </div>
 
@@ -985,22 +820,22 @@ ${itemsText}--------------------------------
                     <button 
                       type="button" 
                       onClick={() => setShowPrivacyModal(true)} 
-                      className="text-[11px] text-indigo-400 hover:text-indigo-300 underline font-semibold cursor-pointer inline-flex items-center gap-0.5"
+                      className="text-xs text-indigo-400 hover:text-indigo-300 underline font-semibold cursor-pointer inline-flex items-center gap-0.5"
                     >
-                      약관 및 탈퇴·유료화 고지 전문보기 <ChevronRight className="w-3 h-3" />
+                      약관 및 유료화 고지 전문보기 <ChevronRight className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>
               </div>
 
-              {authError && <div className="p-2.5 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-400 text-xs">{authError}</div>}
+              {authError && <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-400 text-xs">{authError}</div>}
 
               <button
                 type="submit"
                 disabled={authLoading}
-                className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm rounded-lg cursor-pointer"
+                className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm rounded-lg cursor-pointer"
               >
-                {authLoading ? '보안 검증 및 계정 생성 중...' : '동의하고 무료 회원가입'}
+                {authLoading ? '계정 생성 중...' : '동의하고 회원가입'}
               </button>
             </form>
           )}
@@ -1024,34 +859,46 @@ ${itemsText}--------------------------------
 
               <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 text-xs text-slate-300 space-y-3.5 max-h-[380px] overflow-y-auto leading-relaxed">
                 <div>
-                  <h4 className="font-bold text-white mb-1">1. 수집하는 개인정보 항목 및 목적</h4>
+                  <h4 className="font-bold text-white mb-1">1. 수집하는 개인정보 항목 및 저장 방식</h4>
                   <p className="text-slate-400">
-                    - <strong>수집 항목:</strong> 로그인 이메일, 성명(이름), 휴대폰 번호(숫자), 암호화된 비밀번호, 탁송 운행 기록<br />
-                    - <strong>이용 목적:</strong> 본인 식별, 1인 1계정 중복 방지, 청구문자 기사 정보 자동 기재, 서비스 공지 발송
+                    - <strong className="text-indigo-300">클라우드(서버) 저장 필수 항목:</strong> 로그인 이메일, <span className="text-white font-bold underline">휴대폰 번호(연락처)</span>, 암호화된 비밀번호, 탁송 운행 기록(일자, 시간, 출발지, 도착지, 탁송료, 대납 주유비, 대납 경비, 팁)<br />
+                    - <strong className="text-emerald-300">기기 로컬(단말기) 저장 항목:</strong> 기사 송금 계좌번호는 외부 서버로 전송되지 않으며, 사용자 본인의 스마트폰/PC 웹 브라우저(localStorage)에만 안전하게 보관됩니다.
                   </p>
                 </div>
 
-                <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/30">
-                  <h4 className="font-bold text-rose-300 mb-1 flex items-center gap-1.5">
-                    <UserX className="w-3.5 h-3.5 text-rose-400" />
-                    2. 회원 탈퇴 및 데이터 자동 파기 정책 (30일 유예)
-                  </h4>
-                  <p className="text-slate-300 leading-relaxed text-[11px]">
-                    1) 회원은 앱 내 [계정 설정 ➔ 회원 탈퇴] 메뉴를 통해 언제든 탈퇴를 요청할 수 있습니다.<br />
-                    2) 부정 이용 방지 및 정산 분쟁 방지를 위해 탈퇴 신청 즉시 계정은 비활성화되며, <strong>탈퇴 신청일로부터 30일간 보관 후 시스템에서 자동으로 영구 삭제(파기)</strong>됩니다.<br />
-                    3) 30일 유예 기간이 경과하면 복구가 불가능합니다.
+                <div>
+                  <h4 className="font-bold text-white mb-1">2. 개인정보 수집 및 이용 목적</h4>
+                  <p className="text-slate-400">
+                    - 기사 회원 본인 식별 및 로그인 상태 유지<br />
+                    - 정산 청구문자 기사 연락처 자동 기재 및 중요 공지 발송<br />
+                    - 운행 일지 및 수입·지출 데이터의 클라우드 영구 저장 및 기기 간 동기화
+                  </p>
+                </div>
+
+                <div>
+                  <h4 className="font-bold text-white mb-1">3. 보유 및 이용 기간</h4>
+                  <p className="text-slate-400">
+                    - 회원 탈퇴 시 또는 서비스 종료 시까지 안전하게 보관되며, 사용자 탈퇴 요청 시 지체 없이 파기됩니다.
                   </p>
                 </div>
 
                 <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
                   <h4 className="font-bold text-amber-300 mb-1 flex items-center gap-1.5">
                     <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                    3. 오픈 베타 운영 및 향후 유료 멤버십 전환 고지
+                    4. 오픈 베타 운영 및 향후 유료 멤버십 전환 고지
                   </h4>
                   <p className="text-slate-300 leading-relaxed text-[11px]">
-                    1) 본 서비스(JunDriver)는 현재 기능 안정화 및 고도화를 위한 오픈 베타 테스트 기간으로 무료 운영됩니다.<br />
-                    2) 베타 테스트 기간이 종료되면 서비스의 전부 또는 일부 기능이 유료 멤버십으로 전환될 수 있습니다.<br />
-                    3) 베타 종료 후 사용자의 명시적 신청 없는 자동 결제는 절대 발생하지 않습니다.
+                    1) 본 서비스(JunDriver)는 현재 기능 안정화 및 고도화를 위한 <strong>오픈 베타 테스트(Open Beta)</strong> 기간으로 무료 운영됩니다.<br />
+                    2) 베타 테스트 기간이 종료되면 서비스의 전부 또는 일부 기능이 <strong>유료 회원제 및 구독 모델</strong>로 전환될 수 있습니다.<br />
+                    3) 베타 종료 후 <strong>사용자의 명시적 신청 없는 자동 결제는 일체 발생하지 않습니다.</strong> 유료 전환을 원하지 않으실 경우 언제든 자유롭게 탈퇴가 가능합니다.<br />
+                    4) 회사는 베타 기간 중 활동 실적, 피드백 기여도 등에 따라 회원을 선별하여 <strong>우수회원 등급 부여, 평생 무료/할인 혜택 등 차등 혜택</strong>을 제공할 수 있습니다.
+                  </p>
+                </div>
+
+                <div>
+                  <h4 className="font-bold text-white mb-1">5. 동의를 거부할 권리</h4>
+                  <p className="text-slate-400">
+                    귀하는 본 동의를 거부할 권리가 있습니다. 단, 본 조항은 서비스 제공을 위한 필수 요건이므로 거부 시 가입이 제한됩니다.
                   </p>
                 </div>
               </div>
@@ -1073,9 +920,7 @@ ${itemsText}--------------------------------
   }
 
   // 2. 메인 대시보드
-  const userName = session?.user?.user_metadata?.name || '기사';
-  const rawUserPhone = session?.user?.user_metadata?.phone;
-  const userPhone = formatPhoneNumber(rawUserPhone);
+  const userPhone = session?.user?.user_metadata?.phone;
 
   return (
     <div className="min-h-screen bg-[#070B14] text-slate-100 font-sans pb-20 selection:bg-indigo-500 selection:text-white">
@@ -1092,14 +937,14 @@ ${itemsText}--------------------------------
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <button
-              onClick={() => { setShowProfileModal(true); setPwdMessage(null); setNewPassword(''); setShowWithdrawConfirm(false); }}
+              onClick={() => { setShowProfileModal(true); setPwdMessage(null); setNewPassword(''); }}
               className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700/70 hover:border-indigo-500 transition-all text-xs text-slate-200 cursor-pointer"
             >
               <User className="w-3.5 h-3.5 text-indigo-400" />
               <div className="text-left max-w-[150px] truncate">
-                <span className="block truncate font-bold text-white">{userName}님</span>
+                <span className="block truncate font-medium">{session.user.email}</span>
                 {userPhone && <span className="block text-[10px] text-slate-400 font-mono">{userPhone}</span>}
               </div>
             </button>
@@ -1994,78 +1839,28 @@ ${itemsText}--------------------------------
         </div>
       )}
 
-      {/* 계정 관리, 비밀번호 변경 및 회원 탈퇴 모달 */}
+      {/* 비밀번호 변경 모달 */}
       {showProfileModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
           <div className="w-full max-w-sm bg-[#0E1424] border border-slate-800 rounded-2xl p-6 shadow-2xl relative">
             <button onClick={() => setShowProfileModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-1">
               <X className="w-5 h-5" />
             </button>
-            
-            <h3 className="text-sm font-bold text-white mb-1 flex items-center gap-2">
-              <User className="w-4 h-4 text-indigo-400" /> 계정 및 보안 설정
-            </h3>
-            <p className="text-xs text-slate-400 mb-4">{session.user.email}</p>
-
-            {/* 비밀번호 변경 폼 */}
-            <form onSubmit={handleChangePassword} className="space-y-3 pb-5 border-b border-slate-800">
-              <label className="block text-[11px] font-semibold text-slate-300">비밀번호 변경</label>
+            <h3 className="text-sm font-bold text-white mb-4">비밀번호 변경</h3>
+            <form onSubmit={handleChangePassword} className="space-y-3.5">
               <input
                 type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="새 비밀번호 (6자리 이상)"
+                placeholder="새 비밀번호 입력 (6자리 이상)"
                 required
-                className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
+                className="w-full px-3.5 py-2.5 rounded-lg bg-white text-slate-900 font-semibold text-sm"
               />
-              {pwdMessage && <div className="p-2.5 text-xs rounded-lg bg-slate-800">{pwdMessage.text}</div>}
-              <button type="submit" disabled={pwdLoading} className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-lg cursor-pointer">
-                {pwdLoading ? '변경 중...' : '비밀번호 변경'}
+              {pwdMessage && <div className="p-3 text-xs rounded-lg bg-slate-800">{pwdMessage.text}</div>}
+              <button type="submit" disabled={pwdLoading} className="w-full py-2.5 bg-indigo-600 text-white font-bold text-xs rounded-lg">
+                {pwdLoading ? '변경 중...' : '변경 완료'}
               </button>
             </form>
-
-            {/* 회원 탈퇴 영역 */}
-            <div className="pt-4">
-              {!showWithdrawConfirm ? (
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-400">더 이상 서비스를 이용하지 않으시나요?</span>
-                  <button
-                    type="button"
-                    onClick={() => setShowWithdrawConfirm(true)}
-                    className="text-rose-400 hover:text-rose-300 font-semibold underline cursor-pointer text-xs"
-                  >
-                    회원 탈퇴
-                  </button>
-                </div>
-              ) : (
-                <div className="p-3.5 rounded-xl bg-rose-950/30 border border-rose-500/40 space-y-2.5 animate-fadeIn">
-                  <div className="text-xs text-rose-300 font-bold flex items-center gap-1.5">
-                    <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
-                    정말 회원 탈퇴를 진행하시겠습니까?
-                  </div>
-                  <p className="text-[11px] text-slate-300 leading-relaxed">
-                    탈퇴 시 즉시 로그아웃되며, 개인정보보호 및 분쟁 방지 정책에 따라 <strong>30일 유예 후 운행 기록과 계정이 자동 영구 삭제</strong>됩니다.
-                  </p>
-                  <div className="flex gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => setShowWithdrawConfirm(false)}
-                      className="flex-1 py-1.5 bg-slate-800 text-slate-300 text-xs font-semibold rounded-lg cursor-pointer"
-                    >
-                      취소
-                    </button>
-                    <button
-                      type="button"
-                      disabled={withdrawLoading}
-                      onClick={handleWithdrawAccount}
-                      className="flex-1 py-1.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-lg cursor-pointer shadow-md"
-                    >
-                      {withdrawLoading ? '탈퇴 처리 중...' : '30일 후 자동삭제 탈퇴'}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
           </div>
         </div>
       )}
