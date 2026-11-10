@@ -14,7 +14,7 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const ADMIN_DEFAULT_EMAIL = 'beat4989@naver.com';
-const ADMIN_DEFAULT_NAME = '김탁송'; // 관리자 기본이름 홍길동으로 변경
+const ADMIN_DEFAULT_NAME = '홍길동'; 
 const ADMIN_DEFAULT_PHONE = '01091417586';
 
 const formatNumberWithComma = (val: string | number) => {
@@ -88,9 +88,8 @@ export default function App() {
   const [records, setRecords] = useState<DrivingRecord[]>([]);
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
   const [accounts, setAccounts] = useState<BankAccount[]>(() => {
-    // 모든 기기에서 캐시가 초기화되도록 _v2 키를 사용하고 기본 예금주를 홍길동으로 강제 변경
     try { const saved = localStorage.getItem('jundriver_local_accounts_v2'); if (saved) return JSON.parse(saved); } catch (e) { console.error(e); }
-    return [{ id: '1', bankName: '신한은행', accountNumber: '110-123-456789', holder: '김탁송' }];
+    return [{ id: '1', bankName: '신한은행', accountNumber: '110-123-456789', holder: '홍길동' }];
   });
 
   // 공지사항
@@ -106,7 +105,7 @@ export default function App() {
   const [adminAllRecords, setAdminAllRecords] = useState<DrivingRecord[]>([]);
   const [adminSearchTerm, setAdminSearchTerm] = useState('');
 
-  // 입력 폼 (이전 간편 버전 복원)
+  // 입력 폼
   const [newDate, setNewDate] = useState('2026-11-10'); const [newStartTime, setNewStartTime] = useState(''); const [newEndTime, setNewEndTime] = useState('');
   const [newDeparture, setNewDeparture] = useState(''); const [newDestination, setNewDestination] = useState('');
   const [newGross, setNewGross] = useState(''); const [newFeeRate, setNewFeeRate] = useState('20');
@@ -114,7 +113,6 @@ export default function App() {
   const [expCategory, setExpCategory] = useState('대중교통'); const [expAmount, setExpAmount] = useState(''); const [expMemo, setExpMemo] = useState('');
   const [bankName, setBankName] = useState(''); const [accountNumber, setAccountNumber] = useState(''); const [holder, setHolder] = useState('');
 
-  // _v2 키에 저장
   useEffect(() => { localStorage.setItem('jundriver_local_accounts_v2', JSON.stringify(accounts)); }, [accounts]);
 
   const fetchNotices = async () => {
@@ -220,7 +218,6 @@ export default function App() {
     setPwdLoading(false);
   };
 
-  // 공지 관리 (관제탑)
   const handleSaveNoticeTemplate = async (e: React.FormEvent) => {
     e.preventDefault(); if (!inputNoticeTitle.trim() || !inputNoticeContent.trim()) return;
     setNoticeLoading(true);
@@ -257,7 +254,6 @@ export default function App() {
     await supabase.from('announcements').delete().eq('id', id); fetchNotices();
   };
 
-  // 운행 관리 (간편 폼 복원)
   const handleAddRecord = async (e: React.FormEvent) => {
     e.preventDefault(); if (!session) return;
     const gross = cleanNumber(newGross); const feeRate = cleanNumber(newFeeRate); const fuel = cleanNumber(newFuel);
@@ -311,7 +307,6 @@ export default function App() {
     if (!error) setRecords(records.map((r) => (r.id === id ? { ...r, isPaid: !target.isPaid } : r)));
   };
 
-  // 경비 및 계좌
   const handleAddExpense = async (e: React.FormEvent) => {
     e.preventDefault(); const cleanAmt = cleanNumber(expAmount); if (!cleanAmt || !session) return;
     const expenseId = 'exp_' + Date.now().toString();
@@ -326,7 +321,6 @@ export default function App() {
   };
   const handleDeleteAccount = (id: string) => { setAccounts(accounts.filter(a => a.id !== id)); };
 
-  // 관리자 권한 변경 및 CSV
   const handleUpdateMemberRole = async (memberId: string, newRole: string) => {
     if (currentUserRole !== 'super_admin') { alert('최고 관리자만 변경 가능합니다.'); return; }
     const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', memberId);
@@ -344,7 +338,6 @@ export default function App() {
     document.body.appendChild(link); link.click(); document.body.removeChild(link);
   };
 
-  // 청구 문자 로직 (3개 항목으로 간소화 복원)
   const buildClaimText = (r: DrivingRecord, withGross: boolean, withFuel: boolean, withExtra: boolean) => {
     const primaryAccount = accounts[0] || { bankName: '은행명', accountNumber: '계좌번호', holder: '예금주' };
     const driverPhone = formatPhoneNumber(session?.user?.user_metadata?.phone || ADMIN_DEFAULT_PHONE);
@@ -470,7 +463,7 @@ export default function App() {
           <button onClick={() => setActiveTab('wallet')} className={`px-4 py-2 rounded-lg text-xs font-bold cursor-pointer shrink-0 transition-colors ${activeTab === 'wallet' ? 'bg-indigo-600 text-white' : 'bg-slate-900 text-slate-400 hover:text-slate-200'}`}>계좌 관리</button>
         </div>
 
-        {/* 1. 운행 일지 탭 (간편 버전 복원) */}
+        {/* 1. 운행 일지 탭 */}
         {activeTab === 'records' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="bg-[#0E1424]/80 backdrop-blur-md border border-slate-800 rounded-xl p-5 shadow-lg">
@@ -657,6 +650,7 @@ export default function App() {
               </div>
             )}
 
+            {/* 확장된 회원 등급 관리자 UI */}
             {adminSubTab === 'members' && (
               <div className="bg-[#0E1424] border border-slate-800 p-5 rounded-xl space-y-3">
                 <input type="text" placeholder="이름/번호/이메일 검색..." value={adminSearchTerm} onChange={(e) => setAdminSearchTerm(e.target.value)} className="px-3 py-2 bg-white text-black font-semibold rounded text-xs w-full max-w-xs focus:ring-2 focus:ring-indigo-500" />
@@ -667,10 +661,20 @@ export default function App() {
                       {adminMemberList.filter(m => m.name.includes(adminSearchTerm) || m.phone.includes(adminSearchTerm) || m.email.includes(adminSearchTerm)).map((m) => (
                         <tr key={m.id} className="hover:bg-slate-900/50">
                           <td className="p-3 text-white font-bold">{m.name}</td><td className="p-3 font-mono">{formatPhoneNumber(m.phone)}</td><td className="p-3 text-slate-300">{m.email}</td>
-                          <td className="p-3"><span className={`px-2 py-1 rounded text-[10px] font-bold ${m.role === 'super_admin' ? 'bg-amber-500/20 text-amber-400' : 'bg-slate-800 text-slate-300'}`}>{m.role}</span></td>
+                          <td className="p-3">
+                            {m.role === 'super_admin' ? <span className="px-2 py-1 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400">최고 관리자</span> :
+                             m.role === 'manager' ? <span className="px-2 py-1 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-400">운영 직원</span> :
+                             m.role === 'vip_driver' ? <span className="px-2 py-1 rounded text-[10px] font-bold bg-pink-500/20 text-pink-400">VIP 기사</span> :
+                             m.role === 'pro_driver' ? <span className="px-2 py-1 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400">PRO 기사</span> :
+                             <span className="px-2 py-1 rounded text-[10px] font-bold bg-slate-800 text-slate-300">일반 기사</span>}
+                          </td>
                           <td className="p-3 text-right">
                             <select value={m.role} onChange={(e) => handleUpdateMemberRole(m.id, e.target.value)} className="bg-slate-900 border border-slate-700 text-white rounded px-2 py-1 text-[11px] cursor-pointer outline-none">
-                              <option value="user">일반 기사</option><option value="manager">운영 직원</option><option value="super_admin">최고 관리자</option>
+                              <option value="user">일반 기사</option>
+                              <option value="pro_driver">PRO 기사</option>
+                              <option value="vip_driver">VIP 기사</option>
+                              <option value="manager">운영 직원</option>
+                              <option value="super_admin">최고 관리자</option>
                             </select>
                           </td>
                         </tr>
@@ -698,7 +702,7 @@ export default function App() {
         )}
       </main>
 
-      {/* 모달: 운행 일지 수정 (간편 버전 폼 복원) */}
+      {/* 모달: 운행 일지 수정 */}
       {editingRecord && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm transition-opacity">
           <div className="w-full max-w-sm bg-[#0E1424] border border-slate-700 rounded-2xl p-6 shadow-2xl">
@@ -714,7 +718,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 모달: 청구 문자 (3항목 옵션 복원) */}
+      {/* 모달: 청구 문자 */}
       {claimModalOpen && selectedClaimRecord && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm transition-opacity">
           <div className="w-full max-w-lg bg-[#0E1424] border border-slate-700 rounded-2xl p-6 shadow-2xl">
