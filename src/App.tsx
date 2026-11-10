@@ -43,15 +43,13 @@ import {
   Users,
   Download,
   Award,
-  Crown,
-  Key
+  Crown
 } from 'lucide-react';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// 고정 관리자 기본 정보
 const ADMIN_DEFAULT_EMAIL = 'beat4989@naver.com';
 const ADMIN_DEFAULT_NAME = '공민준';
 const ADMIN_DEFAULT_PHONE = '01091417586';
@@ -261,7 +259,6 @@ export default function App() {
   const fetchUserData = async (userId: string, userEmail: string) => {
     setDataLoading(true);
     try {
-      // 관리자 이메일 자동 super_admin 부여
       let role = 'user';
       if (userEmail.toLowerCase() === ADMIN_DEFAULT_EMAIL.toLowerCase()) {
         role = 'super_admin';
@@ -270,7 +267,7 @@ export default function App() {
           email: userEmail,
           name: ADMIN_DEFAULT_NAME,
           phone: ADMIN_DEFAULT_PHONE,
-          role: 'super_admin'
+          role: 'super_admin',
         });
       } else {
         const { data: profile } = await supabase.from('profiles').select('role').eq('id', userId).maybeSingle();
@@ -278,7 +275,6 @@ export default function App() {
       }
       setCurrentUserRole(role as any);
 
-      // 운행 기록 로드
       const { data: recordsData } = await supabase
         .from('driving_records')
         .select('*')
@@ -306,7 +302,6 @@ export default function App() {
         );
       }
 
-      // 경비 로드
       const { data: expensesData } = await supabase
         .from('expenses')
         .select('*')
@@ -387,7 +382,9 @@ export default function App() {
       }
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (session?.user) {
         fetchUserData(session.user.id, session.user.email || '');
@@ -415,59 +412,6 @@ export default function App() {
     if (error) {
       setAuthError('이메일 또는 비밀번호가 일치하지 않습니다.');
     }
-    setAuthLoading(false);
-  };
-
-  // 모바일 편의용 관리자 원클릭 접속 핸들러
-  const handleQuickAdminBootstrap = async () => {
-    const inputPwd = prompt('사용하실 관리자 비밀번호를 입력해 주세요 (6자리 이상):', 'admin1234!');
-    if (!inputPwd || inputPwd.length < 6) {
-      alert('비밀번호는 6자리 이상 입력해야 합니다.');
-      return;
-    }
-
-    setAuthLoading(true);
-    setAuthError('');
-
-    // 가입 시도
-    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-      email: ADMIN_DEFAULT_EMAIL,
-      password: inputPwd,
-      options: {
-        data: {
-          name: ADMIN_DEFAULT_NAME,
-          phone: ADMIN_DEFAULT_PHONE,
-          role: 'super_admin'
-        }
-      }
-    });
-
-    // 이미 가입된 경우 즉시 로그인
-    if (signUpError && signUpError.message.includes('already registered')) {
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: ADMIN_DEFAULT_EMAIL,
-        password: inputPwd,
-      });
-
-      if (signInError) {
-        alert('기존 비밀번호와 일치하지 않습니다. 다른 비밀번호로 로그인해 주세요.');
-      } else {
-        alert('관리자 계정으로 접속되었습니다.');
-      }
-    } else if (signUpData?.user) {
-      // profiles 테이블에 직접 권한 등록
-      await supabase.from('profiles').upsert({
-        id: signUpData.user.id,
-        email: ADMIN_DEFAULT_EMAIL,
-        name: ADMIN_DEFAULT_NAME,
-        phone: ADMIN_DEFAULT_PHONE,
-        role: 'super_admin'
-      });
-      alert('관리자 계정이 새로 생성되어 접속되었습니다.');
-    } else if (signUpError) {
-      alert('오류 발생: ' + signUpError.message);
-    }
-
     setAuthLoading(false);
   };
 
@@ -919,7 +863,7 @@ ${itemsText}--------------------------------
 
   const isAdminUser = currentUserRole === 'super_admin' || currentUserRole === 'manager';
 
-  // 미로그인 화면
+  // 1. 미로그인 첫 화면 (관리자 전용 문구 및 버튼 완전 제거)
   if (!session) {
     return (
       <div className="min-h-screen bg-[#070B14] text-slate-100 flex items-center justify-center p-4 font-sans relative">
@@ -982,22 +926,10 @@ ${itemsText}--------------------------------
               <button
                 type="submit"
                 disabled={authLoading}
-                className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm rounded-lg cursor-pointer"
+                className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm rounded-lg cursor-pointer shadow-lg"
               >
                 {authLoading ? '로그인 처리 중...' : '클라우드 로그인'}
               </button>
-
-              {/* 관리자 비상 원클릭 버튼 */}
-              <div className="pt-2">
-                <button
-                  type="button"
-                  onClick={handleQuickAdminBootstrap}
-                  className="w-full py-2 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 font-bold text-xs rounded-lg flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <Key className="w-3.5 h-3.5" />
-                  관리자 계정 즉시 생성 및 바로 접속 (beat4989)
-                </button>
-              </div>
             </form>
           ) : (
             <form onSubmit={handleSignUp} className="space-y-3">
@@ -1081,8 +1013,8 @@ ${itemsText}--------------------------------
               </div>
 
               <div className="flex items-center gap-2 pt-1">
-                <input type="checkbox" id="agreeChk" checked={agreePrivacy} onChange={(e) => setAgreePrivacy(e.target.checked)} className="w-4 h-4 rounded text-indigo-600" />
-                <label htmlFor="agreeChk" className="text-xs text-slate-300">이용약관 및 개인정보 처리에 동의합니다.</label>
+                <input type="checkbox" id="agreeChk" checked={agreePrivacy} onChange={(e) => setAgreePrivacy(e.target.checked)} className="w-4 h-4 rounded text-indigo-600 cursor-pointer" />
+                <label htmlFor="agreeChk" className="text-xs text-slate-300 cursor-pointer">이용약관 및 개인정보 처리에 동의합니다.</label>
               </div>
 
               {authError && <div className="p-2.5 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-400 text-xs">{authError}</div>}
@@ -1101,7 +1033,7 @@ ${itemsText}--------------------------------
     );
   }
 
-  // 메인 화면
+  // 2. 메인 대시보드 화면
   const userName = session?.user?.user_metadata?.name || ADMIN_DEFAULT_NAME;
   const userPhone = formatPhoneNumber(session?.user?.user_metadata?.phone || ADMIN_DEFAULT_PHONE);
 
@@ -1110,7 +1042,7 @@ ${itemsText}--------------------------------
       <header className="sticky top-0 z-30 bg-[#0E1424]/90 backdrop-blur-md border-b border-slate-800/80 px-4 lg:px-8 py-3">
         <div className="max-w-[1400px] mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
+            <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center shadow-md">
               <Car className="w-4 h-4 text-white" />
             </div>
             <span className="font-bold text-base text-white">JunDriver</span>
@@ -1121,8 +1053,8 @@ ${itemsText}--------------------------------
             {isAdminUser && (
               <button
                 onClick={() => { fetchAdminData(); setActiveTab('admin'); }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${
-                  activeTab === 'admin' ? 'bg-amber-500 text-slate-950 font-extrabold' : 'bg-amber-500/10 border border-amber-500/30 text-amber-400'
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all ${
+                  activeTab === 'admin' ? 'bg-amber-500 text-slate-950 font-extrabold shadow-lg shadow-amber-500/20' : 'bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20'
                 }`}
               >
                 <Crown className="w-3.5 h-3.5" />
@@ -1177,16 +1109,19 @@ ${itemsText}--------------------------------
         )}
 
         <div className="flex gap-2 border-b border-slate-800 pb-2 overflow-x-auto">
-          <button onClick={() => setActiveTab('records')} className={`px-4 py-2 rounded-lg text-xs font-bold cursor-pointer ${activeTab === 'records' ? 'bg-indigo-600 text-white' : 'bg-slate-900 text-slate-400'}`}>운행 일지</button>
-          <button onClick={() => setActiveTab('claims')} className={`px-4 py-2 rounded-lg text-xs font-bold cursor-pointer ${activeTab === 'claims' ? 'bg-indigo-600 text-white' : 'bg-slate-900 text-slate-400'}`}>청구문자</button>
-          <button onClick={() => setActiveTab('expense')} className={`px-4 py-2 rounded-lg text-xs font-bold cursor-pointer ${activeTab === 'expense' ? 'bg-indigo-600 text-white' : 'bg-slate-900 text-slate-400'}`}>경비 장부</button>
-          <button onClick={() => setActiveTab('wallet')} className={`px-4 py-2 rounded-lg text-xs font-bold cursor-pointer ${activeTab === 'wallet' ? 'bg-indigo-600 text-white' : 'bg-slate-900 text-slate-400'}`}>계좌 관리</button>
+          <button onClick={() => setActiveTab('records')} className={`px-4 py-2 rounded-lg text-xs font-bold cursor-pointer shrink-0 ${activeTab === 'records' ? 'bg-indigo-600 text-white' : 'bg-slate-900 text-slate-400'}`}>운행 일지</button>
+          <button onClick={() => setActiveTab('claims')} className={`px-4 py-2 rounded-lg text-xs font-bold cursor-pointer relative shrink-0 ${activeTab === 'claims' ? 'bg-indigo-600 text-white' : 'bg-slate-900 text-slate-400'}`}>
+            청구문자
+            {unpaidRecords.length > 0 && <span className="ml-1 px-1.5 py-0.2 rounded-full bg-rose-500 text-white text-[10px] font-extrabold">{unpaidRecords.length}</span>}
+          </button>
+          <button onClick={() => setActiveTab('expense')} className={`px-4 py-2 rounded-lg text-xs font-bold cursor-pointer shrink-0 ${activeTab === 'expense' ? 'bg-indigo-600 text-white' : 'bg-slate-900 text-slate-400'}`}>경비 장부</button>
+          <button onClick={() => setActiveTab('wallet')} className={`px-4 py-2 rounded-lg text-xs font-bold cursor-pointer shrink-0 ${activeTab === 'wallet' ? 'bg-indigo-600 text-white' : 'bg-slate-900 text-slate-400'}`}>계좌 관리</button>
           {isAdminUser && (
-            <button onClick={() => setActiveTab('admin')} className={`px-4 py-2 rounded-lg text-xs font-bold ml-auto cursor-pointer ${activeTab === 'admin' ? 'bg-amber-500 text-slate-950 font-extrabold' : 'bg-amber-500/20 text-amber-300'}`}>관제탑</button>
+            <button onClick={() => { fetchAdminData(); setActiveTab('admin'); }} className={`px-4 py-2 rounded-lg text-xs font-bold ml-auto cursor-pointer shrink-0 ${activeTab === 'admin' ? 'bg-amber-500 text-slate-950 font-extrabold' : 'bg-amber-500/20 text-amber-300'}`}>관제탑</button>
           )}
         </div>
 
-        {/* 운행 일지 */}
+        {/* 운행 일지 탭 */}
         {activeTab === 'records' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="bg-[#0E1424]/80 border border-slate-800 rounded-xl p-5">
@@ -1204,13 +1139,13 @@ ${itemsText}--------------------------------
                 <input type="text" placeholder="대납 주유비" value={newFuel} onChange={(e) => setNewFuel(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 bg-white text-slate-900 rounded text-xs" />
                 <input type="text" placeholder="대납 통행료/경비" value={newExtraExpense} onChange={(e) => setNewExtraExpense(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 bg-white text-slate-900 rounded text-xs" />
                 <input type="text" placeholder="기사 팁" value={newTip} onChange={(e) => setNewTip(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 bg-white text-slate-900 rounded text-xs" />
-                <button type="submit" className="w-full py-2.5 bg-indigo-600 text-white font-bold rounded text-xs cursor-pointer">운행 등록</button>
+                <button type="submit" className="w-full py-2.5 bg-indigo-600 text-white font-bold rounded text-xs cursor-pointer shadow-md">운행 등록</button>
               </form>
             </div>
 
             <div className="lg:col-span-2 bg-[#0E1424]/80 border border-slate-800 rounded-xl p-5">
               <h3 className="text-sm font-bold text-white mb-4">운행 내역 ({records.length}건)</h3>
-              <div className="space-y-3">
+              <div className="space-y-3 max-h-[560px] overflow-y-auto">
                 {records.map((r) => (
                   <div key={r.id} className="bg-slate-900/70 border border-slate-800 p-3.5 rounded-xl flex items-center justify-between">
                     <div>
@@ -1232,7 +1167,7 @@ ${itemsText}--------------------------------
           </div>
         )}
 
-        {/* 관제탑 */}
+        {/* 관제탑 관리자 화면 */}
         {activeTab === 'admin' && isAdminUser && (
           <div className="space-y-6">
             <div className="flex gap-2 border-b border-slate-800 pb-2">
@@ -1285,39 +1220,41 @@ ${itemsText}--------------------------------
                   onChange={(e) => setAdminSearchTerm(e.target.value)}
                   className="px-3 py-2 bg-white text-slate-900 rounded text-xs w-full max-w-xs"
                 />
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-900 text-slate-400">
-                    <tr>
-                      <th className="p-2.5">이름</th>
-                      <th className="p-2.5">전화번호</th>
-                      <th className="p-2.5">이메일</th>
-                      <th className="p-2.5">권한</th>
-                      <th className="p-2.5 text-right">권한 변경</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800">
-                    {filteredAdminMembers.map((m) => (
-                      <tr key={m.id}>
-                        <td className="p-2.5 text-white font-bold">{m.name}</td>
-                        <td className="p-2.5">{formatPhoneNumber(m.phone)}</td>
-                        <td className="p-2.5">{m.email}</td>
-                        <td className="p-2.5">{m.role}</td>
-                        <td className="p-2.5 text-right">
-                          <select
-                            value={m.role}
-                            onChange={(e) => handleUpdateMemberRole(m.id, e.target.value)}
-                            className="bg-slate-900 border border-slate-700 text-white rounded px-2 py-1"
-                          >
-                            <option value="user">일반 기사</option>
-                            <option value="vip_driver">우수 기사</option>
-                            <option value="manager">운영 직원</option>
-                            <option value="super_admin">최고 관리자</option>
-                          </select>
-                        </td>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-900 text-slate-400">
+                      <tr>
+                        <th className="p-2.5">이름</th>
+                        <th className="p-2.5">전화번호</th>
+                        <th className="p-2.5">이메일</th>
+                        <th className="p-2.5">권한</th>
+                        <th className="p-2.5 text-right">권한 변경</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800">
+                      {filteredAdminMembers.map((m) => (
+                        <tr key={m.id}>
+                          <td className="p-2.5 text-white font-bold">{m.name}</td>
+                          <td className="p-2.5">{formatPhoneNumber(m.phone)}</td>
+                          <td className="p-2.5">{m.email}</td>
+                          <td className="p-2.5">{m.role}</td>
+                          <td className="p-2.5 text-right">
+                            <select
+                              value={m.role}
+                              onChange={(e) => handleUpdateMemberRole(m.id, e.target.value)}
+                              className="bg-slate-900 border border-slate-700 text-white rounded px-2 py-1"
+                            >
+                              <option value="user">일반 기사</option>
+                              <option value="vip_driver">우수 기사</option>
+                              <option value="manager">운영 직원</option>
+                              <option value="super_admin">최고 관리자</option>
+                            </select>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
 
