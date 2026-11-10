@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import {
   Wallet,
@@ -27,33 +27,21 @@ import {
   ChevronRight,
   Smartphone,
   Fuel,
+  Camera,
+  Image as ImageIcon,
   AlertTriangle,
   MessageSquare,
   Check,
   Edit2,
   Coins,
   Sparkles,
-  Phone,
-  RefreshCw
+  Phone
 } from 'lucide-react';
 
+// Supabase 클라이언트 초기화
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-// 천 단위 콤마 포맷터 & 언포맷 유틸리티
-const formatNumberWithComma = (val: string | number) => {
-  if (val === '' || val === null || val === undefined) return '';
-  const numStr = String(val).replace(/[^0-9]/g, '');
-  if (!numStr) return '';
-  return Number(numStr).toLocaleString('ko-KR');
-};
-
-const cleanNumber = (val: string | number): number => {
-  if (typeof val === 'number') return val;
-  if (!val) return 0;
-  return Number(String(val).replace(/,/g, '')) || 0;
-};
 
 interface DrivingRecord {
   id: string;
@@ -62,14 +50,15 @@ interface DrivingRecord {
   endTime: string;
   departure: string;
   destination: string;
-  grossAmount: number;
-  feeRate: number;
-  fuelAmount: number;
-  extraExpenseAmount: number;
-  tipAmount: number;
-  isPaid: boolean;
-  netAmount: number;
-  totalClaimAmount: number;
+  grossAmount: number; // 탁송료
+  feeRate: number; // 수수료율
+  fuelAmount: number; // 대납 주유비
+  extraExpenseAmount: number; // 대납 추가경비 (통행료/세차비 등)
+  tipAmount: number; // 순수 팁 (기사 순익 가산, 청구문자 미포함)
+  receiptImage?: string; // 영수증
+  isPaid: boolean; // 입금 여부
+  netAmount: number; // 순수입: (탁송료 - 수수료) + 팁
+  totalClaimAmount: number; // 총 청구 가능액: 탁송료 + 대납 주유비 + 대납 추가경비
 }
 
 interface ExpenseRecord {
@@ -93,7 +82,7 @@ export default function App() {
   // 인증 관련 상태
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
+  const [phone, setPhone] = useState(''); // 휴대폰 번호 필수
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [agreePrivacy, setAgreePrivacy] = useState(false);
@@ -117,10 +106,9 @@ export default function App() {
 
   // 운행 일지 수정 모달 상태
   const [editingRecord, setEditingRecord] = useState<DrivingRecord | null>(null);
-  const [editGross, setEditGross] = useState('');
-  const [editFuel, setEditFuel] = useState('');
-  const [editExtra, setEditExtra] = useState('');
-  const [editTip, setEditTip] = useState('');
+
+  // 영수증 사진 확대 모달 상태
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   // 청구 문자 전용 모달 및 3대 항목 선택 상태
   const [claimModalOpen, setClaimModalOpen] = useState(false);
@@ -130,12 +118,55 @@ export default function App() {
   const [includeExtra, setIncludeExtra] = useState(true);
   const [claimMessageText, setClaimMessageText] = useState('');
 
-  // 로딩 상태
-  const [dataLoading, setDataLoading] = useState(false);
+  // 파일 입력 ref
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // DB 연동 데이터 상태
-  const [records, setRecords] = useState<DrivingRecord[]>([]);
-  const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
+  // 운행 기록 리스트
+  const [records, setRecords] = useState<DrivingRecord[]>([
+    {
+      id: '1',
+      date: '2026-11-09',
+      startTime: '08:30',
+      endTime: '11:00',
+      departure: '경기 광주',
+      destination: '인천 송도',
+      grossAmount: 85000,
+      feeRate: 20,
+      fuelAmount: 50000,
+      extraExpenseAmount: 8400,
+      tipAmount: 5000,
+      isPaid: false,
+      netAmount: 73000,
+      totalClaimAmount: 143400,
+    },
+    {
+      id: '2',
+      date: '2026-11-06',
+      startTime: '13:00',
+      endTime: '15:30',
+      departure: '서울 강남',
+      destination: '경기 평택',
+      grossAmount: 65000,
+      feeRate: 20,
+      fuelAmount: 30000,
+      extraExpenseAmount: 0,
+      tipAmount: 0,
+      isPaid: false,
+      netAmount: 52000,
+      totalClaimAmount: 95000,
+    },
+  ]);
+
+  // 경비 지출 리스트
+  const [expenses, setExpenses] = useState<ExpenseRecord[]>([
+    {
+      id: '1',
+      date: '2026-11-09',
+      category: '대중교통',
+      amount: 4200,
+      memo: '복귀 지하철 + 광역버스',
+    },
+  ]);
 
   // 로컬 기기 저장 계좌
   const [accounts, setAccounts] = useState<BankAccount[]>(() => {
@@ -170,6 +201,7 @@ export default function App() {
   const [newFuel, setNewFuel] = useState('');
   const [newExtraExpense, setNewExtraExpense] = useState('');
   const [newTip, setNewTip] = useState('');
+  const [receiptImage, setReceiptImage] = useState<string>('');
 
   // 지출 입력 폼 상태
   const [expCategory, setExpCategory] = useState('대중교통');
@@ -185,84 +217,16 @@ export default function App() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      if (session) {
-        fetchUserData(session.user.id);
-      }
     });
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
-      if (session) {
-        fetchUserData(session.user.id);
-      } else {
-        setRecords([]);
-        setExpenses([]);
-      }
     });
 
     return () => subscription.unsubscribe();
   }, []);
-
-  // Supabase DB에서 데이터 불러오기
-  const fetchUserData = async (userId: string) => {
-    setDataLoading(true);
-    try {
-      const { data: recordsData, error: recordsError } = await supabase
-        .from('driving_records')
-        .select('*')
-        .eq('user_id', userId)
-        .order('date', { ascending: false });
-
-      if (recordsError) {
-        console.error('운행 일지 로드 오류:', recordsError);
-      } else if (recordsData) {
-        setRecords(
-          recordsData.map((r: any) => ({
-            id: r.id,
-            date: r.date,
-            startTime: r.start_time || '-',
-            endTime: r.end_time || '-',
-            departure: r.departure,
-            destination: r.destination,
-            grossAmount: Number(r.gross_amount),
-            feeRate: Number(r.fee_rate),
-            fuelAmount: Number(r.fuel_amount),
-            extraExpenseAmount: Number(r.extra_expense_amount),
-            tipAmount: Number(r.tip_amount),
-            isPaid: Boolean(r.is_paid),
-            netAmount: Number(r.net_amount),
-            totalClaimAmount: Number(r.total_claim_amount),
-          }))
-        );
-      }
-
-      const { data: expensesData, error: expensesError } = await supabase
-        .from('expenses')
-        .select('*')
-        .eq('user_id', userId)
-        .order('date', { ascending: false });
-
-      if (expensesError) {
-        console.error('경비 로드 오류:', expensesError);
-      } else if (expensesData) {
-        setExpenses(
-          expensesData.map((e: any) => ({
-            id: e.id,
-            date: e.date,
-            category: e.category,
-            amount: Number(e.amount),
-            memo: e.memo || '',
-          }))
-        );
-      }
-    } catch (err) {
-      console.error('데이터 통신 실패:', err);
-    } finally {
-      setDataLoading(false);
-    }
-  };
 
   // 로그인 핸들러
   const handleLogin = async (e: React.FormEvent) => {
@@ -282,7 +246,7 @@ export default function App() {
     setAuthLoading(false);
   };
 
-  // 회원가입 핸들러
+  // 회원가입 핸들러 (휴대폰 번호 필수 검증 및 DB 저장)
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthLoading(true);
@@ -364,53 +328,30 @@ export default function App() {
     setPwdLoading(false);
   };
 
-  // 운행 등록 핸들러
-  const handleAddRecord = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!session) {
-      alert('로그인이 필요한 기능입니다.');
-      return;
+  // 갤러리 이미지 선택 핸들러
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const imageUrl = URL.createObjectURL(file);
+      setReceiptImage(imageUrl);
     }
+  };
 
-    const gross = cleanNumber(newGross);
-    const feeRate = cleanNumber(newFeeRate);
-    const fuel = cleanNumber(newFuel);
-    const extraExp = cleanNumber(newExtraExpense);
-    const tip = cleanNumber(newTip);
+  // 운행 등록 핸들러
+  const handleAddRecord = (e: React.FormEvent) => {
+    e.preventDefault();
+    const gross = Number(newGross) || 0;
+    const feeRate = Number(newFeeRate) || 0;
+    const fuel = Number(newFuel) || 0;
+    const extraExp = Number(newExtraExpense) || 0;
+    const tip = Number(newTip) || 0;
 
     const feeAmount = gross * (feeRate / 100);
     const net = gross - feeAmount + tip;
     const claimTotal = gross + fuel + extraExp;
-    const recordId = 'rec_' + Date.now().toString();
-
-    const insertPayload = {
-      id: recordId,
-      user_id: session.user.id,
-      date: newDate,
-      start_time: newStartTime || '-',
-      end_time: newEndTime || '-',
-      departure: newDeparture,
-      destination: newDestination,
-      gross_amount: gross,
-      fee_rate: feeRate,
-      fuel_amount: fuel,
-      extra_expense_amount: extraExp,
-      tip_amount: tip,
-      is_paid: false,
-      net_amount: Math.round(net),
-      total_claim_amount: Math.round(claimTotal),
-    };
-
-    const { error } = await supabase.from('driving_records').insert([insertPayload]);
-
-    if (error) {
-      alert('DB 저장 오류 발생: ' + error.message);
-      console.error('Insert error:', error);
-      return;
-    }
 
     const newRecord: DrivingRecord = {
-      id: recordId,
+      id: Date.now().toString(),
       date: newDate,
       startTime: newStartTime || '-',
       endTime: newEndTime || '-',
@@ -421,6 +362,7 @@ export default function App() {
       fuelAmount: fuel,
       extraExpenseAmount: extraExp,
       tipAmount: tip,
+      receiptImage: receiptImage || undefined,
       isPaid: false,
       netAmount: Math.round(net),
       totalClaimAmount: Math.round(claimTotal),
@@ -433,54 +375,23 @@ export default function App() {
     setNewFuel('');
     setNewExtraExpense('');
     setNewTip('');
-  };
-
-  // 수정 모달 열기 핸들러
-  const handleOpenEditModal = (r: DrivingRecord) => {
-    setEditingRecord(r);
-    setEditGross(formatNumberWithComma(r.grossAmount));
-    setEditFuel(formatNumberWithComma(r.fuelAmount));
-    setEditExtra(formatNumberWithComma(r.extraExpenseAmount));
-    setEditTip(formatNumberWithComma(r.tipAmount));
+    setReceiptImage('');
   };
 
   // 운행 기록 수정 저장 핸들러
-  const handleUpdateRecord = async (e: React.FormEvent) => {
+  const handleUpdateRecord = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingRecord || !session) return;
+    if (!editingRecord) return;
 
-    const gross = cleanNumber(editGross);
-    const feeRate = cleanNumber(editingRecord.feeRate);
-    const fuel = cleanNumber(editFuel);
-    const extraExp = cleanNumber(editExtra);
-    const tip = cleanNumber(editTip);
+    const gross = Number(editingRecord.grossAmount) || 0;
+    const feeRate = Number(editingRecord.feeRate) || 0;
+    const fuel = Number(editingRecord.fuelAmount) || 0;
+    const extraExp = Number(editingRecord.extraExpenseAmount) || 0;
+    const tip = Number(editingRecord.tipAmount) || 0;
 
     const feeAmount = gross * (feeRate / 100);
     const net = gross - feeAmount + tip;
     const claimTotal = gross + fuel + extraExp;
-
-    const { error } = await supabase
-      .from('driving_records')
-      .update({
-        date: editingRecord.date,
-        start_time: editingRecord.startTime,
-        end_time: editingRecord.endTime,
-        departure: editingRecord.departure,
-        destination: editingRecord.destination,
-        gross_amount: gross,
-        fee_rate: feeRate,
-        fuel_amount: fuel,
-        extra_expense_amount: extraExp,
-        tip_amount: tip,
-        net_amount: Math.round(net),
-        total_claim_amount: Math.round(claimTotal),
-      })
-      .eq('id', editingRecord.id);
-
-    if (error) {
-      alert('수정 실패: ' + error.message);
-      return;
-    }
 
     const updated: DrivingRecord = {
       ...editingRecord,
@@ -497,31 +408,12 @@ export default function App() {
     setEditingRecord(null);
   };
 
-  // 운행 기록 삭제 핸들러
-  const handleDeleteRecord = async (id: string) => {
-    const { error } = await supabase.from('driving_records').delete().eq('id', id);
-    if (error) {
-      alert('삭제 실패: ' + error.message);
-      return;
-    }
-    setRecords(records.filter((r) => r.id !== id));
-  };
-
   // 입금 상태 토글
-  const togglePaidStatus = async (id: string) => {
-    const target = records.find((r) => r.id === id);
-    if (!target) return;
-    const newStatus = !target.isPaid;
-
-    const { error } = await supabase.from('driving_records').update({ is_paid: newStatus }).eq('id', id);
-    if (error) {
-      alert('상태 변경 실패: ' + error.message);
-      return;
-    }
-    setRecords(records.map((r) => (r.id === id ? { ...r, isPaid: newStatus } : r)));
+  const togglePaidStatus = (id: string) => {
+    setRecords(records.map(r => r.id === id ? { ...r, isPaid: !r.isPaid } : r));
   };
 
-  // 청구 문자 템플릿 생성
+  // 청구 문자 템플릿 실시간 동적 생성 함수 (기사 연락처 자동 포함)
   const buildClaimText = (r: DrivingRecord, withGross: boolean, withFuel: boolean, withExtra: boolean) => {
     const primaryAccount = accounts[0] || { bankName: '은행명', accountNumber: '계좌번호', holder: '예금주' };
     const driverPhone = session?.user?.user_metadata?.phone || '';
@@ -535,7 +427,7 @@ export default function App() {
     }
     if (withFuel && r.fuelAmount > 0) {
       total += r.fuelAmount;
-      itemsText += `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원\n`;
+      itemsText += `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원 (영수증 첨부)\n`;
     }
     if (withExtra && r.extraExpenseAmount > 0) {
       total += r.extraExpenseAmount;
@@ -552,6 +444,7 @@ ${itemsText}--------------------------------
 확인 후 빠른 입금 부탁드립니다. 감사합니다.`;
   };
 
+  // 청구 문자 모달 열기
   const openClaimMessageModal = (r: DrivingRecord) => {
     setSelectedClaimRecord(r);
     setIncludeGross(true);
@@ -561,6 +454,7 @@ ${itemsText}--------------------------------
     setClaimModalOpen(true);
   };
 
+  // 체크박스 클릭 토글
   const handleToggleInclude = (type: 'gross' | 'fuel' | 'extra') => {
     if (!selectedClaimRecord) return;
     const newGross = type === 'gross' ? !includeGross : includeGross;
@@ -573,62 +467,35 @@ ${itemsText}--------------------------------
     setClaimMessageText(buildClaimText(selectedClaimRecord, newGross, newFuel, newExtra));
   };
 
+  // 수정한 문자 복사
   const handleCopyClaimMessage = () => {
     navigator.clipboard.writeText(claimMessageText);
     alert('청구 문자가 복사되었습니다.\n문자나 카카오톡에 붙여넣기 하세요!');
     setClaimModalOpen(false);
   };
 
+  // 경과일 계산
   const getElapsedDays = (recordDate: string) => {
     const today = new Date('2026-11-09');
     const target = new Date(recordDate);
     const diffTime = today.getTime() - target.getTime();
-    return Math.max(0, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
+    return Math.floor(diffTime / (1000 * 60 * 60 * 24));
   };
 
-  // 경비 등록 핸들러
-  const handleAddExpense = async (e: React.FormEvent) => {
+  // 지출 등록 핸들러
+  const handleAddExpense = (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanAmt = cleanNumber(expAmount);
-    if (!cleanAmt || !session) return;
-    const expenseId = 'exp_' + Date.now().toString();
-
-    const insertPayload = {
-      id: expenseId,
-      user_id: session.user.id,
-      date: newDate,
-      category: expCategory,
-      amount: cleanAmt,
-      memo: expMemo,
-    };
-
-    const { error } = await supabase.from('expenses').insert([insertPayload]);
-    if (error) {
-      alert('경비 저장 실패: ' + error.message);
-      return;
-    }
-
+    if (!expAmount) return;
     const newExp: ExpenseRecord = {
-      id: expenseId,
+      id: Date.now().toString(),
       date: newDate,
       category: expCategory,
-      amount: cleanAmt,
+      amount: Number(expAmount) || 0,
       memo: expMemo,
     };
-
     setExpenses([newExp, ...expenses]);
     setExpAmount('');
     setExpMemo('');
-  };
-
-  // 경비 삭제 핸들러
-  const handleDeleteExpense = async (id: string) => {
-    const { error } = await supabase.from('expenses').delete().eq('id', id);
-    if (error) {
-      alert('삭제 실패: ' + error.message);
-      return;
-    }
-    setExpenses(expenses.filter((e) => e.id !== id));
   };
 
   // 계좌 추가 핸들러
@@ -648,7 +515,7 @@ ${itemsText}--------------------------------
   };
 
   // 미수금 통계
-  const unpaidRecords = records.filter((r) => !r.isPaid);
+  const unpaidRecords = records.filter(r => !r.isPaid);
   const totalUnpaidAmount = unpaidRecords.reduce((acc, cur) => acc + cur.totalClaimAmount, 0);
   const totalUnpaidReimbursements = unpaidRecords.reduce((acc, cur) => acc + cur.fuelAmount + cur.extraExpenseAmount, 0);
 
@@ -665,7 +532,7 @@ ${itemsText}--------------------------------
   const filteredRecords = filterAllDates ? records : records.filter((r) => r.date === selectedDate);
   const filteredExpenses = filterAllDates ? expenses : expenses.filter((e) => e.date === selectedDate);
 
-  // 1. 미로그인 뷰
+  // 1. 미로그인 뷰 (연락처 필수 입력 포함)
   if (!session) {
     return (
       <div className="min-h-screen bg-[#070B14] text-slate-100 flex items-center justify-center p-4 font-sans relative selection:bg-indigo-500 selection:text-white">
@@ -751,6 +618,7 @@ ${itemsText}--------------------------------
                 />
               </div>
 
+              {/* 휴대폰 번호 필수 입력창 */}
               <div>
                 <label className="block text-[11px] font-semibold text-slate-300 mb-1 flex items-center gap-1">
                   <Phone className="w-3.5 h-3.5 text-indigo-400" />
@@ -789,6 +657,7 @@ ${itemsText}--------------------------------
                 />
               </div>
 
+              {/* 약관 및 고지 동의 */}
               <div className="pt-2">
                 <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2.5">
                   <div className="flex items-start gap-2.5">
@@ -841,7 +710,7 @@ ${itemsText}--------------------------------
           )}
         </div>
 
-        {/* 약관 및 고지 모달 */}
+        {/* 개인정보 처리방침 및 고지 모달 */}
         {showPrivacyModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn">
             <div className="w-full max-w-lg bg-[#0E1424] border border-slate-800 rounded-2xl p-6 shadow-2xl relative">
@@ -862,7 +731,7 @@ ${itemsText}--------------------------------
                   <h4 className="font-bold text-white mb-1">1. 수집하는 개인정보 항목 및 저장 방식</h4>
                   <p className="text-slate-400">
                     - <strong className="text-indigo-300">클라우드(서버) 저장 필수 항목:</strong> 로그인 이메일, <span className="text-white font-bold underline">휴대폰 번호(연락처)</span>, 암호화된 비밀번호, 탁송 운행 기록(일자, 시간, 출발지, 도착지, 탁송료, 대납 주유비, 대납 경비, 팁)<br />
-                    - <strong className="text-emerald-300">기기 로컬(단말기) 저장 항목:</strong> 기사 송금 계좌번호는 외부 서버로 전송되지 않으며, 사용자 본인의 스마트폰/PC 웹 브라우저(localStorage)에만 안전하게 보관됩니다.
+                    - <strong className="text-emerald-300">기기 로컬(단말기) 저장 항목:</strong> 기사 송금 계좌번호 및 영수증 사진은 외부 서버로 전송되지 않으며, 사용자 본인의 스마트폰/PC 웹 브라우저(localStorage)에만 안전하게 보관됩니다.
                   </p>
                 </div>
 
@@ -1004,16 +873,9 @@ ${itemsText}--------------------------------
                 {currentMonthPrefix.replace('-', '년 ')}월 총 누적 결산
               </h2>
             </div>
-            <div className="flex items-center gap-2">
-              {dataLoading && (
-                <span className="text-[10px] text-slate-400 flex items-center gap-1">
-                  <RefreshCw className="w-3 h-3 animate-spin text-indigo-400" /> 동기화 중...
-                </span>
-              )}
-              <span className="text-[11px] font-semibold text-indigo-400 bg-indigo-500/10 px-2.5 py-0.5 rounded-full border border-indigo-500/20">
-                월간 집계 ({monthlyRecords.length}회 운행)
-              </span>
-            </div>
+            <span className="text-[11px] font-semibold text-indigo-400 bg-indigo-500/10 px-2.5 py-0.5 rounded-full border border-indigo-500/20">
+              월간 집계 ({monthlyRecords.length}회 운행)
+            </span>
           </div>
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1187,13 +1049,12 @@ ${itemsText}--------------------------------
                     <div>
                       <label className="block text-[11px] font-semibold text-slate-300 mb-1">탁송료(원)</label>
                       <input
-                        type="text"
-                        inputMode="numeric"
-                        placeholder="85,000"
+                        type="number"
+                        placeholder="85000"
                         value={newGross}
-                        onChange={(e) => setNewGross(formatNumberWithComma(e.target.value))}
+                        onChange={(e) => setNewGross(e.target.value)}
                         required
-                        className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-bold text-xs"
+                        className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
                       />
                     </div>
                     <div>
@@ -1215,11 +1076,10 @@ ${itemsText}--------------------------------
                         대납 주유/충전비 (회수금)
                       </label>
                       <input
-                        type="text"
-                        inputMode="numeric"
-                        placeholder="선결제 금액 (예: 50,000)"
+                        type="number"
+                        placeholder="사비 선결제 금액 (없으면 0)"
                         value={newFuel}
-                        onChange={(e) => setNewFuel(formatNumberWithComma(e.target.value))}
+                        onChange={(e) => setNewFuel(e.target.value)}
                         className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-bold text-xs"
                       />
                     </div>
@@ -1230,14 +1090,47 @@ ${itemsText}--------------------------------
                         대납 추가경비 (통행료/세차비/주차비)
                       </label>
                       <input
-                        type="text"
-                        inputMode="numeric"
-                        placeholder="선결제 추가 경비 (없으면 0)"
+                        type="number"
+                        placeholder="선결제한 추가 경비 (없으면 0)"
                         value={newExtraExpense}
-                        onChange={(e) => setNewExtraExpense(formatNumberWithComma(e.target.value))}
+                        onChange={(e) => setNewExtraExpense(e.target.value)}
                         className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-bold text-xs"
                       />
                     </div>
+
+                    <div className="pt-1">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        ref={fileInputRef}
+                        onChange={handleImageChange}
+                        className="hidden"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="w-full py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs text-slate-200 font-medium flex items-center justify-center gap-2 cursor-pointer transition-all"
+                      >
+                        <Camera className="w-3.5 h-3.5 text-indigo-400" />
+                        {receiptImage ? '영수증 첨부 완료 (변경)' : '스마트폰 갤러리에서 영수증 선택'}
+                      </button>
+                    </div>
+
+                    {receiptImage && (
+                      <div className="relative p-1 bg-slate-950 rounded-lg border border-slate-800 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <img src={receiptImage} alt="영수증" className="w-9 h-9 object-cover rounded" />
+                          <span className="text-[11px] text-emerald-400 font-semibold">영수증 등록됨</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setReceiptImage('')}
+                          className="text-slate-500 hover:text-rose-400 p-1"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {/* 순수 수입용 팁 */}
@@ -1247,11 +1140,10 @@ ${itemsText}--------------------------------
                       손님 수고비 / 팁 (순수 기사 수익)
                     </label>
                     <input
-                      type="text"
-                      inputMode="numeric"
+                      type="number"
                       placeholder="청구문자 미포함, 내 순익에만 합산"
                       value={newTip}
-                      onChange={(e) => setNewTip(formatNumberWithComma(e.target.value))}
+                      onChange={(e) => setNewTip(e.target.value)}
                       className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
                     />
                   </div>
@@ -1260,7 +1152,7 @@ ${itemsText}--------------------------------
                     type="submit"
                     className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-lg transition-all shadow-md cursor-pointer"
                   >
-                    운행 등록 (DB 영구 저장)
+                    운행 등록 (미입금 상태로 저장)
                   </button>
                 </form>
               </div>
@@ -1276,9 +1168,7 @@ ${itemsText}--------------------------------
                 </div>
 
                 {filteredRecords.length === 0 ? (
-                  <div className="py-12 text-center text-slate-500 text-xs">
-                    {dataLoading ? '데이터를 불러오는 중입니다...' : '등록된 운행 기록이 없습니다.'}
-                  </div>
+                  <div className="py-12 text-center text-slate-500 text-xs">해당 일자에 등록된 운행이 없습니다.</div>
                 ) : (
                   <div className="space-y-3 max-h-[560px] overflow-y-auto pr-1">
                     {filteredRecords.map((r) => {
@@ -1325,8 +1215,18 @@ ${itemsText}--------------------------------
                             </div>
 
                             <div className="flex items-center gap-2">
+                              {r.receiptImage && (
+                                <button
+                                  onClick={() => setPreviewImage(r.receiptImage || null)}
+                                  className="p-1.5 rounded-lg bg-slate-800 text-indigo-400 cursor-pointer"
+                                  title="영수증 보기"
+                                >
+                                  <ImageIcon className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+
                               <button
-                                onClick={() => handleOpenEditModal(r)}
+                                onClick={() => setEditingRecord(r)}
                                 className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-indigo-300 hover:text-white transition-all cursor-pointer"
                                 title="운행 내역 수정"
                               >
@@ -1334,7 +1234,7 @@ ${itemsText}--------------------------------
                               </button>
 
                               <button
-                                onClick={() => handleDeleteRecord(r.id)}
+                                onClick={() => setRecords(records.filter((item) => item.id !== r.id))}
                                 className="p-1.5 text-slate-500 hover:text-rose-400 cursor-pointer"
                                 title="삭제"
                               >
@@ -1413,6 +1313,16 @@ ${itemsText}--------------------------------
                       </div>
 
                       <div className="flex items-center gap-2 self-end md:self-auto">
+                        {r.receiptImage && (
+                          <button
+                            onClick={() => setPreviewImage(r.receiptImage || null)}
+                            className="p-2 rounded-lg bg-slate-800 text-indigo-400 hover:bg-slate-700 transition-all cursor-pointer"
+                            title="주유 영수증 사진 확인"
+                          >
+                            <ImageIcon className="w-4 h-4" />
+                          </button>
+                        )}
+
                         <button
                           onClick={() => openClaimMessageModal(r)}
                           className="px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md cursor-pointer transition-all"
@@ -1472,13 +1382,12 @@ ${itemsText}--------------------------------
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-300 mb-1">지출 금액(원)</label>
                   <input
-                    type="text"
-                    inputMode="numeric"
-                    placeholder="4,500"
+                    type="number"
+                    placeholder="4500"
                     value={expAmount}
-                    onChange={(e) => setExpAmount(formatNumberWithComma(e.target.value))}
+                    onChange={(e) => setExpAmount(e.target.value)}
                     required
-                    className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-bold text-xs"
+                    className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
                   />
                 </div>
                 <div>
@@ -1492,7 +1401,7 @@ ${itemsText}--------------------------------
                   />
                 </div>
                 <button type="submit" className="w-full py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-lg cursor-pointer">
-                  경비 등록 (DB 저장)
+                  경비 등록
                 </button>
               </form>
             </div>
@@ -1511,7 +1420,7 @@ ${itemsText}--------------------------------
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="text-sm font-bold text-rose-400">-{exp.amount.toLocaleString()}원</span>
-                      <button onClick={() => handleDeleteExpense(exp.id)} className="text-slate-500 hover:text-rose-400 p-1 cursor-pointer">
+                      <button onClick={() => setExpenses(expenses.filter((e) => e.id !== exp.id))} className="text-slate-500 hover:text-rose-400 p-1 cursor-pointer">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
@@ -1673,12 +1582,11 @@ ${itemsText}--------------------------------
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-300 mb-1">탁송료(원)</label>
                   <input
-                    type="text"
-                    inputMode="numeric"
-                    value={editGross}
-                    onChange={(e) => setEditGross(formatNumberWithComma(e.target.value))}
+                    type="number"
+                    value={editingRecord.grossAmount}
+                    onChange={(e) => setEditingRecord({ ...editingRecord, grossAmount: Number(e.target.value) })}
                     required
-                    className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-bold text-xs"
+                    className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
                   />
                 </div>
                 <div>
@@ -1696,21 +1604,19 @@ ${itemsText}--------------------------------
                 <div>
                   <label className="block text-[11px] font-semibold text-indigo-300 mb-1">대납 주유비</label>
                   <input
-                    type="text"
-                    inputMode="numeric"
-                    value={editFuel}
-                    onChange={(e) => setEditFuel(formatNumberWithComma(e.target.value))}
-                    className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-bold text-xs"
+                    type="number"
+                    value={editingRecord.fuelAmount}
+                    onChange={(e) => setEditingRecord({ ...editingRecord, fuelAmount: Number(e.target.value) })}
+                    className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
                   />
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold text-sky-300 mb-1">대납 추가경비</label>
                   <input
-                    type="text"
-                    inputMode="numeric"
-                    value={editExtra}
-                    onChange={(e) => setEditExtra(formatNumberWithComma(e.target.value))}
-                    className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-bold text-xs"
+                    type="number"
+                    value={editingRecord.extraExpenseAmount}
+                    onChange={(e) => setEditingRecord({ ...editingRecord, extraExpenseAmount: Number(e.target.value) })}
+                    className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
                   />
                 </div>
               </div>
@@ -1718,10 +1624,9 @@ ${itemsText}--------------------------------
               <div>
                 <label className="block text-[11px] font-semibold text-emerald-400 mb-1">팁/수고비 (순익 가산용)</label>
                 <input
-                  type="text"
-                  inputMode="numeric"
-                  value={editTip}
-                  onChange={(e) => setEditTip(formatNumberWithComma(e.target.value))}
+                  type="number"
+                  value={editingRecord.tipAmount}
+                  onChange={(e) => setEditingRecord({ ...editingRecord, tipAmount: Number(e.target.value) })}
                   className="w-full px-3 py-2 rounded-lg bg-white text-slate-900 font-semibold text-xs"
                 />
               </div>
@@ -1738,7 +1643,7 @@ ${itemsText}--------------------------------
                   type="submit"
                   className="flex-1 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-md cursor-pointer"
                 >
-                  수정 완료 (DB 갱신)
+                  수정 완료
                 </button>
               </div>
             </form>
@@ -1834,6 +1739,26 @@ ${itemsText}--------------------------------
               >
                 <Copy className="w-3.5 h-3.5" /> 청구 문구 복사하기
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 영수증 원본 보기 모달 */}
+      {previewImage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
+          <div className="relative max-w-lg w-full bg-slate-900 border border-slate-800 rounded-2xl p-4">
+            <button
+              onClick={() => setPreviewImage(null)}
+              className="absolute top-3 right-3 p-1.5 rounded-lg bg-black/60 text-white hover:bg-black/90 cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <div className="text-xs font-bold text-slate-300 mb-3 flex items-center gap-2">
+              <Receipt className="w-4 h-4 text-indigo-400" /> 주유 영수증 사진 확인
+            </div>
+            <div className="max-h-[70vh] overflow-auto flex items-center justify-center">
+              <img src={previewImage} alt="영수증 원본" className="max-w-full h-auto rounded-lg" />
             </div>
           </div>
         </div>
