@@ -332,6 +332,7 @@ export default function App() {
     if (!error) { setExpenses([{ id: expenseId, date: newDate, category: expCategory, amount: cleanAmt, memo: expMemo }, ...expenses]); setExpAmount(''); setExpMemo(''); }
   };
   const handleDeleteExpense = async (id: string) => { await supabase.from('expenses').delete().eq('id', id); setExpenses(expenses.filter((e) => e.id !== id)); };
+  
   const handleAddAccount = (e: React.FormEvent) => {
     e.preventDefault(); if (!bankName || !accountNumber) return;
     setAccounts([...accounts, { id: Date.now().toString(), bankName, accountNumber, holder: holder || '본인' }]);
@@ -733,8 +734,11 @@ export default function App() {
         {activeTab === 'wallet' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 fade-in-text">
             <div className="glass-card rounded-xl p-6 shadow-lg h-fit">
-              <h3 className="text-sm font-bold text-white mb-1 flex items-center gap-2"><CreditCard className="w-4 h-4 text-[#38BDF8]" />정산 입금용 계좌 추가</h3>
-              <p className="text-[11px] text-[#38BDF8] font-medium mb-4 ml-6">정산받을 계좌를 등록해두면 청구 문자 생성 시 자동으로 첨부됩니다. (기기 로컬에만 보관)</p>
+              <h3 className="text-sm font-bold text-white mb-1 flex items-center gap-2"><CreditCard className="w-4 h-4 text-[#38BDF8]" />정산 및 송금용 계좌 추가</h3>
+              <p className="text-[11px] text-[#38BDF8] font-medium mb-4 ml-6 leading-relaxed">
+                정산받을 계좌와 각종 유료앱에 입금할 계좌들을 모두 등록해두면 계좌번호 복사로 간편하게 송금과 입금을 받을 수 있는 기능입니다.<br/>
+                <span className="text-slate-400 font-normal">(본인 휴대폰에만 안전하게 보관됩니다)</span>
+              </p>
               <form onSubmit={handleAddAccount} className="space-y-3.5">
                 <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">은행명</label><input type="text" placeholder="예: 신한은행" value={bankName} onChange={(e) => setBankName(e.target.value)} required className="w-full px-3 py-2 rounded-lg" /></div>
                 <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">계좌번호 (- 제외)</label><input type="text" placeholder="계좌번호 입력" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} required className="w-full px-3 py-2 rounded-lg font-mono" /></div>
