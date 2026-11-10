@@ -24,7 +24,10 @@ import {
   Edit2,
   Filter,
   RotateCcw,
-  CalendarDays
+  CalendarDays,
+  ShieldCheck,
+  ChevronRight,
+  Smartphone
 } from 'lucide-react';
 
 // Supabase 클라이언트 초기화
@@ -62,10 +65,17 @@ interface BankAccount {
 
 export default function App() {
   const [session, setSession] = useState<any>(null);
+  
+  // 인증 관련 상태
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordConfirm, setPasswordConfirm] = useState('');
+  const [agreePrivacy, setAgreePrivacy] = useState(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState('');
+  const [authSuccess, setAuthSuccess] = useState('');
 
   // 탭 상태
   const [activeTab, setActiveTab] = useState<'records' | 'expense' | 'wallet' | 'analytics'>('records');
@@ -74,7 +84,7 @@ export default function App() {
   const [selectedDate, setSelectedDate] = useState<string>('2026-11-09');
   const [filterAllDates, setFilterAllDates] = useState<boolean>(false);
 
-  // 계정 모달
+  // 계정 보안 모달
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [pwdLoading, setPwdLoading] = useState(false);
@@ -122,15 +132,32 @@ export default function App() {
     },
   ]);
 
-  // 저장 계좌 리스트
-  const [accounts, setAccounts] = useState<BankAccount[]>([
-    {
-      id: '1',
-      bankName: '신한은행',
-      accountNumber: '110-123-456789',
-      holder: '공민준',
-    },
-  ]);
+  // 사용자 로컬 기기(localStorage) 전용 계좌 리스트 상태
+  const [accounts, setAccounts] = useState<BankAccount[]>(() => {
+    try {
+      const saved = localStorage.getItem('jundriver_local_accounts');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error('로컬 계좌 로드 실패:', e);
+    }
+    return [
+      {
+        id: '1',
+        bankName: '신한은행',
+        accountNumber: '110-123-456789',
+        holder: '공민준',
+      },
+    ];
+  });
+
+  // 로컬 계좌 상태 변경 시 localStorage 자동 갱신
+  useEffect(() => {
+    try {
+      localStorage.setItem('jundriver_local_accounts', JSON.stringify(accounts));
+    } catch (e) {
+      console.error('로컬 계좌 저장 실패:', e);
+    }
+  }, [accounts]);
 
   // 신규 등록 폼 상태
   const [newDate, setNewDate] = useState('2026-11-09');
@@ -152,7 +179,7 @@ export default function App() {
   const [accountNumber, setAccountNumber] = useState('');
   const [holder, setHolder] = useState('');
 
-  // 세션 감지
+  // Supabase 세션 감지
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -172,6 +199,7 @@ export default function App() {
     e.preventDefault();
     setAuthLoading(true);
     setAuthError('');
+    setAuthSuccess('');
 
     const { error } = await supabase.auth.signInWithPassword({
       email,
@@ -179,7 +207,57 @@ export default function App() {
     });
 
     if (error) {
-      setAuthError('이메일 또는 비밀번호를 다시 확인해 주세요.');
+      setAuthError('이메일 또는 비밀번호가 일치하지 않습니다.');
+    }
+    setAuthLoading(false);
+  };
+
+  // 회원가입 핸들러
+  const handleSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthLoading(true);
+    setAuthError('');
+    setAuthSuccess('');
+
+    if (password.length < 6) {
+      setAuthError('비밀번호는 최소 6자리 이상이어야 합니다.');
+      setAuthLoading(false);
+      return;
+    }
+
+    if (password !== passwordConfirm) {
+      setAuthError('비밀번호와 비밀번호 확인이 일치하지 않습니다.');
+      setAuthLoading(false);
+      return;
+    }
+
+    if (!agreePrivacy) {
+      setAuthError('개인정보 수집 및 이용에 동의하셔야 가입이 가능합니다.');
+      setAuthLoading(false);
+      return;
+    }
+
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          privacy_policy_agreed: true,
+          privacy_policy_agreed_at: new Date().toISOString(),
+          privacy_policy_version: 'v1.1_local_wallet',
+        },
+      },
+    });
+
+    if (error) {
+      setAuthError('가입 실패: ' + error.message);
+    } else {
+      if (data.session) {
+        setAuthSuccess('회원가입이 완료되어 자동 로그인되었습니다.');
+      } else {
+        setAuthSuccess('회원가입 요청이 완료되었습니다. 로그인해 주세요.');
+        setAuthMode('login');
+      }
     }
     setAuthLoading(false);
   };
@@ -281,7 +359,7 @@ export default function App() {
     setExpMemo('');
   };
 
-  // 계좌 추가 핸들러
+  // 기기 로컬 계좌 추가 핸들러 (서버 저장 X, localStorage 보관)
   const handleAddAccount = (e: React.FormEvent) => {
     e.preventDefault();
     if (!bankName || !accountNumber) return;
@@ -299,40 +377,41 @@ export default function App() {
     setHolder('');
   };
 
-  // 현재 선택된 월(YYYY-MM) 문자열 도출
-  const currentMonthPrefix = selectedDate.substring(0, 7); // 예: '2026-11'
+  // 기기 로컬 계좌 삭제 핸들러
+  const handleDeleteAccount = (id: string) => {
+    setAccounts(accounts.filter((a) => a.id !== id));
+  };
 
-  // 1. 월간(Monthly) 통계 계산
+  // 월간 집계
+  const currentMonthPrefix = selectedDate.substring(0, 7);
   const monthlyRecords = records.filter((r) => r.date.startsWith(currentMonthPrefix));
   const monthlyExpenses = expenses.filter((e) => e.date.startsWith(currentMonthPrefix));
-
   const monthlyGross = monthlyRecords.reduce((acc, cur) => acc + cur.grossAmount, 0);
   const monthlyNet = monthlyRecords.reduce((acc, cur) => acc + cur.netAmount, 0);
   const monthlyExpense = monthlyExpenses.reduce((acc, cur) => acc + cur.amount, 0);
   const monthlyProfit = monthlyNet - monthlyExpense;
 
-  // 2. 일별/선택기간(Filtered) 통계 계산
+  // 일자별/선택기간 집계
   const filteredRecords = filterAllDates
     ? records
     : records.filter((r) => r.date === selectedDate);
-
   const filteredExpenses = filterAllDates
     ? expenses
     : expenses.filter((e) => e.date === selectedDate);
-
   const dailyGross = filteredRecords.reduce((acc, cur) => acc + cur.grossAmount, 0);
   const dailyNet = filteredRecords.reduce((acc, cur) => acc + cur.netAmount, 0);
   const dailyExpense = filteredExpenses.reduce((acc, cur) => acc + cur.amount, 0);
   const dailyProfit = dailyNet - dailyExpense;
 
-  // 1. 미로그인 뷰
+  // 1. 미로그인: 로그인 및 개인정보 동의 화면
   if (!session) {
     return (
       <div className="min-h-screen bg-[#070B14] text-slate-100 flex items-center justify-center p-4 font-sans relative selection:bg-indigo-500 selection:text-white">
         <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[380px] h-[380px] bg-indigo-500/10 rounded-full blur-[100px] pointer-events-none" />
-        <div className="w-full max-w-[390px] bg-[#0E1424]/90 border border-slate-800/80 rounded-2xl p-8 backdrop-blur-xl shadow-2xl relative z-10">
-          <div className="flex flex-col items-center mb-8">
-            <div className="w-13 h-13 p-3 bg-slate-900 border border-slate-700/60 rounded-xl flex items-center justify-center shadow-inner mb-4">
+
+        <div className="w-full max-w-[420px] bg-[#0E1424]/90 border border-slate-800/80 rounded-2xl p-7 backdrop-blur-xl shadow-2xl relative z-10">
+          <div className="flex flex-col items-center mb-6">
+            <div className="w-12 h-12 p-2.5 bg-slate-900 border border-slate-700/60 rounded-xl flex items-center justify-center shadow-inner mb-3">
               <Wallet className="w-6 h-6 text-indigo-400" />
             </div>
             <div className="flex items-center gap-1">
@@ -341,54 +420,240 @@ export default function App() {
                 PRO
               </span>
             </div>
-            <p className="text-xs text-slate-400 mt-1.5">프로 기사용 스마트 디지털 지갑 & 운행 일지</p>
+            <p className="text-xs text-slate-400 mt-1">프로 기사용 스마트 디지털 지갑 & 운행 일지</p>
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-300 mb-1.5">이메일 계정</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@driver.com"
-                required
-                className="w-full px-3.5 py-2.5 rounded-lg bg-white text-slate-900 font-semibold text-sm border border-slate-200 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all placeholder:text-slate-400 placeholder:font-normal"
-              />
-            </div>
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-300 mb-1.5">비밀번호</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="비밀번호를 입력하세요"
-                required
-                className="w-full px-3.5 py-2.5 rounded-lg bg-white text-slate-900 font-semibold text-sm border border-slate-200 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all placeholder:text-slate-400 placeholder:font-normal"
-              />
-            </div>
-
-            {authError && (
-              <div className="flex items-center gap-2 p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-400 text-xs">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{authError}</span>
-              </div>
-            )}
-
+          <div className="flex bg-slate-900/80 p-1 rounded-xl border border-slate-800 mb-5">
             <button
-              type="submit"
-              disabled={authLoading}
-              className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-500 active:scale-[0.99] text-white font-semibold text-sm rounded-lg shadow-lg shadow-indigo-600/20 border border-indigo-400/20 transition-all duration-150 disabled:opacity-50 mt-2 cursor-pointer"
+              type="button"
+              onClick={() => {
+                setAuthMode('login');
+                setAuthError('');
+                setAuthSuccess('');
+              }}
+              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                authMode === 'login'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
             >
-              {authLoading ? '로그인 중...' : '로그인'}
+              로그인
             </button>
-          </form>
+            <button
+              type="button"
+              onClick={() => {
+                setAuthMode('signup');
+                setAuthError('');
+                setAuthSuccess('');
+              }}
+              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                authMode === 'signup'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              회원가입
+            </button>
+          </div>
+
+          {authMode === 'login' ? (
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1.5">이메일 계정</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="name@driver.com"
+                  required
+                  className="w-full px-3.5 py-2.5 rounded-lg bg-white text-slate-900 font-semibold text-sm border border-slate-200 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all placeholder:text-slate-400"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1.5">비밀번호</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="비밀번호를 입력하세요"
+                  required
+                  className="w-full px-3.5 py-2.5 rounded-lg bg-white text-slate-900 font-semibold text-sm border border-slate-200 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all placeholder:text-slate-400"
+                />
+              </div>
+
+              {authError && (
+                <div className="flex items-center gap-2 p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-400 text-xs">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{authError}</span>
+                </div>
+              )}
+              {authSuccess && (
+                <div className="flex items-center gap-2 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-400 text-xs">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span>{authSuccess}</span>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={authLoading}
+                className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-500 active:scale-[0.99] text-white font-semibold text-sm rounded-lg shadow-lg shadow-indigo-600/20 border border-indigo-400/20 transition-all duration-150 disabled:opacity-50 mt-2 cursor-pointer"
+              >
+                {authLoading ? '로그인 중...' : '클라우드 로그인'}
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleSignUp} className="space-y-3.5">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1">이메일 계정 (ID)</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="name@driver.com"
+                  required
+                  className="w-full px-3.5 py-2.5 rounded-lg bg-white text-slate-900 font-semibold text-sm border border-slate-200 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all placeholder:text-slate-400"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1">비밀번호 (6자리 이상)</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="비밀번호 설정"
+                  required
+                  className="w-full px-3.5 py-2.5 rounded-lg bg-white text-slate-900 font-semibold text-sm border border-slate-200 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all placeholder:text-slate-400"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1">비밀번호 확인</label>
+                <input
+                  type="password"
+                  value={passwordConfirm}
+                  onChange={(e) => setPasswordConfirm(e.target.value)}
+                  placeholder="비밀번호 재입력"
+                  required
+                  className="w-full px-3.5 py-2.5 rounded-lg bg-white text-slate-900 font-semibold text-sm border border-slate-200 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all placeholder:text-slate-400"
+                />
+              </div>
+
+              <div className="pt-2">
+                <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
+                  <div className="flex items-start gap-2.5">
+                    <input
+                      type="checkbox"
+                      id="privacyCheck"
+                      checked={agreePrivacy}
+                      onChange={(e) => setAgreePrivacy(e.target.checked)}
+                      className="mt-0.5 w-4 h-4 rounded border-slate-700 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                    />
+                    <label htmlFor="privacyCheck" className="text-xs text-slate-200 font-medium cursor-pointer leading-tight">
+                      [필수] 개인정보 수집 및 운행일지 클라우드 저장에 동의합니다.
+                    </label>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-slate-400 pl-6">
+                    <span className="text-emerald-400 flex items-center gap-1">
+                      <Smartphone className="w-3 h-3" /> 계좌번호는 서버 저장 없이 기기에만 보관
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowPrivacyModal(true)}
+                      className="text-indigo-400 hover:text-indigo-300 flex items-center font-semibold cursor-pointer underline"
+                    >
+                      전문보기 <ChevronRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {authError && (
+                <div className="flex items-center gap-2 p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-400 text-xs">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{authError}</span>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={authLoading}
+                className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-500 active:scale-[0.99] text-white font-semibold text-sm rounded-lg shadow-lg shadow-indigo-600/20 border border-indigo-400/20 transition-all duration-150 disabled:opacity-50 mt-2 cursor-pointer"
+              >
+                {authLoading ? '계정 생성 중...' : '동의하고 회원가입 완료'}
+              </button>
+            </form>
+          )}
         </div>
+
+        {/* 개인정보 처리방침 모달 */}
+        {showPrivacyModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+            <div className="w-full max-w-lg bg-[#0E1424] border border-slate-800 rounded-2xl p-6 shadow-2xl relative">
+              <button
+                onClick={() => setShowPrivacyModal(false)}
+                className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="flex items-center gap-2.5 mb-4">
+                <ShieldCheck className="w-5 h-5 text-indigo-400" />
+                <h3 className="text-sm font-bold text-white">개인정보 수집 및 보관 방침 전문</h3>
+              </div>
+
+              <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 text-xs text-slate-300 space-y-3.5 max-h-[360px] overflow-y-auto leading-relaxed">
+                <div>
+                  <h4 className="font-bold text-white mb-1">1. 수집하는 정보 및 저장 위치 구분</h4>
+                  <p className="text-slate-400">
+                    - <strong className="text-indigo-300">클라우드 서버(Supabase) 저장 항목:</strong> 이메일 계정, 암호화된 비밀번호, 탁송/대리 운행 기록(일자, 출발지, 도착지, 매출, 수수료, 팁), 지출 내역<br />
+                    - <strong className="text-emerald-300">사용자 기기(로컬) 전용 보관 항목:</strong> 송금 및 입금용 은행 계좌 정보는 중앙 데이터베이스에 일체 저장되지 않으며, 사용자 본인의 스마트폰/PC 웹 브라우저(localStorage)에만 안전하게 독립 보관됩니다.
+                  </p>
+                </div>
+
+                <div>
+                  <h4 className="font-bold text-white mb-1">2. 개인정보 수집 및 이용 목적</h4>
+                  <p className="text-slate-400">
+                    - 기사 회원 식별 및 로그인 상태 유지<br />
+                    - 운행 일지 및 수입·지출 데이터의 기기 간 백업 및 동기화
+                  </p>
+                </div>
+
+                <div>
+                  <h4 className="font-bold text-white mb-1">3. 보유 및 이용 기간</h4>
+                  <p className="text-slate-400">
+                    - 클라우드 계정 데이터는 회원 탈퇴 시까지 보관되며, 탈퇴 시 지체 없이 파기됩니다.<br />
+                    - 로컬 계좌 정보는 브라우저 캐시 삭제 시 또는 본인이 삭제 버튼을 누를 때 즉시 삭제됩니다.
+                  </p>
+                </div>
+
+                <div>
+                  <h4 className="font-bold text-white mb-1">4. 동의를 거부할 권리</h4>
+                  <p className="text-slate-400">
+                    귀하는 개인정보 수집 동의를 거부할 권리가 있으며, 거부 시 회원가입 및 클라우드 운행일지 동기화 기능 이용이 제한됩니다.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAgreePrivacy(true);
+                    setShowPrivacyModal(false);
+                  }}
+                  className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer"
+                >
+                  확인하고 동의하기
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
 
-  // 2. 로그인 완료 대시보드
+  // 2. 메인 대시보드
   return (
     <div className="min-h-screen bg-[#070B14] text-slate-100 font-sans pb-20 selection:bg-indigo-500 selection:text-white">
       {/* 상단 헤더 */}
@@ -430,10 +695,10 @@ export default function App() {
         </div>
       </header>
 
-      {/* 메인 본문 컨테이너 */}
+      {/* 본문 컨테이너 */}
       <main className="max-w-[1400px] mx-auto px-4 lg:px-8 pt-6 space-y-6">
         
-        {/* 1. 최상단: 당월(Monthly) 전체 누적 합계 지표 바 */}
+        {/* 1. 최상단: 당월 누적 결산 바 */}
         <section className="bg-gradient-to-r from-[#0E1424] via-[#121B30] to-[#0E1424] border border-indigo-500/30 rounded-2xl p-5 shadow-xl relative overflow-hidden">
           <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-800/80">
             <div className="flex items-center gap-2">
@@ -588,7 +853,7 @@ export default function App() {
             }`}
           >
             <CreditCard className="w-3.5 h-3.5" />
-            기사 송금 계좌
+            기사 송금 계좌 (기기 로컬)
           </button>
           <button
             onClick={() => setActiveTab('analytics')}
@@ -606,7 +871,6 @@ export default function App() {
         {/* TAB 1: 운행 일지 */}
         {activeTab === 'records' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* 운행 등록 폼 */}
             <div className="bg-[#0E1424]/80 border border-slate-800/80 rounded-xl p-5">
               <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
                 <PlusCircle className="w-4 h-4 text-indigo-400" />
@@ -712,7 +976,6 @@ export default function App() {
               </form>
             </div>
 
-            {/* 운행 일지 목록 */}
             <div className="lg:col-span-2 bg-[#0E1424]/80 border border-slate-800/80 rounded-xl p-5">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
@@ -902,14 +1165,21 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 3: 송금 계좌 */}
+        {/* TAB 3: 송금 계좌 (로컬 브라우저 독립 보관) */}
         {activeTab === 'wallet' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="bg-[#0E1424]/80 border border-slate-800/80 rounded-xl p-5">
-              <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
-                <CreditCard className="w-4 h-4 text-indigo-400" />
-                송금용 계좌 추가
-              </h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <CreditCard className="w-4 h-4 text-indigo-400" />
+                  송금용 계좌 추가
+                </h3>
+              </div>
+              <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-300 mb-4 flex items-center gap-2">
+                <Smartphone className="w-4 h-4 shrink-0" />
+                <span>계좌번호는 서버로 전송되지 않고 현재 기기 브라우저에만 저장됩니다.</span>
+              </div>
+
               <form onSubmit={handleAddAccount} className="space-y-3.5">
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-300 mb-1">은행명</label>
@@ -948,50 +1218,63 @@ export default function App() {
                   type="submit"
                   className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-lg transition-all shadow-md mt-2 cursor-pointer"
                 >
-                  계좌 저장
+                  현재 기기에 안전 저장
                 </button>
               </form>
             </div>
 
             <div className="lg:col-span-2 bg-[#0E1424]/80 border border-slate-800/80 rounded-xl p-5">
-              <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
-                <CreditCard className="w-4 h-4 text-indigo-400" />
-                등록된 입금/송금 계좌 ({accounts.length}개)
-              </h3>
-              <div className="space-y-3">
-                {accounts.map((acc) => (
-                  <div
-                    key={acc.id}
-                    className="bg-slate-900/60 border border-slate-800/80 rounded-xl p-4 flex items-center justify-between"
-                  >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-white">{acc.bankName}</span>
-                        <span className="text-xs text-slate-400">({acc.holder})</span>
-                      </div>
-                      <div className="text-sm font-mono text-indigo-300 mt-1">{acc.accountNumber}</div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(acc.accountNumber);
-                          alert('계좌번호가 복사되었습니다.');
-                        }}
-                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <Copy className="w-3.5 h-3.5" />
-                        복사
-                      </button>
-                      <button
-                        onClick={() => setAccounts(accounts.filter((a) => a.id !== acc.id))}
-                        className="p-1.5 text-slate-500 hover:text-rose-400"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <CreditCard className="w-4 h-4 text-indigo-400" />
+                  기기 로컬 저장 계좌 ({accounts.length}개)
+                </h3>
+                <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                  기기 로컬 보관 (DB 미전송)
+                </span>
               </div>
+
+              {accounts.length === 0 ? (
+                <div className="py-12 text-center text-slate-500 text-xs">
+                  등록된 계좌가 없습니다. 좌측에서 계좌를 추가해 보세요.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {accounts.map((acc) => (
+                    <div
+                      key={acc.id}
+                      className="bg-slate-900/60 border border-slate-800/80 rounded-xl p-4 flex items-center justify-between"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold text-white">{acc.bankName}</span>
+                          <span className="text-xs text-slate-400">({acc.holder})</span>
+                        </div>
+                        <div className="text-sm font-mono text-indigo-300 mt-1">{acc.accountNumber}</div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(acc.accountNumber);
+                            alert('계좌번호가 클립보드에 복사되었습니다.');
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                          복사
+                        </button>
+                        <button
+                          onClick={() => handleDeleteAccount(acc.id)}
+                          className="p-1.5 text-slate-500 hover:text-rose-400 cursor-pointer"
+                          title="삭제"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
