@@ -7,7 +7,7 @@ import {
   Copy, Car, Filter, RotateCcw, CalendarDays, ShieldCheck, ChevronRight, Smartphone,
   Fuel, AlertTriangle, MessageSquare, Check, Edit2, Coins, Sparkles, Phone,
   RefreshCw, UserX, BotOff, ShieldAlert, BarChart3, Megaphone, Users, Download,
-  Award, Crown, BookmarkPlus, Radio, Send, Building2, Info
+  Award, Crown, BookmarkPlus, Radio, Send, Building2, Info, Map, Target
 } from 'lucide-react';
 
 // Supabase 클라이언트 초기화
@@ -62,8 +62,56 @@ interface BankAccount { id: string; bankName: string; accountNumber: string; hol
 interface MemberProfile { id: string; email: string; name: string; phone: string; role: string; createdAt: string; recordCount?: number; }
 interface NoticeItem { id: string; title: string; content: string; isActive: boolean; updatedAt?: string; }
 
+// 전국 자동차 경매장 일정 데이터 병합본
+const AUCTION_SCHEDULES = [
+  {
+    day: '월요일',
+    hex: '#38BDF8',
+    locations: [
+      { name: '안성 롯데렌탈', addr: '경기 안성시 내가천리 12', tag: '롯데' },
+      { name: '진천 광혜원 오토보이', addr: '충북 진천군 금천길 37', tag: '오토보이' }
+    ]
+  },
+  {
+    day: '화요일',
+    hex: '#EC4899',
+    locations: [
+      { name: '오포(분당) 현대글로비스', addr: '경기 광주시 능평리 174-25', tag: '글로비스' },
+      { name: '세종(부강) K Car', addr: '세종 부강면 문곡리 산 249', tag: '케이카' },
+      { name: '시화(시흥) 현대글로비스', addr: '경기 시흥시 정왕천로 271', tag: '글로비스' },
+      { name: '천안 SK경매장', addr: '충남 천안시 구성동', tag: 'SK' }
+    ]
+  },
+  {
+    day: '수요일',
+    hex: '#10B981',
+    locations: [
+      { name: '안성 오토허브 (구 AJ셀카)', addr: '경기 안성시 문터길 60', tag: '오토허브' },
+      { name: '인천 현대글로비스', addr: '인천 서구 가좌동 173-203', tag: '글로비스' },
+      { name: '시화(시흥) 현대글로비스', addr: '경기 시흥시 정왕동 2122-4', tag: '글로비스' }
+    ]
+  },
+  {
+    day: '목요일',
+    hex: '#F59E0B',
+    locations: [
+      { name: '오산 K Car', addr: '경기 오산시 은계동 7-30', tag: '케이카' },
+      { name: '양산 현대글로비스', addr: '경남 양산시 산막동 572-1', tag: '글로비스' },
+      { name: '진천 광혜원 오토보이', addr: '충북 진천군 금천길 37', tag: '오토보이' },
+      { name: '인천 현대글로비스', addr: '인천 서구 가좌동 173-203', tag: '글로비스' }
+    ]
+  },
+  {
+    day: '금요일',
+    hex: '#8B5CF6',
+    locations: [
+      { name: '시화(시흥) 현대글로비스', addr: '경기 시흥시 정왕동 2122-4', tag: '글로비스' },
+      { name: '오포(분당) 현대글로비스', addr: '경기 광주시 능평리 174-25', tag: '글로비스' }
+    ]
+  }
+];
+
 export default function App() {
-  // PWA 업데이트 상태 관리
   const {
     needRefresh: [needRefresh, setNeedRefresh],
     updateServiceWorker,
@@ -75,7 +123,6 @@ export default function App() {
   const [session, setSession] = useState<any>(null);
   const [currentUserRole, setCurrentUserRole] = useState<string>('user');
 
-  // 인증 상태
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState(''); const [name, setName] = useState(''); const [phone, setPhone] = useState('');
   const [password, setPassword] = useState(''); const [passwordConfirm, setPasswordConfirm] = useState('');
@@ -85,19 +132,17 @@ export default function App() {
   const [authError, setAuthError] = useState(''); const [authSuccess, setAuthSuccess] = useState('');
   const [honeypot, setHoneypot] = useState(''); const [captchaVerified, setCaptchaVerified] = useState(false);
 
-  // 탭 및 필터
-  const [activeTab, setActiveTab] = useState<'records' | 'claims' | 'expense' | 'wallet' | 'analytics' | 'admin'>('records');
+  // 탭 목록에 'auctions' 추가
+  const [activeTab, setActiveTab] = useState<'records' | 'claims' | 'expense' | 'wallet' | 'analytics' | 'auctions' | 'admin'>('records');
   const [adminSubTab, setAdminSubTab] = useState<'campaign' | 'members' | 'analytics'>('campaign');
   const [selectedDate, setSelectedDate] = useState<string>('2026-11-10');
   const [filterAllDates, setFilterAllDates] = useState<boolean>(false);
 
-  // 모달 상태
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [pwdLoading, setPwdLoading] = useState(false);
   const [pwdMessage, setPwdMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // 운행내역 수정 상태
   const [editingRecord, setEditingRecord] = useState<DrivingRecord | null>(null);
   const [editDeparture, setEditDeparture] = useState('');
   const [editDestination, setEditDestination] = useState('');
@@ -113,7 +158,6 @@ export default function App() {
   const [includeExtra, setIncludeExtra] = useState(true);
   const [claimMessageText, setClaimMessageText] = useState('');
   
-  // 데이터 상태
   const [records, setRecords] = useState<DrivingRecord[]>([]);
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
   const [accounts, setAccounts] = useState<BankAccount[]>(() => {
@@ -121,7 +165,6 @@ export default function App() {
     return [{ id: '1', bankName: '신한은행', accountNumber: '110-123-456789', holder: '김탁송' }];
   });
 
-  // 공지사항 상태
   const [activeNotice, setActiveNotice] = useState<NoticeItem | null>(null);
   const [noticeList, setNoticeList] = useState<NoticeItem[]>([]);
   const [inputNoticeTitle, setInputNoticeTitle] = useState('');
@@ -129,12 +172,10 @@ export default function App() {
   const [editingNoticeId, setEditingNoticeId] = useState<string | null>(null);
   const [noticeLoading, setNoticeLoading] = useState(false);
 
-  // 관리자 상태
   const [adminMemberList, setAdminMemberList] = useState<MemberProfile[]>([]);
   const [adminAllRecords, setAdminAllRecords] = useState<DrivingRecord[]>([]);
   const [adminSearchTerm, setAdminSearchTerm] = useState('');
 
-  // 폼 입력 상태
   const [newDate, setNewDate] = useState('2026-11-10'); const [newStartTime, setNewStartTime] = useState(''); const [newEndTime, setNewEndTime] = useState('');
   const [newDeparture, setNewDeparture] = useState(''); const [newDestination, setNewDestination] = useState('');
   const [newGross, setNewGross] = useState(''); const [newFeeRate, setNewFeeRate] = useState('20');
@@ -424,7 +465,6 @@ export default function App() {
   const totalUnpaidAmount = unpaidRecords.reduce((acc, cur) => acc + cur.totalClaimAmount, 0);
   const isAdminUser = currentUserRole === 'super_admin' || currentUserRole === 'manager';
 
-  // 통계용
   const currentMonthPrefix = selectedDate.substring(0, 7);
   const monthlyRecords = records.filter((r) => r.date.startsWith(currentMonthPrefix));
   const monthlyExpenses = expenses.filter((e) => e.date.startsWith(currentMonthPrefix));
@@ -446,7 +486,6 @@ export default function App() {
       @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
       * { font-family: 'Pretendard', sans-serif !important; }
       body { background-color: #0B1120; color: white; }
-      /* White Form Styling for all inputs */
       input, select, textarea {
         background-color: #FFFFFF !important;
         color: #000000 !important;
@@ -475,14 +514,8 @@ export default function App() {
         -webkit-backdrop-filter: blur(12px);
         border: 1px solid rgba(255, 255, 255, 0.1);
       }
-      /* 툴팁/안내문구 애니메이션 효과 */
-      .fade-in-text {
-        animation: fadeIn 0.5s ease-in-out;
-      }
-      @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(-5px); }
-        to { opacity: 1; transform: translateY(0); }
-      }
+      .fade-in-text { animation: fadeIn 0.5s ease-in-out; }
+      @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
     `}} />
   );
 
@@ -563,7 +596,7 @@ export default function App() {
     <div className="min-h-screen bg-[#0B1120] text-slate-100 pb-20 relative">
       {injectStyles()}
       
-      {/* PWA 업데이트 팝업 알림 (최상단/하단 오버레이) */}
+      {/* PWA 업데이트 팝업 알림 */}
       {needRefresh && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] glass-card border border-[#8B5CF6]/50 p-5 rounded-2xl shadow-[0_0_20px_rgba(139,92,246,0.3)] flex flex-col items-center gap-3 w-[90%] max-w-sm fade-in-text">
           <div className="flex items-center gap-2">
@@ -616,10 +649,69 @@ export default function App() {
         <div className="flex gap-2 border-b border-white/10 pb-2 overflow-x-auto scrollbar-hide">
           <button onClick={() => setActiveTab('records')} className={`px-4 py-2 rounded-lg text-xs font-bold cursor-pointer shrink-0 transition-all ${activeTab === 'records' ? 'hp-primary-btn' : 'glass-card text-slate-400 hover:text-white'}`}>운행 일지</button>
           <button onClick={() => setActiveTab('claims')} className={`px-4 py-2 rounded-lg text-xs font-bold cursor-pointer relative shrink-0 transition-all ${activeTab === 'claims' ? 'hp-primary-btn' : 'glass-card text-slate-400 hover:text-white'}`}>청구문자 {unpaidRecords.length > 0 && <span className="ml-1 px-1.5 py-0.5 rounded-full bg-[#EC4899] text-white text-[10px] font-extrabold shadow-[0_0_5px_#EC4899]">{unpaidRecords.length}</span>}</button>
+          <button onClick={() => setActiveTab('auctions')} className={`px-4 py-2 rounded-lg text-xs font-bold cursor-pointer shrink-0 transition-all ${activeTab === 'auctions' ? 'hp-primary-btn' : 'glass-card text-slate-400 hover:text-white'}`}>경매장 일정</button>
           <button onClick={() => setActiveTab('expense')} className={`px-4 py-2 rounded-lg text-xs font-bold cursor-pointer shrink-0 transition-all ${activeTab === 'expense' ? 'hp-primary-btn' : 'glass-card text-slate-400 hover:text-white'}`}>경비 장부</button>
           <button onClick={() => setActiveTab('wallet')} className={`px-4 py-2 rounded-lg text-xs font-bold cursor-pointer shrink-0 transition-all ${activeTab === 'wallet' ? 'hp-primary-btn' : 'glass-card text-slate-400 hover:text-white'}`}>계좌 관리</button>
           <button onClick={() => setActiveTab('analytics')} className={`px-4 py-2 rounded-lg text-xs font-bold cursor-pointer shrink-0 transition-all ${activeTab === 'analytics' ? 'hp-primary-btn' : 'glass-card text-slate-400 hover:text-white'}`}>통계 요약</button>
         </div>
+
+        {/* 신규: 전국 경매장 일정 탭 */}
+        {activeTab === 'auctions' && (
+          <div className="space-y-6 fade-in-text">
+            {/* 경매장 황금시간대 배너 */}
+            <div className="glass-card rounded-xl p-6 shadow-lg border border-[#8B5CF6]/30">
+              <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+                <Target className="w-5 h-5 text-[#8B5CF6]" />
+                탁송 오더 집중 발생 요약 (장거리 계획용)
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="bg-[#0B1120] border border-white/10 p-4 rounded-lg flex items-start gap-3">
+                  <Clock className="w-4 h-4 text-[#38BDF8] mt-0.5" />
+                  <div>
+                    <div className="text-xs font-bold text-slate-300">경매 진행 시간</div>
+                    <div className="text-sm font-extrabold text-white mt-1">오후 1시 ~ 오후 5시</div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">* 마감시간은 경매장별로 상이합니다.</div>
+                  </div>
+                </div>
+                <div className="bg-[#0B1120] border border-white/10 p-4 rounded-lg flex items-start gap-3">
+                  <div>
+                    <div className="text-xs font-bold text-slate-300">오더 집중 발생 시간</div>
+                    <div className="text-sm font-extrabold text-white mt-1">경매 시작 ~ 오후 6시까지</div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">* 익일 오전까지도 잔여 오더가 계속 발생합니다.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 요일별 일정 그리드 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {AUCTION_SCHEDULES.map((schedule, idx) => (
+                <div key={idx} className="glass-card p-5 rounded-xl border-t-2" style={{ borderTopColor: schedule.hex }}>
+                  <div className="flex items-center gap-2 mb-4">
+                    <CalendarDays className="w-5 h-5" style={{ color: schedule.hex }} />
+                    <h4 className="font-extrabold text-base text-white">{schedule.day}</h4>
+                  </div>
+                  <div className="space-y-3">
+                    {schedule.locations.map((loc, i) => (
+                      <div key={i} className="bg-[#0B1120] border border-white/5 p-3.5 rounded-lg hover:border-white/20 transition-all">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-white/10 text-slate-300">
+                            {loc.tag}
+                          </span>
+                          <span className="text-sm font-bold text-slate-100">{loc.name}</span>
+                        </div>
+                        <div className="flex items-start gap-1.5 text-[11px] text-slate-400">
+                          <MapPin className="w-3 h-3 mt-0.5 text-[#38BDF8] shrink-0" />
+                          <span>{loc.addr}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* 1. 운행 일지 탭 */}
         {activeTab === 'records' && (
