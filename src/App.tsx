@@ -655,7 +655,7 @@ export default function App() {
           <button onClick={() => setActiveTab('analytics')} className={`px-4 py-2 rounded-lg text-xs font-bold cursor-pointer shrink-0 transition-all ${activeTab === 'analytics' ? 'hp-primary-btn' : 'glass-card text-slate-400 hover:text-white'}`}>통계 요약</button>
         </div>
 
-        {/* 신규: 전국 경매장 일정 탭 (지도 버튼 추가됨) */}
+        {/* 전국 경매장 일정 탭 (늘어짐 해결 버전) */}
         {activeTab === 'auctions' && (
           <div className="space-y-6 fade-in-text">
             {/* 경매장 황금시간대 배너 */}
@@ -691,9 +691,9 @@ export default function App() {
                     <CalendarDays className="w-5 h-5" style={{ color: schedule.hex }} />
                     <h4 className="font-extrabold text-base text-white">{schedule.day}</h4>
                   </div>
-                  <div className="space-y-3 flex-1">
+                  <div className="space-y-3">
                     {schedule.locations.map((loc, i) => (
-                      <div key={i} className="bg-[#0B1120] border border-white/5 p-3.5 rounded-lg hover:border-white/20 transition-all flex flex-col justify-between h-full">
+                      <div key={i} className="bg-[#0B1120] border border-white/5 p-3.5 rounded-lg hover:border-white/20 transition-all">
                         <div>
                           <div className="flex items-center gap-2 mb-1.5">
                             <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-white/10 text-slate-300">
