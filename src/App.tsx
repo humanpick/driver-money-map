@@ -62,7 +62,7 @@ interface BankAccount { id: string; bankName: string; accountNumber: string; hol
 interface MemberProfile { id: string; email: string; name: string; phone: string; role: string; createdAt: string; recordCount?: number; }
 interface NoticeItem { id: string; title: string; content: string; isActive: boolean; updatedAt?: string; }
 
-// 전국 자동차 경매장 일정 데이터 병합본
+// 전국 자동차 경매장 일정 데이터
 const AUCTION_SCHEDULES = [
   {
     day: '월요일',
@@ -132,7 +132,7 @@ export default function App() {
   const [authError, setAuthError] = useState(''); const [authSuccess, setAuthSuccess] = useState('');
   const [honeypot, setHoneypot] = useState(''); const [captchaVerified, setCaptchaVerified] = useState(false);
 
-  // 탭 목록에 'auctions' 추가
+  // 탭 목록에 'auctions' 추가됨
   const [activeTab, setActiveTab] = useState<'records' | 'claims' | 'expense' | 'wallet' | 'analytics' | 'auctions' | 'admin'>('records');
   const [adminSubTab, setAdminSubTab] = useState<'campaign' | 'members' | 'analytics'>('campaign');
   const [selectedDate, setSelectedDate] = useState<string>('2026-11-10');
