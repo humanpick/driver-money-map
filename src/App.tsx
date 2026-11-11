@@ -67,13 +67,53 @@ const TRADE_CENTERS = [
   { id: '12', name: '창원 디오토몰', tier: 'B', region: '영남권', addr: '경남 창원시 성산구 공단로 18', desc: '경남 지역의 대표적인 신축 실내 매매단지.' }
 ];
 
-// 전국 자동차 경매장 일정 데이터
+// 전국 자동차 경매장 일정 데이터 (등급 순 정렬 적용: S -> A -> B)
 const AUCTION_SCHEDULES = [
-  { day: '월요일', hex: '#38BDF8', locations: [{ name: '안성 롯데렌탈', addr: '경기 안성시 내가천리 12', tag: '롯데' }, { name: '진천 광혜원 오토보이', addr: '충북 진천군 금천길 37', tag: '오토보이' }] },
-  { day: '화요일', hex: '#EC4899', locations: [{ name: '오포(분당) 현대글로비스', addr: '경기 광주시 능평리 174-25', tag: '글로비스' }, { name: '세종(부강) K Car', addr: '세종 부강면 문곡리 산 249', tag: '케이카' }, { name: '시화(시흥) 현대글로비스', addr: '경기 시흥시 정왕천로 271', tag: '글로비스' }, { name: '천안 SK경매장', addr: '충남 천안시 구성동', tag: 'SK' }] },
-  { day: '수요일', hex: '#10B981', locations: [{ name: '안성 오토허브 (구 AJ셀카)', addr: '경기 안성시 문터길 60', tag: '오토허브' }, { name: '인천 현대글로비스', addr: '인천 서구 가좌동 173-203', tag: '글로비스' }, { name: '시화(시흥) 현대글로비스', addr: '경기 시흥시 정왕동 2122-4', tag: '글로비스' }] },
-  { day: '목요일', hex: '#F59E0B', locations: [{ name: '오산 K Car', addr: '경기 오산시 은계동 7-30', tag: '케이카' }, { name: '양산 현대글로비스', addr: '경남 양산시 산막동 572-1', tag: '글로비스' }, { name: '진천 광혜원 오토보이', addr: '충북 진천군 금천길 37', tag: '오토보이' }, { name: '인천 현대글로비스', addr: '인천 서구 가좌동 173-203', tag: '글로비스' }] },
-  { day: '금요일', hex: '#8B5CF6', locations: [{ name: '시화(시흥) 현대글로비스', addr: '경기 시흥시 정왕동 2122-4', tag: '글로비스' }, { name: '오포(분당) 현대글로비스', addr: '경기 광주시 능평리 174-25', tag: '글로비스' }] }
+  {
+    day: '월요일',
+    hex: '#38BDF8',
+    locations: [
+      { name: '안성 롯데렌탈', tier: 'S', addr: '경기 안성시 내가천리 12', tag: '롯데' },
+      { name: '진천 광혜원 오토보이', tier: 'B', addr: '충북 진천군 금천길 37', tag: '오토보이' }
+    ]
+  },
+  {
+    day: '화요일',
+    hex: '#EC4899',
+    locations: [
+      { name: '시화(시흥) 현대글로비스', tier: 'S', addr: '경기 시흥시 정왕천로 271', tag: '글로비스' },
+      { name: '오포(분당) 현대글로비스', tier: 'S', addr: '경기 광주시 능평리 174-25', tag: '글로비스' },
+      { name: '세종(부강) K Car', tier: 'A', addr: '세종 부강면 문곡리 산 249', tag: '케이카' },
+      { name: '천안 SK경매장', tier: 'B', addr: '충남 천안시 구성동', tag: 'SK' }
+    ]
+  },
+  {
+    day: '수요일',
+    hex: '#10B981',
+    locations: [
+      { name: '안성 오토허브 (구 AJ셀카)', tier: 'S', addr: '경기 안성시 문터길 60', tag: '오토허브' },
+      { name: '시화(시흥) 현대글로비스', tier: 'S', addr: '경기 시흥시 정왕동 2122-4', tag: '글로비스' },
+      { name: '인천 현대글로비스', tier: 'A', addr: '인천 서구 가좌동 173-203', tag: '글로비스' }
+    ]
+  },
+  {
+    day: '목요일',
+    hex: '#F59E0B',
+    locations: [
+      { name: '양산 현대글로비스', tier: 'S', addr: '경남 양산시 산막동 572-1', tag: '글로비스' },
+      { name: '오산 K Car', tier: 'A', addr: '경기 오산시 은계동 7-30', tag: '케이카' },
+      { name: '인천 현대글로비스', tier: 'A', addr: '인천 서구 가좌동 173-203', tag: '글로비스' },
+      { name: '진천 광혜원 오토보이', tier: 'B', addr: '충북 진천군 금천길 37', tag: '오토보이' }
+    ]
+  },
+  {
+    day: '금요일',
+    hex: '#8B5CF6',
+    locations: [
+      { name: '시화(시흥) 현대글로비스', tier: 'S', addr: '경기 시흥시 정왕동 2122-4', tag: '글로비스' },
+      { name: '오포(분당) 현대글로비스', tier: 'A', addr: '경기 광주시 능평리 174-25', tag: '글로비스' }
+    ]
+  }
 ];
 
 export default function App() {
@@ -91,7 +131,7 @@ export default function App() {
   const [authError, setAuthError] = useState(''); const [authSuccess, setAuthSuccess] = useState('');
   const [honeypot, setHoneypot] = useState(''); const [captchaVerified, setCaptchaVerified] = useState(false);
 
-  // 탭 목록 재정렬 완료 (trade_centers 추가)
+  // 탭 목록
   const [activeTab, setActiveTab] = useState<'records' | 'claims' | 'expense' | 'analytics' | 'wallet' | 'trade_centers' | 'auctions' | 'admin'>('records');
   const [adminSubTab, setAdminSubTab] = useState<'campaign' | 'members' | 'analytics'>('campaign');
   const [selectedDate, setSelectedDate] = useState<string>('2026-11-10');
@@ -732,14 +772,13 @@ export default function App() {
           </div>
         )}
 
-        {/* 6. 전국 매매단지 안내 탭 (신규 카테고리) */}
+        {/* 6. 전국 매매단지 안내 탭 */}
         {activeTab === 'trade_centers' && (
           <div className="space-y-5 fade-in-text">
             <div className="glass-card rounded-xl p-5 shadow-lg border border-[#8B5CF6]/30">
               <h3 className="text-sm font-bold text-white mb-2 flex items-center gap-2"><Building2 className="w-5 h-5 text-[#8B5CF6]" />전국 주요 매매단지 정보</h3>
               <p className="text-[11px] text-slate-400 mb-4">장거리 탁송 후 복귀 콜이 쏟아지는 전국 주요 매매단지의 거점 정보와 위치입니다.</p>
               
-              {/* 필터 버튼 영역 */}
               <div className="flex flex-wrap gap-2">
                 {['전체', 'S등급', 'A등급', '수도권', '지방권'].map(f => (
                   <button key={f} onClick={() => setTradeFilter(f as any)} className={`px-3 py-1.5 rounded-full text-[11px] font-bold transition-all cursor-pointer ${tradeFilter === f ? 'bg-[#8B5CF6] text-white shadow-[0_0_10px_rgba(139,92,246,0.4)] border-transparent' : 'bg-[#0B1120] text-slate-400 border border-white/10 hover:border-[#8B5CF6]/50'}`}>
@@ -749,14 +788,12 @@ export default function App() {
               </div>
             </div>
 
-            {/* 등급 요약 범례 */}
             <div className="flex gap-4 px-2 text-[10px] font-bold">
               <span className="text-[#F59E0B] flex items-center gap-1"><Crown className="w-3 h-3" /> S등급 (메가 허브)</span>
               <span className="text-[#38BDF8] flex items-center gap-1"><Target className="w-3 h-3" /> A등급 (지역 거점)</span>
               <span className="text-slate-400 flex items-center gap-1"><MapPin className="w-3 h-3" /> B등급 (주요 단지)</span>
             </div>
 
-            {/* 매매단지 카드 리스트 (그리드 레이아웃, 세로 늘어짐 방지) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-start">
               {filteredTradeCenters.map((center) => (
                 <div key={center.id} className={`glass-card p-4 rounded-xl border-t-2 flex flex-col gap-3 transition-all hover:bg-white/5 ${center.tier === 'S' ? 'border-t-[#F59E0B] shadow-[0_4px_15px_rgba(245,158,11,0.1)]' : center.tier === 'A' ? 'border-t-[#38BDF8]' : 'border-t-white/20'}`}>
@@ -777,7 +814,6 @@ export default function App() {
                     </div>
                   </div>
                   
-                  {/* 지도 바로가기 버튼 */}
                   <div className="flex items-center gap-2 pt-3 border-t border-white/5 mt-auto">
                     <button onClick={() => window.open(`https://m.map.naver.com/search2/search.naver?query=${encodeURIComponent(center.addr)}`, '_blank')} className="flex-1 py-2 bg-[#03C75A]/10 hover:bg-[#03C75A]/20 text-[#03C75A] border border-[#03C75A]/30 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors"><Navigation className="w-3.5 h-3.5" /> 네이버 지도</button>
                     <button onClick={() => window.open(`https://map.kakao.com/link/search/${encodeURIComponent(center.addr)}`, '_blank')} className="flex-1 py-2 bg-[#FEE500]/10 hover:bg-[#FEE500]/20 text-[#FEE500] border border-[#FEE500]/30 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors"><Navigation className="w-3.5 h-3.5" /> 카카오 맵</button>
@@ -789,7 +825,7 @@ export default function App() {
           </div>
         )}
 
-        {/* 7. 경매장 일정 탭 (카드 늘어짐 해결 버전) */}
+        {/* 7. 경매장 일정 탭 (등급 표시 및 정렬 적용) */}
         {activeTab === 'auctions' && (
           <div className="space-y-6 fade-in-text">
             <div className="glass-card rounded-xl p-6 shadow-lg border border-[#8B5CF6]/30">
@@ -800,16 +836,32 @@ export default function App() {
               </div>
             </div>
 
+            {/* 등급 요약 범례 */}
+            <div className="flex gap-4 px-2 text-[10px] font-bold">
+              <span className="text-[#F59E0B] flex items-center gap-1"><Crown className="w-3 h-3" /> S등급 (메가 옥션)</span>
+              <span className="text-[#38BDF8] flex items-center gap-1"><Target className="w-3 h-3" /> A등급 (광역 옥션)</span>
+              <span className="text-slate-400 flex items-center gap-1"><MapPin className="w-3 h-3" /> B등급 (지역/특화 옥션)</span>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-start">
               {AUCTION_SCHEDULES.map((schedule, idx) => (
                 <div key={idx} className="glass-card p-5 rounded-xl border-t-2 flex flex-col gap-3" style={{ borderTopColor: schedule.hex }}>
                   <div className="flex items-center gap-2 mb-2"><CalendarDays className="w-5 h-5" style={{ color: schedule.hex }} /><h4 className="font-extrabold text-base text-white">{schedule.day}</h4></div>
                   <div className="space-y-3">
                     {schedule.locations.map((loc, i) => (
-                      <div key={i} className="bg-[#0B1120] border border-white/5 p-3.5 rounded-xl hover:border-white/20 transition-all flex flex-col gap-3">
+                      <div key={i} className={`bg-[#0B1120] border rounded-xl p-3.5 hover:border-white/20 transition-all flex flex-col gap-3 ${loc.tier === 'S' ? 'border-[#F59E0B]/30' : loc.tier === 'A' ? 'border-[#38BDF8]/30' : 'border-white/5'}`}>
                         <div>
-                          <div className="flex items-center gap-2 mb-1.5"><span className="px-2 py-0.5 rounded text-[10px] font-bold bg-white/10 text-slate-300">{loc.tag}</span><span className="text-sm font-bold text-slate-100">{loc.name}</span></div>
-                          <div className="flex items-start gap-1.5 text-[11px] text-slate-400"><MapPin className="w-3 h-3 mt-0.5 text-[#38BDF8] shrink-0" /><span>{loc.addr}</span></div>
+                          <div className="flex items-center gap-2 mb-1.5">
+                            {loc.tier === 'S' && <span className="px-1.5 py-0.5 bg-[#F59E0B]/20 text-[#F59E0B] text-[10px] font-extrabold rounded flex items-center gap-0.5"><Crown className="w-3 h-3" /> S등급</span>}
+                            {loc.tier === 'A' && <span className="px-1.5 py-0.5 bg-[#38BDF8]/20 text-[#38BDF8] text-[10px] font-bold rounded flex items-center gap-0.5"><Target className="w-3 h-3" /> A등급</span>}
+                            {loc.tier === 'B' && <span className="px-1.5 py-0.5 bg-white/10 text-slate-300 text-[10px] font-bold rounded flex items-center gap-0.5">B등급</span>}
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-white/10 text-slate-300">{loc.tag}</span>
+                            <span className="text-sm font-bold text-slate-100">{loc.name}</span>
+                          </div>
+                          <div className="flex items-start gap-1.5 text-[11px] text-slate-400">
+                            <MapPin className="w-3 h-3 mt-0.5 text-[#38BDF8] shrink-0" />
+                            <span>{loc.addr}</span>
+                          </div>
                         </div>
                         <div className="flex items-center gap-2 pt-2 border-t border-white/5">
                           <button onClick={() => window.open(`https://m.map.naver.com/search2/search.naver?query=${encodeURIComponent(loc.addr)}`, '_blank')} className="flex-1 py-1.5 bg-[#03C75A]/10 hover:bg-[#03C75A]/20 text-[#03C75A] border border-[#03C75A]/30 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors">네이버 지도</button>
