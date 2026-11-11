@@ -132,7 +132,7 @@ export default function App() {
   const [authError, setAuthError] = useState(''); const [authSuccess, setAuthSuccess] = useState('');
   const [honeypot, setHoneypot] = useState(''); const [captchaVerified, setCaptchaVerified] = useState(false);
 
-  // 탭 목록에 'auctions' 추가
+  // 탭 목록
   const [activeTab, setActiveTab] = useState<'records' | 'claims' | 'expense' | 'wallet' | 'analytics' | 'auctions' | 'admin'>('records');
   const [adminSubTab, setAdminSubTab] = useState<'campaign' | 'members' | 'analytics'>('campaign');
   const [selectedDate, setSelectedDate] = useState<string>('2026-11-10');
@@ -655,7 +655,7 @@ export default function App() {
           <button onClick={() => setActiveTab('analytics')} className={`px-4 py-2 rounded-lg text-xs font-bold cursor-pointer shrink-0 transition-all ${activeTab === 'analytics' ? 'hp-primary-btn' : 'glass-card text-slate-400 hover:text-white'}`}>통계 요약</button>
         </div>
 
-        {/* 신규: 전국 경매장 일정 탭 */}
+        {/* 신규: 전국 경매장 일정 탭 (지도 버튼 추가됨) */}
         {activeTab === 'auctions' && (
           <div className="space-y-6 fade-in-text">
             {/* 경매장 황금시간대 배너 */}
@@ -686,23 +686,41 @@ export default function App() {
             {/* 요일별 일정 그리드 */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
               {AUCTION_SCHEDULES.map((schedule, idx) => (
-                <div key={idx} className="glass-card p-5 rounded-xl border-t-2" style={{ borderTopColor: schedule.hex }}>
+                <div key={idx} className="glass-card p-5 rounded-xl border-t-2 flex flex-col h-full" style={{ borderTopColor: schedule.hex }}>
                   <div className="flex items-center gap-2 mb-4">
                     <CalendarDays className="w-5 h-5" style={{ color: schedule.hex }} />
                     <h4 className="font-extrabold text-base text-white">{schedule.day}</h4>
                   </div>
-                  <div className="space-y-3">
+                  <div className="space-y-3 flex-1">
                     {schedule.locations.map((loc, i) => (
-                      <div key={i} className="bg-[#0B1120] border border-white/5 p-3.5 rounded-lg hover:border-white/20 transition-all">
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-white/10 text-slate-300">
-                            {loc.tag}
-                          </span>
-                          <span className="text-sm font-bold text-slate-100">{loc.name}</span>
+                      <div key={i} className="bg-[#0B1120] border border-white/5 p-3.5 rounded-lg hover:border-white/20 transition-all flex flex-col justify-between h-full">
+                        <div>
+                          <div className="flex items-center gap-2 mb-1.5">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-white/10 text-slate-300">
+                              {loc.tag}
+                            </span>
+                            <span className="text-sm font-bold text-slate-100">{loc.name}</span>
+                          </div>
+                          <div className="flex items-start gap-1.5 text-[11px] text-slate-400">
+                            <MapPin className="w-3 h-3 mt-0.5 text-[#38BDF8] shrink-0" />
+                            <span>{loc.addr}</span>
+                          </div>
                         </div>
-                        <div className="flex items-start gap-1.5 text-[11px] text-slate-400">
-                          <MapPin className="w-3 h-3 mt-0.5 text-[#38BDF8] shrink-0" />
-                          <span>{loc.addr}</span>
+                        
+                        {/* 지도 바로가기 버튼 영역 */}
+                        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/5">
+                          <button 
+                            onClick={() => window.open(`https://m.map.naver.com/search2/search.naver?query=${encodeURIComponent(loc.addr)}`, '_blank')} 
+                            className="flex-1 py-1.5 bg-[#03C75A]/10 hover:bg-[#03C75A]/20 text-[#03C75A] border border-[#03C75A]/30 rounded-md text-[10px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                          >
+                            네이버 지도
+                          </button>
+                          <button 
+                            onClick={() => window.open(`https://map.kakao.com/link/search/${encodeURIComponent(loc.addr)}`, '_blank')} 
+                            className="flex-1 py-1.5 bg-[#FEE500]/10 hover:bg-[#FEE500]/20 text-[#FEE500] border border-[#FEE500]/30 rounded-md text-[10px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                          >
+                            카카오 맵
+                          </button>
                         </div>
                       </div>
                     ))}
