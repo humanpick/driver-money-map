@@ -51,23 +51,34 @@ interface BankAccount { id: string; bankName: string; accountNumber: string; hol
 interface MemberProfile { id: string; email: string; name: string; phone: string; role: string; createdAt: string; recordCount?: number; }
 interface NoticeItem { id: string; title: string; content: string; isActive: boolean; updatedAt?: string; }
 
-// 전국 주요 자동차 매매단지 데이터 (등급별)
+// 전국 주요 자동차 매매단지 정밀 데이터 (총 18개 거점 - 등급순)
 const TRADE_CENTERS = [
-  { id: '1', name: '수원 도이치오토월드', tier: 'S', region: '수도권', addr: '경기 수원시 권선구 권선로 308-5', desc: '전국 최대 실내 복합단지. 지하~지상 층별 상사 밀집 (출고 콜 최다 지역)' },
+  // S등급 (메가 허브)
+  { id: '1', name: '수원 도이치오토월드', tier: 'S', region: '수도권', addr: '경기 수원시 권선구 권선로 308-5', desc: '전국 최대 실내 복합단지. 지하~지상 층별 상사 밀집 (전국 탁송 출고 최다 지역)' },
   { id: '2', name: '수원 SK V1 모터스', tier: 'S', region: '수도권', addr: '경기 수원시 권선구 평동로79번길 45', desc: '도이치오토월드 바로 옆 대형 실내 단지. 탁송 콜 집중 발생 구역.' },
   { id: '3', name: '인천 엠파크 (허브/타워)', tier: 'S', region: '수도권', addr: '인천 서구 봉수대로 158', desc: '인천 권역 최대 메가 허브. 허브동과 타워동 위치 구분 필수.' },
   { id: '4', name: '용인 오토허브', tier: 'S', region: '수도권', addr: '경기 용인시 기흥구 중부대로 242', desc: '경부고속도로 신갈IC 인근. 접근성 매우 우수한 초대형 복합단지.' },
-  { id: '5', name: '대전 디오토몰', tier: 'A', region: '충청권', addr: '대전 유성구 복용동로 35', desc: '충청권 핵심 실내 단지. 영호남 이동 시 중간 복귀콜 전초기지.' },
-  { id: '6', name: '대구 엠월드', tier: 'A', region: '영남권', addr: '대구 서구 문화로 37', desc: '대구 및 경북권 최대 규모 실내 매매단지.' },
-  { id: '7', name: '부산 사직오토랜드', tier: 'A', region: '영남권', addr: '부산 연제구 경기장로 15', desc: '부산 권역 대표 매매단지. 장거리 종착 및 신규 출발 요충지.' },
-  { id: '8', name: '광주 풍암매매단지', tier: 'A', region: '호남권', addr: '광주 서구 매월1로 50', desc: '호남권 최대 중고차 거래 거점. 대규모 야외 주차장.' },
-  { id: '9', name: '부천 국민차매매단지', tier: 'B', region: '수도권', addr: '경기 부천시 송내대로 450', desc: '수도권 서부권역 주요 전통 매매단지.' },
-  { id: '10', name: '천안 북천안매매단지', tier: 'B', region: '충청권', addr: '충남 천안시 서북구 번영로 608', desc: '천안아산역 인근 위치. 수도권 복귀콜이 자주 뜨는 곳.' },
-  { id: '11', name: '전주 장동매매단지', tier: 'B', region: '호남권', addr: '전북 전주시 덕진구 장동유통로 12', desc: '전북 권역 핵심 단지. 호남IC 인근 접근성 양호.' },
-  { id: '12', name: '창원 디오토몰', tier: 'B', region: '영남권', addr: '경남 창원시 성산구 공단로 18', desc: '경남 지역의 대표적인 신축 실내 매매단지.' }
+
+  // A등급 (광역 핵심 거점)
+  { id: '5', name: '서울 서서울모터리움', tier: 'A', region: '수도권', addr: '서울 강서구 양천로53길 30', desc: '서울 서부권 최대 실내 자동차 백화점. 올림픽대로/가양대교 인접 출고 활발.' },
+  { id: '6', name: '김포 국민차매매단지 (공항점)', tier: 'A', region: '수도권', addr: '경기 김포시 고촌읍 아라육로152번길 45', desc: '김포 아라뱃길 물류축 위치. 수도권 서북부 대형 실내 단지.' },
+  { id: '7', name: '부산 경동오토필드', tier: 'A', region: '영남권', addr: '부산 기장군 장안읍 반룡산단3로 95', desc: '영남 최대 3만6천평급 실내 백화점식 복합단지. 동해고속도로 장안IC 인근 상행 콜 다수.' },
+  { id: '8', name: '대구 엠월드', tier: 'A', region: '영남권', addr: '대구 서구 문화로 37', desc: '대구 및 경북권 최대 규모 실내 매매단지. 서대구역 인근 위치.' },
+  { id: '9', name: '부산 사직오토랜드', tier: 'A', region: '영남권', addr: '부산 연제구 경기장로 15', desc: '부산 권역 전통 대표 매매단지. 도심 내 장거리 종착 및 신규 출발 요충지.' },
+  { id: '10', name: '대전 디오토몰', tier: 'A', region: '충청권', addr: '대전 유성구 복용동로 35', desc: '충청권 핵심 실내 단지. 영호남 이동 시 중간 복귀콜 환적 전초기지.' },
+  { id: '11', name: '대전 오토월드', tier: 'A', region: '충청권', addr: '대전 유성구 유성대로 510', desc: '디오토몰 인근 복용동 매매단지 핵심 거점. 풍부한 지방 이동 콜.' },
+  { id: '12', name: '광주 풍암매매단지', tier: 'A', region: '호남권', addr: '광주 서구 매월1로 50', desc: '호남권 최대 중고차 거래 거점. 대규모 단지 및 상사 밀집.' },
+  { id: '13', name: '광주 엠플러스 (M-PLUS)', tier: 'A', region: '호남권', addr: '광주 서구 매월1로62번길 24', desc: '풍암지구 내 신축 대형 실내 복합 백화점. 호남권 딜러 출고 집중지.' },
+
+  // B등급 (주요 알짜 단지)
+  { id: '14', name: '부천 국민차매매단지', tier: 'B', region: '수도권', addr: '경기 부천시 송내대로 450', desc: '수도권 서부권역 주요 전통 매매단지.' },
+  { id: '15', name: '부천 DY카랜드', tier: 'B', region: '수도권', addr: '경기 부천시 신흥로 399번길 50', desc: '경인고속도로 부천IC 인접. 오정동 대형 매매단지.' },
+  { id: '16', name: '천안 북천안매매단지', tier: 'B', region: '충청권', addr: '충남 천안시 서북구 번영로 608', desc: '천안아산역 인근 위치. 수도권 복귀콜이 자주 발생하는 곳.' },
+  { id: '17', name: '전주 장동매매단지', tier: 'B', region: '호남권', addr: '전북 전주시 덕진구 장동유통로 12', desc: '전북 권역 핵심 단지. 호남IC 인근 접근성 양호.' },
+  { id: '18', name: '창원 디오토몰', tier: 'B', region: '영남권', addr: '경남 창원시 성산구 공단로 18', desc: '경남 지역의 대표적인 신축 실내 복합 매매단지.' }
 ];
 
-// 전국 자동차 경매장 일정 데이터 (등급 순 정렬 적용: S -> A -> B)
+// 전국 자동차 경매장 일정 데이터 (등급 순 정렬: S -> A -> B)
 const AUCTION_SCHEDULES = [
   {
     day: '월요일',
@@ -131,14 +142,14 @@ export default function App() {
   const [authError, setAuthError] = useState(''); const [authSuccess, setAuthSuccess] = useState('');
   const [honeypot, setHoneypot] = useState(''); const [captchaVerified, setCaptchaVerified] = useState(false);
 
-  // 탭 목록
+  // 탭 네비게이션
   const [activeTab, setActiveTab] = useState<'records' | 'claims' | 'expense' | 'analytics' | 'wallet' | 'trade_centers' | 'auctions' | 'admin'>('records');
   const [adminSubTab, setAdminSubTab] = useState<'campaign' | 'members' | 'analytics'>('campaign');
   const [selectedDate, setSelectedDate] = useState<string>('2026-11-10');
   const [filterAllDates, setFilterAllDates] = useState<boolean>(false);
   
-  // 매매단지 전용 필터 상태
-  const [tradeFilter, setTradeFilter] = useState<'전체' | 'S등급' | 'A등급' | '수도권' | '지방권'>('전체');
+  // 매매단지 필터
+  const [tradeFilter, setTradeFilter] = useState<'전체' | 'S등급' | 'A등급' | '수도권' | '충청권' | '영남권' | '호남권'>('전체');
 
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [newPassword, setNewPassword] = useState('');
@@ -425,13 +436,15 @@ export default function App() {
     return Math.floor((today.getTime() - target.getTime()) / (1000 * 60 * 60 * 24));
   };
 
-  // 매매단지 필터링 로직
+  // 매매단지 필터링 로직 (권역 및 등급 연동)
   const filteredTradeCenters = TRADE_CENTERS.filter(center => {
     if (tradeFilter === '전체') return true;
     if (tradeFilter === 'S등급') return center.tier === 'S';
     if (tradeFilter === 'A등급') return center.tier === 'A';
     if (tradeFilter === '수도권') return center.region === '수도권';
-    if (tradeFilter === '지방권') return center.region !== '수도권';
+    if (tradeFilter === '충청권') return center.region === '충청권';
+    if (tradeFilter === '영남권') return center.region === '영남권';
+    if (tradeFilter === '호남권') return center.region === '호남권';
     return true;
   });
 
@@ -772,15 +785,15 @@ export default function App() {
           </div>
         )}
 
-        {/* 6. 전국 매매단지 안내 탭 */}
+        {/* 6. 전국 매매단지 안내 탭 (총 18개 매매단지 풀데이터 및 권역 필터) */}
         {activeTab === 'trade_centers' && (
           <div className="space-y-5 fade-in-text">
             <div className="glass-card rounded-xl p-5 shadow-lg border border-[#8B5CF6]/30">
-              <h3 className="text-sm font-bold text-white mb-2 flex items-center gap-2"><Building2 className="w-5 h-5 text-[#8B5CF6]" />전국 주요 매매단지 정보</h3>
+              <h3 className="text-sm font-bold text-white mb-2 flex items-center gap-2"><Building2 className="w-5 h-5 text-[#8B5CF6]" />전국 주요 매매단지 거점 현황 ({filteredTradeCenters.length}곳)</h3>
               <p className="text-[11px] text-slate-400 mb-4">장거리 탁송 후 복귀 콜이 쏟아지는 전국 주요 매매단지의 거점 정보와 위치입니다.</p>
               
               <div className="flex flex-wrap gap-2">
-                {['전체', 'S등급', 'A등급', '수도권', '지방권'].map(f => (
+                {['전체', 'S등급', 'A등급', '수도권', '충청권', '영남권', '호남권'].map(f => (
                   <button key={f} onClick={() => setTradeFilter(f as any)} className={`px-3 py-1.5 rounded-full text-[11px] font-bold transition-all cursor-pointer ${tradeFilter === f ? 'bg-[#8B5CF6] text-white shadow-[0_0_10px_rgba(139,92,246,0.4)] border-transparent' : 'bg-[#0B1120] text-slate-400 border border-white/10 hover:border-[#8B5CF6]/50'}`}>
                     {f}
                   </button>
@@ -790,8 +803,8 @@ export default function App() {
 
             <div className="flex gap-4 px-2 text-[10px] font-bold">
               <span className="text-[#F59E0B] flex items-center gap-1"><Crown className="w-3 h-3" /> S등급 (메가 허브)</span>
-              <span className="text-[#38BDF8] flex items-center gap-1"><Target className="w-3 h-3" /> A등급 (지역 거점)</span>
-              <span className="text-slate-400 flex items-center gap-1"><MapPin className="w-3 h-3" /> B등급 (주요 단지)</span>
+              <span className="text-[#38BDF8] flex items-center gap-1"><Target className="w-3 h-3" /> A등급 (광역 핵심)</span>
+              <span className="text-slate-400 flex items-center gap-1"><MapPin className="w-3 h-3" /> B등급 (주요 알짜)</span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-start">
@@ -825,7 +838,7 @@ export default function App() {
           </div>
         )}
 
-        {/* 7. 경매장 일정 탭 (등급 표시 및 정렬 적용) */}
+        {/* 7. 경매장 일정 탭 */}
         {activeTab === 'auctions' && (
           <div className="space-y-6 fade-in-text">
             <div className="glass-card rounded-xl p-6 shadow-lg border border-[#8B5CF6]/30">
@@ -836,7 +849,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* 등급 요약 범례 */}
             <div className="flex gap-4 px-2 text-[10px] font-bold">
               <span className="text-[#F59E0B] flex items-center gap-1"><Crown className="w-3 h-3" /> S등급 (메가 옥션)</span>
               <span className="text-[#38BDF8] flex items-center gap-1"><Target className="w-3 h-3" /> A등급 (광역 옥션)</span>
