@@ -96,7 +96,6 @@ export default function App() {
   const [honeypot, setHoneypot] = useState(''); const [captchaVerified, setCaptchaVerified] = useState(false);
 
   const [activeTab, setActiveTab] = useState<'records' | 'claims' | 'expense' | 'analytics' | 'wallet' | 'trade_centers' | 'auctions' | 'admin'>('records');
-  // 복구됨: campaign 탭 포함
   const [adminSubTab, setAdminSubTab] = useState<'campaign' | 'members' | 'analytics'>('members');
   
   const [selectedDate, setSelectedDate] = useState<string>(() => getTodayKST());
@@ -273,7 +272,6 @@ export default function App() {
     setPwdLoading(false);
   };
 
-  // 복구됨: 공지사항 관리 함수
   const handleSaveNoticeTemplate = async (e: React.FormEvent) => {
     e.preventDefault(); if (!inputNoticeTitle.trim() || !inputNoticeContent.trim()) return;
     setNoticeLoading(true);
@@ -389,14 +387,12 @@ export default function App() {
     setClaimMessageText(buildClaimText(selectedClaimRecord, newGross, newFuel, newExtra));
   };
 
-  // 복구됨: 권한 변경 로직
   const handleUpdateMemberRole = async (memberId: string, newRole: string) => {
     if (currentUserRole !== 'super_admin') { alert('최고 관리자만 변경 가능합니다.'); return; }
     const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', memberId);
     if (!error) { alert('권한이 변경되었습니다.'); fetchAdminData(); } else { alert('변경 실패: ' + error.message); }
   };
 
-  // 복구됨: CSV 다운로드 로직
   const handleExportAdminCSV = () => {
     if (adminAllRecords.length === 0) { alert('데이터가 없습니다.'); return; }
     const headers = ['일자', '출발지', '도착지', '운임', '대납비', '운임입금', '대납입금'];
@@ -412,11 +408,6 @@ export default function App() {
     setAdminSelectedUser(user);
     const userRecs = adminAllRecords.filter(r => r.userId === user.id).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10);
     setAdminSelectedUserRecords(userRecs);
-  };
-
-  const getElapsedDays = (recordDate: string) => {
-    const today = new Date(getTodayKST()); const target = new Date(recordDate);
-    return Math.floor((today.getTime() - target.getTime()) / (1000 * 60 * 60 * 24));
   };
 
   const filteredRecords = filterAllDates ? records : records.filter((r) => r.date === selectedDate);
@@ -461,6 +452,19 @@ export default function App() {
     return (
       <div className="min-h-screen bg-[#0B1120] text-slate-100 flex items-center justify-center p-4 relative overflow-hidden">
         {injectStyles()}
+        
+        {/* PWA 업데이트 알림 팝업 (완벽 중앙 정렬 복구) */}
+        {needRefresh && (
+          <div className="fixed bottom-8 left-0 right-0 mx-auto z-[9999] glass-card border border-[#8B5CF6]/50 p-5 rounded-2xl shadow-[0_0_20px_rgba(139,92,246,0.3)] flex flex-col items-center gap-3 w-[90%] max-w-[340px] fade-in-text">
+            <div className="flex items-center gap-2"><RefreshCw className="w-5 h-5 text-[#8B5CF6] animate-spin" /><span className="text-sm font-bold text-white">새로운 버전이 출시되었습니다!</span></div>
+            <p className="text-[11px] text-[#38BDF8] text-center font-medium">안정적인 최신 기능 사용을 위해 앱을 업데이트 해주세요.</p>
+            <div className="flex gap-2 w-full mt-2">
+              <button onClick={() => setNeedRefresh(false)} className="flex-1 py-2.5 bg-[#0B1120] border border-white/10 text-slate-300 text-xs font-bold rounded-lg hover:bg-white/5 transition-colors cursor-pointer">나중에</button>
+              <button onClick={() => updateServiceWorker(true)} className="flex-1 py-2.5 hp-primary-btn text-white text-xs font-bold rounded-lg shadow-[0_4px_12px_rgba(139,92,246,0.4)] cursor-pointer">지금 업데이트</button>
+            </div>
+          </div>
+        )}
+
         <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[380px] h-[380px] bg-[#8B5CF6]/10 rounded-full blur-[100px] pointer-events-none" />
         <div className="w-full max-w-[420px] glass-card rounded-2xl p-7 shadow-2xl relative z-10">
           <div className="flex flex-col items-center mb-6">
@@ -493,6 +497,10 @@ export default function App() {
                     <input type="checkbox" id="agreeChk" checked={agreePrivacy} onChange={(e) => setAgreePrivacy(e.target.checked)} className="mt-0.5 w-4 h-4 rounded text-[#8B5CF6]" />
                     <label htmlFor="agreeChk" className="text-xs text-slate-200 font-medium leading-relaxed cursor-pointer">[필수] 서비스 품질 향상 및 통계 데이터 수집·활용에 동의합니다.</label>
                   </div>
+                  <div className="flex items-center justify-between text-[11px] text-slate-400 pl-6 mt-1">
+                    <span className="text-[#38BDF8]">계좌는 기기 로컬에만 보관됩니다.</span>
+                    <button type="button" onClick={() => setShowPrivacyModal(true)} className="text-[#8B5CF6] underline font-semibold">전문보기</button>
+                  </div>
                 </div>
               </div>
               {authError && <div className="p-2.5 bg-[#EC4899]/10 text-[#EC4899] text-xs rounded-lg">{authError}</div>}
@@ -500,6 +508,16 @@ export default function App() {
             </form>
           )}
         </div>
+        {showPrivacyModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <div className="w-full max-w-lg glass-card rounded-2xl p-6 shadow-2xl relative z-20">
+              <button onClick={() => setShowPrivacyModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 cursor-pointer"><X className="w-5 h-5" /></button>
+              <h3 className="text-sm font-bold text-white mb-3">개인정보 수집 및 이용 방침</h3>
+              <p className="text-xs text-slate-300 leading-relaxed mb-4">JunDriver는 탁송 운행 기록 및 주유비 청구 내역을 클라우드에 안전하게 보관합니다. 송금용 계좌 정보 등은 외부로 전송되지 않고 본인의 기기에만 보관됩니다.</p>
+              <button type="button" onClick={() => { setAgreePrivacy(true); setShowPrivacyModal(false); }} className="w-full py-2.5 hp-primary-btn font-bold text-xs rounded-xl cursor-pointer">확인 및 동의</button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -509,6 +527,19 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#0B1120] text-slate-100 pb-20 relative">
       {injectStyles()}
+      
+      {/* PWA 업데이트 알림 팝업 (로그인 상태에서도 표시, 완벽 중앙 정렬 복구) */}
+      {needRefresh && (
+        <div className="fixed bottom-8 left-0 right-0 mx-auto z-[9999] glass-card border border-[#8B5CF6]/50 p-5 rounded-2xl shadow-[0_0_20px_rgba(139,92,246,0.3)] flex flex-col items-center gap-3 w-[90%] max-w-[340px] fade-in-text">
+          <div className="flex items-center gap-2"><RefreshCw className="w-5 h-5 text-[#8B5CF6] animate-spin" /><span className="text-sm font-bold text-white">새로운 버전이 출시되었습니다!</span></div>
+          <p className="text-[11px] text-[#38BDF8] text-center font-medium">안정적인 최신 기능 사용을 위해 앱을 업데이트 해주세요.</p>
+          <div className="flex gap-2 w-full mt-2">
+            <button onClick={() => setNeedRefresh(false)} className="flex-1 py-2.5 bg-[#0B1120] border border-white/10 text-slate-300 text-xs font-bold rounded-lg hover:bg-white/5 transition-colors cursor-pointer">나중에</button>
+            <button onClick={() => updateServiceWorker(true)} className="flex-1 py-2.5 hp-primary-btn text-white text-xs font-bold rounded-lg shadow-[0_4px_12px_rgba(139,92,246,0.4)] cursor-pointer">지금 업데이트</button>
+          </div>
+        </div>
+      )}
+
       <header className="sticky top-0 z-30 glass-card border-b-0 border-white/5 px-4 lg:px-8 py-3">
         <div className="max-w-[1400px] mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -782,19 +813,18 @@ export default function App() {
           </div>
         )}
 
-        {/* 8. 관제탑 (완벽 복구 + 업그레이드) */}
+        {/* 8. 관제탑 탭 (완벽 복구 + 업그레이드 데이터 추가) */}
         {activeTab === 'admin' && isAdminUser && (
           <div className="space-y-6 fade-in-text">
             <div className="mb-2"><h3 className="text-sm font-bold text-[#38BDF8] flex items-center gap-2"><Crown className="w-5 h-5" />플랫폼 관리자 관제탑 (Data Center)</h3><p className="text-[11px] text-slate-400 mt-1 ml-7">가입자의 접속 패턴과 운행 실적을 분석하여 PRO 전환 및 기사단 스카우트에 활용하세요.</p></div>
             
-            {/* 복구됨: 서브 탭 3개 유지 (공지보관함 복구) */}
             <div className="flex gap-2 border-b border-white/10 pb-2 overflow-x-auto scrollbar-hide">
               <button onClick={() => setAdminSubTab('campaign')} className={`px-3 py-1.5 rounded text-xs font-bold shrink-0 transition-colors ${adminSubTab === 'campaign' ? 'bg-[#38BDF8] text-[#0B1120]' : 'bg-[#0B1120] text-slate-400 hover:text-white border border-white/10'}`}>공지/이벤트 문구보관함</button>
               <button onClick={() => setAdminSubTab('members')} className={`px-3 py-1.5 rounded text-xs font-bold shrink-0 transition-colors ${adminSubTab === 'members' ? 'bg-[#38BDF8] text-[#0B1120]' : 'bg-[#0B1120] text-slate-400 hover:text-white border border-white/10'}`}>가입자 접속 현황 ({adminMemberList.length}명)</button>
               <button onClick={() => setAdminSubTab('analytics')} className={`px-3 py-1.5 rounded text-xs font-bold shrink-0 transition-colors ${adminSubTab === 'analytics' ? 'bg-[#38BDF8] text-[#0B1120]' : 'bg-[#0B1120] text-slate-400 hover:text-white border border-white/10'}`}>통계 보드</button>
             </div>
 
-            {/* 복구됨: 공지사항 관리 탭 내용 */}
+            {/* 공지/이벤트 관리 탭 */}
             {adminSubTab === 'campaign' && (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="glass-card p-6 rounded-xl space-y-4 h-fit">
@@ -825,7 +855,7 @@ export default function App() {
               </div>
             )}
 
-            {/* 복구됨: 가입자 테이블에 연락처, 이메일, 권한 드롭다운 원복 + 새 기능 추가 */}
+            {/* 가입자 접속 현황 (이메일, 연락처, 권한 드롭다운 원상 복구) */}
             {adminSubTab === 'members' && (
               <div className="glass-card p-6 rounded-xl space-y-4">
                 <input type="text" placeholder="이름 / 전화번호 검색..." value={adminSearchTerm} onChange={(e) => setAdminSearchTerm(e.target.value)} className="px-3 py-2 rounded-lg text-xs w-full max-w-xs" />
@@ -873,7 +903,7 @@ export default function App() {
               </div>
             )}
             
-            {/* 복구됨: CSV 추출 버튼 통계 탭에 원복 */}
+            {/* 통계 보드 탭 (CSV 버튼 원상 복구) */}
             {adminSubTab === 'analytics' && (
               <div className="space-y-4">
                 <div className="flex justify-end mb-2">
@@ -890,7 +920,7 @@ export default function App() {
         )}
       </main>
 
-      {/* 모달: 관리자 기사 상세 조회 (CS 모달) */}
+      {/* 모달: 관리자 기사 상세 조회 (CS) */}
       {adminSelectedUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="w-full max-w-xl glass-card rounded-2xl p-6 shadow-2xl relative max-h-[80vh] flex flex-col">
@@ -912,6 +942,74 @@ export default function App() {
               })}
             </div>
             <button onClick={() => setAdminSelectedUser(null)} className="w-full mt-4 py-3 bg-white/10 hover:bg-white/20 text-white font-bold rounded-lg text-xs transition-colors">닫기</button>
+          </div>
+        </div>
+      )}
+
+      {/* 모달: 계정 설정 (완벽 복구) */}
+      {showProfileModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
+          <div className="w-full max-w-sm glass-card rounded-2xl p-6 shadow-2xl relative z-20">
+            <button onClick={() => setShowProfileModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 cursor-pointer"><X className="w-5 h-5" /></button>
+            <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2"><User className="w-4 h-4 text-[#8B5CF6]" />기사 프로필 및 계정 관리</h3>
+            
+            <div className="bg-[#0B1120] border border-white/10 rounded-xl p-3.5 space-y-2 mb-5">
+              <div className="flex justify-between items-center text-xs"><span className="text-slate-400">기사 성함</span><span className="text-white font-bold">{currentUserProfile?.name || userName}</span></div>
+              <div className="flex justify-between items-center text-xs"><span className="text-slate-400">연락처</span><span className="text-[#38BDF8] font-mono font-semibold">{formatPhoneNumber(currentUserProfile?.phone || '') || '미등록'}</span></div>
+              <div className="flex justify-between items-center text-xs"><span className="text-slate-400">계정 이메일</span><span className="text-slate-200 font-mono text-[11px]">{session?.user?.email}</span></div>
+              <div className="flex justify-between items-center text-xs"><span className="text-slate-400">가입 일자</span><span className="text-slate-400 font-mono">{currentUserProfile?.createdAt}</span></div>
+              <div className="flex justify-between items-center text-xs pt-1 border-t border-white/5">
+                <span className="text-slate-400">회원 등급</span>
+                <div>
+                  {currentUserRole === 'super_admin' ? <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#8B5CF6]/20 text-[#8B5CF6]">최고 관리자</span> :
+                   currentUserRole === 'pro_driver' ? <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400">PRO 기사</span> :
+                   <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-white/10 text-slate-300">일반 기사</span>}
+                </div>
+              </div>
+            </div>
+
+            <form onSubmit={handlePasswordChange} className="space-y-3 mb-5">
+              <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">새 비밀번호 변경 (6자리 이상)</label><input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required placeholder="새로운 비밀번호 입력" className="w-full px-3 py-2 rounded-lg" /></div>
+              {pwdMessage && <div className={`p-2.5 rounded-lg text-xs font-semibold ${pwdMessage.type === 'success' ? 'bg-[#38BDF8]/20 text-[#38BDF8]' : 'bg-[#EC4899]/20 text-[#EC4899]'}`}>{pwdMessage.text}</div>}
+              <button type="submit" disabled={pwdLoading} className="w-full py-2.5 bg-white/10 hover:bg-white/20 text-white font-semibold rounded-lg text-xs cursor-pointer border border-white/10">{pwdLoading ? '변경 중...' : '비밀번호 변경'}</button>
+            </form>
+            <button onClick={() => setShowProfileModal(false)} className="w-full py-2.5 hp-primary-btn font-bold rounded-lg text-xs cursor-pointer">닫기</button>
+          </div>
+        </div>
+      )}
+
+      {/* 모달: 운행 일지 수정 */}
+      {editingRecord && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="w-full max-w-sm glass-card rounded-2xl p-6 shadow-2xl relative">
+            <div className="flex justify-between items-center mb-4"><h3 className="text-sm font-bold text-white flex items-center gap-1.5"><Edit2 className="w-4 h-4 text-[#8B5CF6]" /> 운행 내역 수정</h3><button onClick={() => setEditingRecord(null)} className="text-slate-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button></div>
+            <form onSubmit={handleUpdateRecord} className="space-y-3.5">
+              <div><label className="block text-[11px] font-semibold text-[#38BDF8] mb-1">운행 일자 변경</label><input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="w-full px-3 py-2 rounded-lg" required /></div>
+              <div className="grid grid-cols-2 gap-2"><div><label className="block text-[11px] font-semibold text-slate-300 mb-1">출발지</label><input type="text" value={editDeparture} onChange={(e) => setEditDeparture(e.target.value)} className="w-full px-3 py-2 rounded-lg" required /></div><div><label className="block text-[11px] font-semibold text-slate-300 mb-1">도착지</label><input type="text" value={editDestination} onChange={(e) => setEditDestination(e.target.value)} className="w-full px-3 py-2 rounded-lg" required /></div></div>
+              <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">운임(원)</label><input type="text" value={editGross} onChange={(e) => setEditGross(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" required /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">대납 주유비</label><input type="text" value={editFuel} onChange={(e) => setEditFuel(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" /></div>
+              <button type="submit" className="w-full mt-2 py-3 hp-primary-btn font-bold rounded-lg text-xs cursor-pointer">수정 완료</button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 모달: 청구 문자 직접 편집 */}
+      {claimModalOpen && selectedClaimRecord && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="w-full max-w-lg glass-card rounded-2xl p-6 shadow-2xl relative">
+            <button onClick={() => setClaimModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 cursor-pointer"><X className="w-5 h-5" /></button>
+            <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2"><MessageSquare className="w-5 h-5 text-[#8B5CF6]" />정산 청구 문자 편집 및 복사</h3>
+            <div className="flex gap-4 mb-4 pb-4 border-b border-white/10">
+              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 cursor-pointer"><input type="checkbox" checked={includeGross} onChange={() => handleToggleInclude('gross')} className="rounded text-[#8B5CF6]" /> 기본 운임</label>
+              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 cursor-pointer"><input type="checkbox" checked={includeFuel} onChange={() => handleToggleInclude('fuel')} className="rounded text-[#8B5CF6]" disabled={selectedClaimRecord.fuelAmount === 0} /> 주유비</label>
+              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 cursor-pointer"><input type="checkbox" checked={includeExtra} onChange={() => handleToggleInclude('extra')} className="rounded text-[#8B5CF6]" disabled={selectedClaimRecord.extraExpenseAmount === 0} /> 추가경비</label>
+            </div>
+            <textarea rows={10} value={claimMessageText} onChange={(e) => setClaimMessageText(e.target.value)} className="w-full p-4 rounded-xl text-xs font-mono mb-4 bg-[#FFFFFF] text-[#000000] focus:shadow-[0_0_12px_#8B5CF6] transition-all outline-none" />
+            <div className="flex gap-2">
+              <button onClick={() => setClaimModalOpen(false)} className="flex-1 py-3 bg-[#0B1120] border border-white/10 text-white font-semibold rounded-lg text-xs cursor-pointer">닫기</button>
+              <button onClick={() => { navigator.clipboard.writeText(claimMessageText); alert('문자가 복사되었습니다.'); setClaimModalOpen(false); }} className="flex-1 py-3 hp-primary-btn text-white font-bold rounded-lg text-xs cursor-pointer flex items-center justify-center gap-1.5"><Copy className="w-3.5 h-3.5" />복사하기</button>
+            </div>
           </div>
         </div>
       )}
