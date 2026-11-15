@@ -46,7 +46,6 @@ const formatPhoneNumber = (val: string) => {
   return num;
 };
 
-// 분리 미수금 적용된 인터페이스
 interface DrivingRecord {
   id: string; userId?: string; date: string; startTime: string; endTime: string;
   departure: string; destination: string; grossAmount: number; feeRate: number;
@@ -56,11 +55,9 @@ interface DrivingRecord {
 }
 interface ExpenseRecord { id: string; date: string; category: string; amount: number; memo: string; }
 interface BankAccount { id: string; bankName: string; accountNumber: string; holder: string; }
-// 관제탑 접속 데이터 컬럼 적용된 인터페이스
 interface MemberProfile { id: string; email: string; name: string; phone: string; role: string; createdAt: string; lastLoginAt?: string; loginCount?: number; recordCount?: number; }
 interface NoticeItem { id: string; title: string; content: string; isActive: boolean; updatedAt?: string; }
 
-// 전국 주요 18개 매매단지 데이터 완벽 복구
 const TRADE_CENTERS = [
   { id: '1', name: '수원 도이치오토월드', tier: 'S', region: '수도권', addr: '경기 수원시 권선구 권선로 308-5', desc: '전국 최대 실내 복합단지. 지하~지상 층별 상사 밀집 (전국 탁송 출고 최다 지역)' },
   { id: '2', name: '수원 SK V1 모터스', tier: 'S', region: '수도권', addr: '경기 수원시 권선구 평동로79번길 45', desc: '도이치오토월드 바로 옆 대형 실내 단지. 탁송 콜 집중 발생 구역.' },
@@ -82,7 +79,6 @@ const TRADE_CENTERS = [
   { id: '18', name: '창원 디오토몰', tier: 'B', region: '영남권', addr: '경남 창원시 성산구 공단로 18', desc: '경남 지역의 대표적인 신축 실내 복합 매매단지.' }
 ];
 
-// 전체 일정 완벽 복구된 경매장 데이터
 const AUCTION_SCHEDULES = [
   { day: '월요일', hex: '#38BDF8', locations: [{ name: '안성 롯데렌탈', tier: 'S', addr: '경기 안성시 내가천리 12', tag: '롯데' }, { name: '진천 광혜원 오토보이', tier: 'B', addr: '충북 진천군 금천길 37', tag: '오토보이' }] },
   { day: '화요일', hex: '#EC4899', locations: [{ name: '시화(시흥) 현대글로비스', tier: 'S', addr: '경기 시흥시 정왕천로 271', tag: '글로비스' }, { name: '오포(분당) 현대글로비스', tier: 'S', addr: '경기 광주시 능평리 174-25', tag: '글로비스' }, { name: '세종(부강) K Car', tier: 'A', addr: '세종 부강면 문곡리 산 249', tag: '케이카' }, { name: '천안 SK경매장', tier: 'B', addr: '충남 천안시 구성동', tag: 'SK' }] },
@@ -513,9 +509,9 @@ export default function App() {
       <div className="min-h-screen bg-[#0B1120] text-slate-100 flex items-center justify-center p-4 relative overflow-hidden">
         {injectStyles()}
         
-        {/* 모바일 화면 중앙 정렬 완벽 복구된 PWA 업데이트 알림 팝업 */}
+        {/* 모바일 화면 왜곡을 방지하는 절대 중앙 정렬 (inset-x-0 mx-auto) 업데이트 팝업 */}
         {needRefresh && (
-          <div className="fixed bottom-8 left-0 right-0 mx-auto z-[9999] glass-card border border-[#8B5CF6]/50 p-5 rounded-2xl shadow-[0_0_20px_rgba(139,92,246,0.3)] flex flex-col items-center gap-3 w-[90%] max-w-[340px] fade-in-text">
+          <div className="fixed bottom-6 inset-x-0 mx-auto z-[9999] glass-card border border-[#8B5CF6]/50 p-5 rounded-2xl shadow-[0_0_20px_rgba(139,92,246,0.3)] flex flex-col items-center gap-3 w-[90%] max-w-sm fade-in-text">
             <div className="flex items-center gap-2"><RefreshCw className="w-5 h-5 text-[#8B5CF6] animate-spin" /><span className="text-sm font-bold text-white">새로운 버전이 출시되었습니다!</span></div>
             <p className="text-[11px] text-[#38BDF8] text-center font-medium">안정적인 최신 기능 사용을 위해 앱을 업데이트 해주세요.</p>
             <div className="flex gap-2 w-full mt-2">
@@ -578,9 +574,9 @@ export default function App() {
     <div className="min-h-screen bg-[#0B1120] text-slate-100 pb-20 relative">
       {injectStyles()}
       
-      {/* 로그인 후에도 화면 중앙 정렬되는 업데이트 알림 팝업 */}
+      {/* 로그인 후에도 화면 중앙 정렬 100% 보장하는 업데이트 알림 팝업 */}
       {needRefresh && (
-        <div className="fixed bottom-8 left-0 right-0 mx-auto z-[9999] glass-card border border-[#8B5CF6]/50 p-5 rounded-2xl shadow-[0_0_20px_rgba(139,92,246,0.3)] flex flex-col items-center gap-3 w-[90%] max-w-[340px] fade-in-text">
+        <div className="fixed bottom-6 inset-x-0 mx-auto z-[10000] glass-card border border-[#8B5CF6]/50 p-5 rounded-2xl shadow-[0_0_20px_rgba(139,92,246,0.3)] flex flex-col items-center gap-3 w-[90%] max-w-sm fade-in-text">
           <div className="flex items-center gap-2"><RefreshCw className="w-5 h-5 text-[#8B5CF6] animate-spin" /><span className="text-sm font-bold text-white">새로운 버전이 출시되었습니다!</span></div>
           <p className="text-[11px] text-[#38BDF8] text-center font-medium">안정적인 최신 기능 사용을 위해 앱을 업데이트 해주세요.</p>
           <div className="flex gap-2 w-full mt-2">
@@ -615,7 +611,6 @@ export default function App() {
           <section className="bg-[#EC4899]/10 border border-[#EC4899]/40 rounded-2xl p-4 flex items-center justify-between shadow-[0_0_15px_rgba(236,72,153,0.1)] fade-in-text"><div className="flex items-center gap-3"><AlertTriangle className="w-5 h-5 text-[#EC4899]" /><div><span className="text-xs font-bold text-[#EC4899]">미입금 내역 ({unpaidRecords.length}건) 회수 필요</span><div className="text-xl font-extrabold text-white">총 {totalUnpaidAmount.toLocaleString()}원</div></div></div><button onClick={() => setActiveTab('claims')} className="px-4 py-2 hp-primary-btn rounded-xl text-xs font-bold cursor-pointer">청구 관리</button></section>
         )}
 
-        {/* 모바일 2단 배치 탭 네비게이션 */}
         <div className="bg-[#0B1120] p-1.5 rounded-2xl border border-white/10 shadow-lg">
           <div className="grid grid-cols-4 md:flex md:flex-wrap gap-1.5">
             <button onClick={() => setActiveTab('records')} className={`py-2 px-1 text-center rounded-xl text-xs font-bold cursor-pointer transition-all ${activeTab === 'records' ? 'hp-primary-btn shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'bg-white/5 text-slate-300 hover:text-white'}`}>운행 일지</button>
