@@ -58,25 +58,75 @@ interface BankAccount { id: string; bankName: string; accountNumber: string; hol
 interface MemberProfile { id: string; email: string; name: string; phone: string; role: string; createdAt: string; lastLoginAt?: string; loginCount?: number; recordCount?: number; }
 interface NoticeItem { id: string; title: string; content: string; isActive: boolean; updatedAt?: string; }
 
+// 완벽 복구됨: 전국 18개 주요 매매단지 정밀 데이터
 const TRADE_CENTERS = [
-  { id: '1', name: '수원 도이치오토월드', tier: 'S', region: '수도권', addr: '경기 수원시 권선구 권선로 308-5', desc: '전국 탁송 출고 최다 지역' },
-  { id: '2', name: '수원 SK V1 모터스', tier: 'S', region: '수도권', addr: '경기 수원시 권선구 평동로79번길 45', desc: '탁송 콜 집중 발생 구역.' },
-  { id: '3', name: '인천 엠파크 (허브/타워)', tier: 'S', region: '수도권', addr: '인천 서구 봉수대로 158', desc: '인천 권역 최대 메가 허브.' },
-  { id: '4', name: '용인 오토허브', tier: 'S', region: '수도권', addr: '경기 용인시 기흥구 중부대로 242', desc: '초대형 복합단지.' },
-  { id: '5', name: '서울 서서울모터리움', tier: 'A', region: '수도권', addr: '서울 강서구 양천로53길 30', desc: '올림픽대로/가양대교 인접 출고 활발.' },
-  { id: '6', name: '김포 국민차매매단지', tier: 'A', region: '수도권', addr: '경기 김포시 고촌읍 아라육로152번길 45', desc: '수도권 서북부 대형 실내 단지.' },
-  { id: '7', name: '부산 경동오토필드', tier: 'A', region: '영남권', addr: '부산 기장군 장안읍 반룡산단3로 95', desc: '영남 최대 3만6천평급 복합단지.' },
-  { id: '8', name: '대구 엠월드', tier: 'A', region: '영남권', addr: '대구 서구 문화로 37', desc: '대구 및 경북권 최대 규모 실내 단지.' },
-  { id: '9', name: '대전 디오토몰', tier: 'A', region: '충청권', addr: '대전 유성구 복용동로 35', desc: '영호남 이동 시 중간 복귀콜 환적 요충지.' },
-  { id: '10', name: '광주 풍암매매단지', tier: 'A', region: '호남권', addr: '광주 서구 매월1로 50', desc: '호남권 최대 중고차 거래 거점.' }
+  { id: '1', name: '수원 도이치오토월드', tier: 'S', region: '수도권', addr: '경기 수원시 권선구 권선로 308-5', desc: '전국 최대 실내 복합단지. 지하~지상 층별 상사 밀집 (전국 탁송 출고 최다 지역)' },
+  { id: '2', name: '수원 SK V1 모터스', tier: 'S', region: '수도권', addr: '경기 수원시 권선구 평동로79번길 45', desc: '도이치오토월드 바로 옆 대형 실내 단지. 탁송 콜 집중 발생 구역.' },
+  { id: '3', name: '인천 엠파크 (허브/타워)', tier: 'S', region: '수도권', addr: '인천 서구 봉수대로 158', desc: '인천 권역 최대 메가 허브. 허브동과 타워동 위치 구분 필수.' },
+  { id: '4', name: '용인 오토허브', tier: 'S', region: '수도권', addr: '경기 용인시 기흥구 중부대로 242', desc: '경부고속도로 신갈IC 인근. 접근성 매우 우수한 초대형 복합단지.' },
+  { id: '5', name: '서울 서서울모터리움', tier: 'A', region: '수도권', addr: '서울 강서구 양천로53길 30', desc: '서울 서부권 최대 실내 자동차 백화점. 올림픽대로/가양대교 인접 출고 활발.' },
+  { id: '6', name: '김포 국민차매매단지 (공항점)', tier: 'A', region: '수도권', addr: '경기 김포시 고촌읍 아라육로152번길 45', desc: '김포 아라뱃길 물류축 위치. 수도권 서북부 대형 실내 단지.' },
+  { id: '7', name: '부산 경동오토필드', tier: 'A', region: '영남권', addr: '부산 기장군 장안읍 반룡산단3로 95', desc: '영남 최대 3만6천평급 실내 백화점식 복합단지. 동해고속도로 장안IC 인근 상행 콜 다수.' },
+  { id: '8', name: '대구 엠월드', tier: 'A', region: '영남권', addr: '대구 서구 문화로 37', desc: '대구 및 경북권 최대 규모 실내 매매단지. 서대구역 인근 위치.' },
+  { id: '9', name: '부산 사직오토랜드', tier: 'A', region: '영남권', addr: '부산 연제구 경기장로 15', desc: '부산 권역 전통 대표 매매단지. 도심 내 장거리 종착 및 신규 출발 요충지.' },
+  { id: '10', name: '대전 디오토몰', tier: 'A', region: '충청권', addr: '대전 유성구 복용동로 35', desc: '충청권 핵심 실내 단지. 영호남 이동 시 중간 복귀콜 환적 전초기지.' },
+  { id: '11', name: '대전 오토월드', tier: 'A', region: '충청권', addr: '대전 유성구 유성대로 510', desc: '디오토몰 인근 복용동 매매단지 핵심 거점. 풍부한 지방 이동 콜.' },
+  { id: '12', name: '광주 풍암매매단지', tier: 'A', region: '호남권', addr: '광주 서구 매월1로 50', desc: '호남권 최대 중고차 거래 거점. 대규모 단지 및 상사 밀집.' },
+  { id: '13', name: '광주 엠플러스 (M-PLUS)', tier: 'A', region: '호남권', addr: '광주 서구 매월1로62번길 24', desc: '풍암지구 내 신축 대형 실내 복합 백화점. 호남권 딜러 출고 집중지.' },
+  { id: '14', name: '부천 국민차매매단지', tier: 'B', region: '수도권', addr: '경기 부천시 송내대로 450', desc: '수도권 서부권역 주요 전통 매매단지.' },
+  { id: '15', name: '부천 DY카랜드', tier: 'B', region: '수도권', addr: '경기 부천시 신흥로 399번길 50', desc: '경인고속도로 부천IC 인접. 오정동 대형 매매단지.' },
+  { id: '16', name: '천안 북천안매매단지', tier: 'B', region: '충청권', addr: '충남 천안시 서북구 번영로 608', desc: '천안아산역 인근 위치. 수도권 복귀콜이 자주 발생하는 곳.' },
+  { id: '17', name: '전주 장동매매단지', tier: 'B', region: '호남권', addr: '전북 전주시 덕진구 장동유통로 12', desc: '전북 권역 핵심 단지. 호남IC 인근 접근성 양호.' },
+  { id: '18', name: '창원 디오토몰', tier: 'B', region: '영남권', addr: '경남 창원시 성산구 공단로 18', desc: '경남 지역의 대표적인 신축 실내 복합 매매단지.' }
 ];
 
+// 완벽 복구됨: 전국 자동차 경매장 일정 데이터 전체
 const AUCTION_SCHEDULES = [
-  { day: '월요일', hex: '#38BDF8', locations: [{ name: '안성 롯데렌탈', tier: 'S', addr: '경기 안성시 내가천리 12', tag: '롯데' }] },
-  { day: '화요일', hex: '#EC4899', locations: [{ name: '시화(시흥) 현대글로비스', tier: 'S', addr: '경기 시흥시 정왕천로 271', tag: '글로비스' }, { name: '오포(분당) 현대글로비스', tier: 'S', addr: '경기 광주시 능평리 174-25', tag: '글로비스' }] },
-  { day: '수요일', hex: '#10B981', locations: [{ name: '안성 오토허브', tier: 'S', addr: '경기 안성시 문터길 60', tag: '오토허브' }, { name: '시화(시흥) 현대글로비스', tier: 'S', addr: '경기 시흥시 정왕동 2122-4', tag: '글로비스' }] },
-  { day: '목요일', hex: '#F59E0B', locations: [{ name: '양산 현대글로비스', tier: 'S', addr: '경남 양산시 산막동 572-1', tag: '글로비스' }, { name: '오산 K Car', tier: 'A', addr: '경기 오산시 은계동 7-30', tag: '케이카' }] },
-  { day: '금요일', hex: '#8B5CF6', locations: [{ name: '시화(시흥) 현대글로비스', tier: 'S', addr: '경기 시흥시 정왕동 2122-4', tag: '글로비스' }] }
+  {
+    day: '월요일',
+    hex: '#38BDF8',
+    locations: [
+      { name: '안성 롯데렌탈', tier: 'S', addr: '경기 안성시 내가천리 12', tag: '롯데' },
+      { name: '진천 광혜원 오토보이', tier: 'B', addr: '충북 진천군 금천길 37', tag: '오토보이' }
+    ]
+  },
+  {
+    day: '화요일',
+    hex: '#EC4899',
+    locations: [
+      { name: '시화(시흥) 현대글로비스', tier: 'S', addr: '경기 시흥시 정왕천로 271', tag: '글로비스' },
+      { name: '오포(분당) 현대글로비스', tier: 'S', addr: '경기 광주시 능평리 174-25', tag: '글로비스' },
+      { name: '세종(부강) K Car', tier: 'A', addr: '세종 부강면 문곡리 산 249', tag: '케이카' },
+      { name: '천안 SK경매장', tier: 'B', addr: '충남 천안시 구성동', tag: 'SK' }
+    ]
+  },
+  {
+    day: '수요일',
+    hex: '#10B981',
+    locations: [
+      { name: '안성 오토허브 (구 AJ셀카)', tier: 'S', addr: '경기 안성시 문터길 60', tag: '오토허브' },
+      { name: '시화(시흥) 현대글로비스', tier: 'S', addr: '경기 시흥시 정왕동 2122-4', tag: '글로비스' },
+      { name: '인천 현대글로비스', tier: 'A', addr: '인천 서구 가좌동 173-203', tag: '글로비스' }
+    ]
+  },
+  {
+    day: '목요일',
+    hex: '#F59E0B',
+    locations: [
+      { name: '양산 현대글로비스', tier: 'S', addr: '경남 양산시 산막동 572-1', tag: '글로비스' },
+      { name: '오산 K Car', tier: 'A', addr: '경기 오산시 은계동 7-30', tag: '케이카' },
+      { name: '인천 현대글로비스', tier: 'A', addr: '인천 서구 가좌동 173-203', tag: '글로비스' },
+      { name: '진천 광혜원 오토보이', tier: 'B', addr: '충북 진천군 금천길 37', tag: '오토보이' }
+    ]
+  },
+  {
+    day: '금요일',
+    hex: '#8B5CF6',
+    locations: [
+      { name: '시화(시흥) 현대글로비스', tier: 'S', addr: '경기 시흥시 정왕동 2122-4', tag: '글로비스' },
+      { name: '오포(분당) 현대글로비스', tier: 'A', addr: '경기 광주시 능평리 174-25', tag: '글로비스' }
+    ]
+  }
 ];
 
 export default function App() {
@@ -453,7 +503,7 @@ export default function App() {
       <div className="min-h-screen bg-[#0B1120] text-slate-100 flex items-center justify-center p-4 relative overflow-hidden">
         {injectStyles()}
         
-        {/* PWA 업데이트 알림 팝업 (완벽 중앙 정렬 복구) */}
+        {/* 완벽 중앙 정렬 적용된 업데이트 알림 팝업 */}
         {needRefresh && (
           <div className="fixed bottom-8 left-0 right-0 mx-auto z-[9999] glass-card border border-[#8B5CF6]/50 p-5 rounded-2xl shadow-[0_0_20px_rgba(139,92,246,0.3)] flex flex-col items-center gap-3 w-[90%] max-w-[340px] fade-in-text">
             <div className="flex items-center gap-2"><RefreshCw className="w-5 h-5 text-[#8B5CF6] animate-spin" /><span className="text-sm font-bold text-white">새로운 버전이 출시되었습니다!</span></div>
@@ -528,7 +578,7 @@ export default function App() {
     <div className="min-h-screen bg-[#0B1120] text-slate-100 pb-20 relative">
       {injectStyles()}
       
-      {/* PWA 업데이트 알림 팝업 (로그인 상태에서도 표시, 완벽 중앙 정렬 복구) */}
+      {/* PWA 업데이트 알림 팝업 (로그인 후 화면, 완벽 중앙 정렬 복구) */}
       {needRefresh && (
         <div className="fixed bottom-8 left-0 right-0 mx-auto z-[9999] glass-card border border-[#8B5CF6]/50 p-5 rounded-2xl shadow-[0_0_20px_rgba(139,92,246,0.3)] flex flex-col items-center gap-3 w-[90%] max-w-[340px] fade-in-text">
           <div className="flex items-center gap-2"><RefreshCw className="w-5 h-5 text-[#8B5CF6] animate-spin" /><span className="text-sm font-bold text-white">새로운 버전이 출시되었습니다!</span></div>
@@ -813,7 +863,7 @@ export default function App() {
           </div>
         )}
 
-        {/* 8. 관제탑 탭 (완벽 복구 + 업그레이드 데이터 추가) */}
+        {/* 8. 관제탑 (완벽 복구 + 업그레이드 데이터 추가) */}
         {activeTab === 'admin' && isAdminUser && (
           <div className="space-y-6 fade-in-text">
             <div className="mb-2"><h3 className="text-sm font-bold text-[#38BDF8] flex items-center gap-2"><Crown className="w-5 h-5" />플랫폼 관리자 관제탑 (Data Center)</h3><p className="text-[11px] text-slate-400 mt-1 ml-7">가입자의 접속 패턴과 운행 실적을 분석하여 PRO 전환 및 기사단 스카우트에 활용하세요.</p></div>
@@ -855,7 +905,7 @@ export default function App() {
               </div>
             )}
 
-            {/* 가입자 접속 현황 (이메일, 연락처, 권한 드롭다운 원상 복구) */}
+            {/* 가입자 접속 현황 (이메일, 연락처, 권한 드롭다운 포함) */}
             {adminSubTab === 'members' && (
               <div className="glass-card p-6 rounded-xl space-y-4">
                 <input type="text" placeholder="이름 / 전화번호 검색..." value={adminSearchTerm} onChange={(e) => setAdminSearchTerm(e.target.value)} className="px-3 py-2 rounded-lg text-xs w-full max-w-xs" />
@@ -903,7 +953,7 @@ export default function App() {
               </div>
             )}
             
-            {/* 통계 보드 탭 (CSV 버튼 원상 복구) */}
+            {/* 통계 보드 탭 (CSV 버튼 포함) */}
             {adminSubTab === 'analytics' && (
               <div className="space-y-4">
                 <div className="flex justify-end mb-2">
