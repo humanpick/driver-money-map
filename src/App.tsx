@@ -19,6 +19,14 @@ const ADMIN_DEFAULT_EMAIL = 'beat4989@naver.com';
 const ADMIN_DEFAULT_NAME = '김탁송'; 
 const ADMIN_DEFAULT_PHONE = '01091417586';
 
+// 한국 표준시(KST) 기준 당일 날짜 (YYYY-MM-DD) 반환 함수
+const getTodayKST = () => {
+  const now = new Date();
+  const kstOffset = 9 * 60 * 60 * 1000;
+  const kstDate = new Date(now.getTime() + kstOffset);
+  return kstDate.toISOString().split('T')[0];
+};
+
 const formatNumberWithComma = (val: string | number) => {
   if (val === '' || val === null || val === undefined) return '';
   const numStr = String(val).replace(/[^0-9]/g, '');
@@ -146,7 +154,9 @@ export default function App() {
   // 탭 네비게이션
   const [activeTab, setActiveTab] = useState<'records' | 'claims' | 'expense' | 'analytics' | 'wallet' | 'trade_centers' | 'auctions' | 'admin'>('records');
   const [adminSubTab, setAdminSubTab] = useState<'campaign' | 'members' | 'analytics'>('campaign');
-  const [selectedDate, setSelectedDate] = useState<string>('2026-11-10');
+  
+  // 접속 시 당일 날짜(KST)로 자동 설정
+  const [selectedDate, setSelectedDate] = useState<string>(() => getTodayKST());
   const [filterAllDates, setFilterAllDates] = useState<boolean>(false);
   
   // 매매단지 필터
@@ -157,7 +167,9 @@ export default function App() {
   const [pwdLoading, setPwdLoading] = useState(false);
   const [pwdMessage, setPwdMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // 운행 일지 수정 모달 상태
   const [editingRecord, setEditingRecord] = useState<DrivingRecord | null>(null);
+  const [editDate, setEditDate] = useState('');
   const [editDeparture, setEditDeparture] = useState(''); const [editDestination, setEditDestination] = useState('');
   const [editGross, setEditGross] = useState(''); const [editFuel, setEditFuel] = useState('');
   const [editExtra, setEditExtra] = useState(''); const [editTip, setEditTip] = useState('');
@@ -183,7 +195,9 @@ export default function App() {
   const [adminAllRecords, setAdminAllRecords] = useState<DrivingRecord[]>([]);
   const [adminSearchTerm, setAdminSearchTerm] = useState('');
 
-  const [newDate, setNewDate] = useState('2026-11-10'); const [newStartTime, setNewStartTime] = useState(''); const [newEndTime, setNewEndTime] = useState('');
+  // 새 운행 등록 및 경비 등록 초기 날짜도 당일(KST)로 설정
+  const [newDate, setNewDate] = useState<string>(() => getTodayKST());
+  const [newStartTime, setNewStartTime] = useState(''); const [newEndTime, setNewEndTime] = useState('');
   const [newDeparture, setNewDeparture] = useState(''); const [newDestination, setNewDestination] = useState('');
   const [newGross, setNewGross] = useState(''); const [newFeeRate, setNewFeeRate] = useState('20');
   const [newFuel, setNewFuel] = useState(''); const [newExtraExpense, setNewExtraExpense] = useState(''); const [newTip, setNewTip] = useState('');
@@ -211,7 +225,6 @@ export default function App() {
     const cleanMail = userEmail.toLowerCase();
     const metaName = userMeta?.name || (cleanMail === ADMIN_DEFAULT_EMAIL ? ADMIN_DEFAULT_NAME : '기사님');
     const metaPhone = userMeta?.phone || (cleanMail === ADMIN_DEFAULT_EMAIL ? ADMIN_DEFAULT_PHONE : '');
-    const metaCreatedAt = userCreatedAt ? userCreatedAt.substring(0, 10) : new Date().toISOString().substring(0, 10);
 
     const { data: profile } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
 
@@ -222,7 +235,6 @@ export default function App() {
     }
     setCurrentUserRole(role);
 
-    // profiles 테이블에 필수 정보 자동 보정/동기화 (Upsert)
     const profilePayload = {
       id: userId,
       email: cleanMail,
@@ -377,13 +389,18 @@ export default function App() {
     const payload = { id: recordId, user_id: session.user.id, date: newDate, start_time: newStartTime || '-', end_time: newEndTime || '-', departure: newDeparture, destination: newDestination, gross_amount: gross, fee_rate: feeRate, fuel_amount: fuel, extra_expense_amount: extraExp, tip_amount: tip, is_paid: false, net_amount: Math.round(net), total_claim_amount: Math.round(claimTotal) };
     const { error } = await supabase.from('driving_records').insert([payload]);
     if (!error) {
-      setRecords([{ id: recordId, date: newDate, startTime: payload.start_time, endTime: payload.end_time, departure: newDeparture, destination: newDestination, grossAmount: gross, feeRate, fuelAmount: fuel, extraExpenseAmount: extraExp, tipAmount: tip, isPaid: false, netAmount: Math.round(net), totalClaimAmount: Math.round(claimTotal) }, ...records]);
+      const updated = [{ id: recordId, date: newDate, startTime: payload.start_time, endTime: payload.end_time, departure: newDeparture, destination: newDestination, grossAmount: gross, feeRate, fuelAmount: fuel, extraExpenseAmount: extraExp, tipAmount: tip, isPaid: false, netAmount: Math.round(net), totalClaimAmount: Math.round(claimTotal) }, ...records];
+      updated.sort((a, b) => b.date.localeCompare(a.date));
+      setRecords(updated);
+      setSelectedDate(newDate); // 등록한 날짜로 필터 자동 맞춤
       setNewDeparture(''); setNewDestination(''); setNewGross(''); setNewFuel(''); setNewExtraExpense(''); setNewTip('');
     }
   };
 
   const handleOpenEditModal = (r: DrivingRecord) => {
-    setEditingRecord(r); setEditDeparture(r.departure); setEditDestination(r.destination);
+    setEditingRecord(r);
+    setEditDate(r.date);
+    setEditDeparture(r.departure); setEditDestination(r.destination);
     setEditGross(formatNumberWithComma(r.grossAmount)); setEditFuel(formatNumberWithComma(r.fuelAmount));
     setEditExtra(formatNumberWithComma(r.extraExpenseAmount)); setEditTip(formatNumberWithComma(r.tipAmount));
   };
@@ -394,9 +411,33 @@ export default function App() {
     const fuel = cleanNumber(editFuel); const extraExp = cleanNumber(editExtra); const tip = cleanNumber(editTip);
     const net = gross - (gross * (feeRate / 100)) + tip; const claimTotal = gross + fuel + extraExp;
 
-    const { error } = await supabase.from('driving_records').update({ departure: editDeparture, destination: editDestination, gross_amount: gross, fuel_amount: fuel, extra_expense_amount: extraExp, tip_amount: tip, net_amount: Math.round(net), total_claim_amount: Math.round(claimTotal) }).eq('id', editingRecord.id);
+    const { error } = await supabase.from('driving_records').update({
+      date: editDate,
+      departure: editDeparture,
+      destination: editDestination,
+      gross_amount: gross,
+      fuel_amount: fuel,
+      extra_expense_amount: extraExp,
+      tip_amount: tip,
+      net_amount: Math.round(net),
+      total_claim_amount: Math.round(claimTotal)
+    }).eq('id', editingRecord.id);
+
     if (!error) {
-      setRecords(records.map((r) => r.id === editingRecord.id ? { ...r, departure: editDeparture, destination: editDestination, grossAmount: gross, fuelAmount: fuel, extraExpenseAmount: extraExp, tipAmount: tip, netAmount: Math.round(net), totalClaimAmount: Math.round(claimTotal) } : r));
+      const updatedList = records.map((r) => r.id === editingRecord.id ? {
+        ...r,
+        date: editDate,
+        departure: editDeparture,
+        destination: editDestination,
+        grossAmount: gross,
+        fuelAmount: fuel,
+        extraExpenseAmount: extraExp,
+        tipAmount: tip,
+        netAmount: Math.round(net),
+        totalClaimAmount: Math.round(claimTotal)
+      } : r);
+      updatedList.sort((a, b) => b.date.localeCompare(a.date));
+      setRecords(updatedList);
       setEditingRecord(null);
     } else { alert('수정 실패: ' + error.message); }
   };
@@ -481,7 +522,7 @@ export default function App() {
   const monthlyProfit = monthlyNet - monthlyExpense;
 
   const getElapsedDays = (recordDate: string) => {
-    const today = new Date(selectedDate); const target = new Date(recordDate);
+    const today = new Date(getTodayKST()); const target = new Date(recordDate);
     return Math.floor((today.getTime() - target.getTime()) / (1000 * 60 * 60 * 24));
   };
 
@@ -687,7 +728,7 @@ export default function App() {
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
-                            <button onClick={() => togglePaidStatus(r.id)} className={`px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer flex items-center gap-1.5 transition-all ${r.isPaid ? 'bg-[#38BDF8]/20 text-[#38BDF8] border border-[#38BDF8]/40' : 'bg-[#EC4899]/20 text-[#EC4899] border border-[#EC4899]/40 animate-pulse'}`}>{r.isPaid ? <><CheckCircle2 className="w-3.5 h-3.5" /> 입금완료</> : <><AlertCircle className="w-3.5 h-3.5" /> 미입금 ({elapsed === 0 ? 'D-Day' : `${elapsed}일 경과`})</>}</button>
+                            <button onClick={() => togglePaidStatus(r.id)} className={`px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer flex items-center gap-1.5 transition-all ${r.isPaid ? 'bg-[#38BDF8]/20 text-[#38BDF8] border border-[#38BDF8]/40' : 'bg-[#EC4899]/20 text-[#EC4899] border border-[#EC4899]/40 animate-pulse'}`}>{r.isPaid ? <><CheckCircle2 className="w-3.5 h-3.5" /> 입금완료</> : <><AlertCircle className="w-3.5 h-3.5" /> 미입금 ({elapsed <= 0 ? 'D-Day' : `${elapsed}일 경과`})</>}</button>
                           </div>
                         </div>
                         <div className="pt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
@@ -702,8 +743,8 @@ export default function App() {
                               <span className="text-[10px] text-slate-400 block">총 청구액</span>
                               <span className="text-sm font-extrabold text-white">{r.totalClaimAmount.toLocaleString()}원</span>
                             </div>
-                            <button onClick={() => handleOpenEditModal(r)} className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 transition-all cursor-pointer"><Edit2 className="w-3.5 h-3.5" /></button>
-                            <button onClick={() => handleDeleteRecord(r.id)} className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 hover:text-[#EC4899] transition-all cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => handleOpenEditModal(r)} title="날짜 및 내역 수정" className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 transition-all cursor-pointer"><Edit2 className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => handleDeleteRecord(r.id)} title="삭제" className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 hover:text-[#EC4899] transition-all cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
                           </div>
                         </div>
                       </div>
@@ -1044,12 +1085,21 @@ export default function App() {
         )}
       </main>
 
-      {/* 모달: 운행 일지 수정 */}
+      {/* 모달: 운행 일지 수정 (날짜 변경 기능 포함) */}
       {editingRecord && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="w-full max-w-sm glass-card rounded-2xl p-6 shadow-2xl relative">
-            <div className="flex justify-between items-center mb-4"><h3 className="text-sm font-bold text-white">운행 내역 수정</h3><button onClick={() => setEditingRecord(null)} className="text-slate-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button></div>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+                <Edit2 className="w-4 h-4 text-[#8B5CF6]" /> 운행 내역 수정
+              </h3>
+              <button onClick={() => setEditingRecord(null)} className="text-slate-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
+            </div>
             <form onSubmit={handleUpdateRecord} className="space-y-3.5">
+              <div>
+                <label className="block text-[11px] font-semibold text-[#38BDF8] mb-1">운행 일자 변경</label>
+                <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="w-full px-3 py-2 rounded-lg" required />
+              </div>
               <div className="grid grid-cols-2 gap-2">
                 <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">출발지</label><input type="text" value={editDeparture} onChange={(e) => setEditDeparture(e.target.value)} className="w-full px-3 py-2 rounded-lg" required /></div>
                 <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">도착지</label><input type="text" value={editDestination} onChange={(e) => setEditDestination(e.target.value)} className="w-full px-3 py-2 rounded-lg" required /></div>
@@ -1095,7 +1145,7 @@ export default function App() {
               기사 프로필 및 계정 관리
             </h3>
             
-            {/* 기사 기본정보 카드 (자동 등록/동기화된 정보 표시) */}
+            {/* 기사 기본정보 카드 */}
             <div className="bg-[#0B1120] border border-white/10 rounded-xl p-3.5 space-y-2 mb-5">
               <div className="flex justify-between items-center text-xs">
                 <span className="text-slate-400">기사 성함</span>
@@ -1111,7 +1161,7 @@ export default function App() {
               </div>
               <div className="flex justify-between items-center text-xs">
                 <span className="text-slate-400">가입 일자</span>
-                <span className="text-slate-400 font-mono">{currentUserProfile?.createdAt || (session?.user?.created_at ? session.user.created_at.substring(0, 10) : '2026-11-10')}</span>
+                <span className="text-slate-400 font-mono">{currentUserProfile?.createdAt || (session?.user?.created_at ? session.user.created_at.substring(0, 10) : getTodayKST())}</span>
               </div>
               <div className="flex justify-between items-center text-xs pt-1 border-t border-white/5">
                 <span className="text-slate-400">회원 등급</span>
