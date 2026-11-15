@@ -50,7 +50,7 @@ interface DrivingRecord {
   id: string; userId?: string; date: string; startTime: string; endTime: string;
   departure: string; destination: string; grossAmount: number; feeRate: number;
   fuelAmount: number; extraExpenseAmount: number; tipAmount: number; 
-  isGrossPaid: boolean; isExpensePaid: boolean; // 분리 미수금 적용
+  isGrossPaid: boolean; isExpensePaid: boolean;
   netAmount: number; totalClaimAmount: number;
 }
 interface ExpenseRecord { id: string; date: string; category: string; amount: number; memo: string; }
@@ -58,35 +58,25 @@ interface BankAccount { id: string; bankName: string; accountNumber: string; hol
 interface MemberProfile { id: string; email: string; name: string; phone: string; role: string; createdAt: string; lastLoginAt?: string; loginCount?: number; recordCount?: number; }
 interface NoticeItem { id: string; title: string; content: string; isActive: boolean; updatedAt?: string; }
 
-// 전국 주요 자동차 매매단지
 const TRADE_CENTERS = [
-  { id: '1', name: '수원 도이치오토월드', tier: 'S', region: '수도권', addr: '경기 수원시 권선구 권선로 308-5', desc: '전국 최대 실내 복합단지. 지하~지상 층별 상사 밀집 (전국 탁송 출고 최다 지역)' },
-  { id: '2', name: '수원 SK V1 모터스', tier: 'S', region: '수도권', addr: '경기 수원시 권선구 평동로79번길 45', desc: '도이치오토월드 바로 옆 대형 실내 단지. 탁송 콜 집중 발생 구역.' },
-  { id: '3', name: '인천 엠파크 (허브/타워)', tier: 'S', region: '수도권', addr: '인천 서구 봉수대로 158', desc: '인천 권역 최대 메가 허브. 허브동과 타워동 위치 구분 필수.' },
-  { id: '4', name: '용인 오토허브', tier: 'S', region: '수도권', addr: '경기 용인시 기흥구 중부대로 242', desc: '경부고속도로 신갈IC 인근. 접근성 매우 우수한 초대형 복합단지.' },
-  { id: '5', name: '서울 서서울모터리움', tier: 'A', region: '수도권', addr: '서울 강서구 양천로53길 30', desc: '서울 서부권 최대 실내 자동차 백화점. 올림픽대로/가양대교 인접 출고 활발.' },
-  { id: '6', name: '김포 국민차매매단지 (공항점)', tier: 'A', region: '수도권', addr: '경기 김포시 고촌읍 아라육로152번길 45', desc: '김포 아라뱃길 물류축 위치. 수도권 서북부 대형 실내 단지.' },
-  { id: '7', name: '부산 경동오토필드', tier: 'A', region: '영남권', addr: '부산 기장군 장안읍 반룡산단3로 95', desc: '영남 최대 3만6천평급 실내 백화점식 복합단지. 동해고속도로 장안IC 인근 상행 콜 다수.' },
-  { id: '8', name: '대구 엠월드', tier: 'A', region: '영남권', addr: '대구 서구 문화로 37', desc: '대구 및 경북권 최대 규모 실내 매매단지. 서대구역 인근 위치.' },
-  { id: '9', name: '부산 사직오토랜드', tier: 'A', region: '영남권', addr: '부산 연제구 경기장로 15', desc: '부산 권역 전통 대표 매매단지. 도심 내 장거리 종착 및 신규 출발 요충지.' },
-  { id: '10', name: '대전 디오토몰', tier: 'A', region: '충청권', addr: '대전 유성구 복용동로 35', desc: '충청권 핵심 실내 단지. 영호남 이동 시 중간 복귀콜 환적 전초기지.' },
-  { id: '11', name: '대전 오토월드', tier: 'A', region: '충청권', addr: '대전 유성구 유성대로 510', desc: '디오토몰 인근 복용동 매매단지 핵심 거점. 풍부한 지방 이동 콜.' },
-  { id: '12', name: '광주 풍암매매단지', tier: 'A', region: '호남권', addr: '광주 서구 매월1로 50', desc: '호남권 최대 중고차 거래 거점. 대규모 단지 및 상사 밀집.' },
-  { id: '13', name: '광주 엠플러스 (M-PLUS)', tier: 'A', region: '호남권', addr: '광주 서구 매월1로62번길 24', desc: '풍암지구 내 신축 대형 실내 복합 백화점. 호남권 딜러 출고 집중지.' },
-  { id: '14', name: '부천 국민차매매단지', tier: 'B', region: '수도권', addr: '경기 부천시 송내대로 450', desc: '수도권 서부권역 주요 전통 매매단지.' },
-  { id: '15', name: '부천 DY카랜드', tier: 'B', region: '수도권', addr: '경기 부천시 신흥로 399번길 50', desc: '경인고속도로 부천IC 인접. 오정동 대형 매매단지.' },
-  { id: '16', name: '천안 북천안매매단지', tier: 'B', region: '충청권', addr: '충남 천안시 서북구 번영로 608', desc: '천안아산역 인근 위치. 수도권 복귀콜이 자주 발생하는 곳.' },
-  { id: '17', name: '전주 장동매매단지', tier: 'B', region: '호남권', addr: '전북 전주시 덕진구 장동유통로 12', desc: '전북 권역 핵심 단지. 호남IC 인근 접근성 양호.' },
-  { id: '18', name: '창원 디오토몰', tier: 'B', region: '영남권', addr: '경남 창원시 성산구 공단로 18', desc: '경남 지역의 대표적인 신축 실내 복합 매매단지.' }
+  { id: '1', name: '수원 도이치오토월드', tier: 'S', region: '수도권', addr: '경기 수원시 권선구 권선로 308-5', desc: '전국 탁송 출고 최다 지역' },
+  { id: '2', name: '수원 SK V1 모터스', tier: 'S', region: '수도권', addr: '경기 수원시 권선구 평동로79번길 45', desc: '탁송 콜 집중 발생 구역.' },
+  { id: '3', name: '인천 엠파크 (허브/타워)', tier: 'S', region: '수도권', addr: '인천 서구 봉수대로 158', desc: '인천 권역 최대 메가 허브.' },
+  { id: '4', name: '용인 오토허브', tier: 'S', region: '수도권', addr: '경기 용인시 기흥구 중부대로 242', desc: '초대형 복합단지.' },
+  { id: '5', name: '서울 서서울모터리움', tier: 'A', region: '수도권', addr: '서울 강서구 양천로53길 30', desc: '올림픽대로/가양대교 인접 출고 활발.' },
+  { id: '6', name: '김포 국민차매매단지', tier: 'A', region: '수도권', addr: '경기 김포시 고촌읍 아라육로152번길 45', desc: '수도권 서북부 대형 실내 단지.' },
+  { id: '7', name: '부산 경동오토필드', tier: 'A', region: '영남권', addr: '부산 기장군 장안읍 반룡산단3로 95', desc: '영남 최대 3만6천평급 복합단지.' },
+  { id: '8', name: '대구 엠월드', tier: 'A', region: '영남권', addr: '대구 서구 문화로 37', desc: '대구 및 경북권 최대 규모 실내 단지.' },
+  { id: '9', name: '대전 디오토몰', tier: 'A', region: '충청권', addr: '대전 유성구 복용동로 35', desc: '영호남 이동 시 중간 복귀콜 환적 요충지.' },
+  { id: '10', name: '광주 풍암매매단지', tier: 'A', region: '호남권', addr: '광주 서구 매월1로 50', desc: '호남권 최대 중고차 거래 거점.' }
 ];
 
-// 전국 자동차 경매장 일정 데이터
 const AUCTION_SCHEDULES = [
-  { day: '월요일', hex: '#38BDF8', locations: [{ name: '안성 롯데렌탈', tier: 'S', addr: '경기 안성시 내가천리 12', tag: '롯데' }, { name: '진천 광혜원 오토보이', tier: 'B', addr: '충북 진천군 금천길 37', tag: '오토보이' }] },
-  { day: '화요일', hex: '#EC4899', locations: [{ name: '시화(시흥) 현대글로비스', tier: 'S', addr: '경기 시흥시 정왕천로 271', tag: '글로비스' }, { name: '오포(분당) 현대글로비스', tier: 'S', addr: '경기 광주시 능평리 174-25', tag: '글로비스' }, { name: '세종(부강) K Car', tier: 'A', addr: '세종 부강면 문곡리 산 249', tag: '케이카' }, { name: '천안 SK경매장', tier: 'B', addr: '충남 천안시 구성동', tag: 'SK' }] },
-  { day: '수요일', hex: '#10B981', locations: [{ name: '안성 오토허브 (구 AJ셀카)', tier: 'S', addr: '경기 안성시 문터길 60', tag: '오토허브' }, { name: '시화(시흥) 현대글로비스', tier: 'S', addr: '경기 시흥시 정왕동 2122-4', tag: '글로비스' }, { name: '인천 현대글로비스', tier: 'A', addr: '인천 서구 가좌동 173-203', tag: '글로비스' }] },
-  { day: '목요일', hex: '#F59E0B', locations: [{ name: '양산 현대글로비스', tier: 'S', addr: '경남 양산시 산막동 572-1', tag: '글로비스' }, { name: '오산 K Car', tier: 'A', addr: '경기 오산시 은계동 7-30', tag: '케이카' }, { name: '인천 현대글로비스', tier: 'A', addr: '인천 서구 가좌동 173-203', tag: '글로비스' }, { name: '진천 광혜원 오토보이', tier: 'B', addr: '충북 진천군 금천길 37', tag: '오토보이' }] },
-  { day: '금요일', hex: '#8B5CF6', locations: [{ name: '시화(시흥) 현대글로비스', tier: 'S', addr: '경기 시흥시 정왕동 2122-4', tag: '글로비스' }, { name: '오포(분당) 현대글로비스', tier: 'A', addr: '경기 광주시 능평리 174-25', tag: '글로비스' }] }
+  { day: '월요일', hex: '#38BDF8', locations: [{ name: '안성 롯데렌탈', tier: 'S', addr: '경기 안성시 내가천리 12', tag: '롯데' }] },
+  { day: '화요일', hex: '#EC4899', locations: [{ name: '시화(시흥) 현대글로비스', tier: 'S', addr: '경기 시흥시 정왕천로 271', tag: '글로비스' }, { name: '오포(분당) 현대글로비스', tier: 'S', addr: '경기 광주시 능평리 174-25', tag: '글로비스' }] },
+  { day: '수요일', hex: '#10B981', locations: [{ name: '안성 오토허브', tier: 'S', addr: '경기 안성시 문터길 60', tag: '오토허브' }, { name: '시화(시흥) 현대글로비스', tier: 'S', addr: '경기 시흥시 정왕동 2122-4', tag: '글로비스' }] },
+  { day: '목요일', hex: '#F59E0B', locations: [{ name: '양산 현대글로비스', tier: 'S', addr: '경남 양산시 산막동 572-1', tag: '글로비스' }, { name: '오산 K Car', tier: 'A', addr: '경기 오산시 은계동 7-30', tag: '케이카' }] },
+  { day: '금요일', hex: '#8B5CF6', locations: [{ name: '시화(시흥) 현대글로비스', tier: 'S', addr: '경기 시흥시 정왕동 2122-4', tag: '글로비스' }] }
 ];
 
 export default function App() {
@@ -105,13 +95,12 @@ export default function App() {
   const [authError, setAuthError] = useState(''); const [authSuccess, setAuthSuccess] = useState('');
   const [honeypot, setHoneypot] = useState(''); const [captchaVerified, setCaptchaVerified] = useState(false);
 
-  // 이전의 모든 탭 정상 복구
   const [activeTab, setActiveTab] = useState<'records' | 'claims' | 'expense' | 'analytics' | 'wallet' | 'trade_centers' | 'auctions' | 'admin'>('records');
-  const [adminSubTab, setAdminSubTab] = useState<'members' | 'campaign' | 'analytics'>('members');
+  // 복구됨: campaign 탭 포함
+  const [adminSubTab, setAdminSubTab] = useState<'campaign' | 'members' | 'analytics'>('members');
   
   const [selectedDate, setSelectedDate] = useState<string>(() => getTodayKST());
   const [filterAllDates, setFilterAllDates] = useState<boolean>(false);
-  
   const [tradeFilter, setTradeFilter] = useState<'전체' | 'S등급' | 'A등급' | '수도권' | '충청권' | '영남권' | '호남권'>('전체');
 
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -119,11 +108,9 @@ export default function App() {
   const [pwdLoading, setPwdLoading] = useState(false);
   const [pwdMessage, setPwdMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // 관제탑 기사 상세조회 (CS 모달)
   const [adminSelectedUser, setAdminSelectedUser] = useState<MemberProfile | null>(null);
   const [adminSelectedUserRecords, setAdminSelectedUserRecords] = useState<DrivingRecord[]>([]);
 
-  // 운행 일지 수정 모달
   const [editingRecord, setEditingRecord] = useState<DrivingRecord | null>(null);
   const [editDate, setEditDate] = useState('');
   const [editDeparture, setEditDeparture] = useState(''); const [editDestination, setEditDestination] = useState('');
@@ -151,7 +138,6 @@ export default function App() {
   const [adminAllRecords, setAdminAllRecords] = useState<DrivingRecord[]>([]);
   const [adminSearchTerm, setAdminSearchTerm] = useState('');
 
-  // 새 운행 등록
   const [newDate, setNewDate] = useState<string>(() => getTodayKST());
   const [newStartTime, setNewStartTime] = useState(''); const [newEndTime, setNewEndTime] = useState('');
   const [newDeparture, setNewDeparture] = useState(''); const [newDestination, setNewDestination] = useState('');
@@ -204,9 +190,7 @@ export default function App() {
       setRecords(recordsData.map((r: any) => ({
         id: r.id, date: r.date, startTime: r.start_time || '-', endTime: r.end_time || '-', departure: r.departure, destination: r.destination,
         grossAmount: Number(r.gross_amount), feeRate: Number(r.fee_rate), fuelAmount: Number(r.fuel_amount), extraExpenseAmount: Number(r.extra_expense_amount),
-        tipAmount: Number(r.tip_amount), 
-        isGrossPaid: Boolean(r.is_gross_paid), isExpensePaid: Boolean(r.is_expense_paid), 
-        netAmount: Number(r.net_amount), totalClaimAmount: Number(r.total_claim_amount),
+        tipAmount: Number(r.tip_amount), isGrossPaid: Boolean(r.is_gross_paid), isExpensePaid: Boolean(r.is_expense_paid), netAmount: Number(r.net_amount), totalClaimAmount: Number(r.total_claim_amount),
       })));
     }
 
@@ -289,6 +273,30 @@ export default function App() {
     setPwdLoading(false);
   };
 
+  // 복구됨: 공지사항 관리 함수
+  const handleSaveNoticeTemplate = async (e: React.FormEvent) => {
+    e.preventDefault(); if (!inputNoticeTitle.trim() || !inputNoticeContent.trim()) return;
+    setNoticeLoading(true);
+    const targetId = editingNoticeId || `notice_${Date.now()}`;
+    const { error } = await supabase.from('announcements').upsert({ id: targetId, title: inputNoticeTitle.trim(), content: inputNoticeContent.trim(), is_active: editingNoticeId ? (noticeList.find(n => n.id === editingNoticeId)?.isActive || false) : false, updated_at: new Date().toISOString() });
+    if (!error) { alert('저장되었습니다.'); setInputNoticeTitle(''); setInputNoticeContent(''); setEditingNoticeId(null); fetchNotices(); }
+    setNoticeLoading(false);
+  };
+  const handleActivateNotice = async (targetNotice: NoticeItem) => {
+    setNoticeLoading(true); await supabase.from('announcements').update({ is_active: false }).neq('id', 'dummy');
+    const { error } = await supabase.from('announcements').update({ is_active: true, updated_at: new Date().toISOString() }).eq('id', targetNotice.id);
+    if (!error) { alert('메인 배너로 송출됩니다.'); fetchNotices(); }
+    setNoticeLoading(false);
+  };
+  const handleDeactivateAllNotices = async () => {
+    setNoticeLoading(true); await supabase.from('announcements').update({ is_active: false }).neq('id', 'dummy');
+    fetchNotices(); setNoticeLoading(false);
+  };
+  const handleDeleteNotice = async (id: string) => {
+    if (!window.confirm('삭제하시겠습니까?')) return;
+    await supabase.from('announcements').delete().eq('id', id); fetchNotices();
+  };
+
   const handleAddRecord = async (e: React.FormEvent) => {
     e.preventDefault(); if (!session) return;
     const gross = cleanNumber(newGross); const feeRate = cleanNumber(newFeeRate); const fuel = cleanNumber(newFuel);
@@ -348,7 +356,6 @@ export default function App() {
   };
   const handleDeleteAccount = (id: string) => { setAccounts(accounts.filter(a => a.id !== id)); };
 
-  // 통계 계산 로직 복구
   const currentMonthPrefix = selectedDate.substring(0, 7);
   const monthlyRecords = records.filter((r) => r.date.startsWith(currentMonthPrefix));
   const monthlyExpenses = expenses.filter((e) => e.date.startsWith(currentMonthPrefix));
@@ -382,11 +389,23 @@ export default function App() {
     setClaimMessageText(buildClaimText(selectedClaimRecord, newGross, newFuel, newExtra));
   };
 
-  // 관리자 - 기사 권한 변경
+  // 복구됨: 권한 변경 로직
   const handleUpdateMemberRole = async (memberId: string, newRole: string) => {
     if (currentUserRole !== 'super_admin') { alert('최고 관리자만 변경 가능합니다.'); return; }
     const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', memberId);
     if (!error) { alert('권한이 변경되었습니다.'); fetchAdminData(); } else { alert('변경 실패: ' + error.message); }
+  };
+
+  // 복구됨: CSV 다운로드 로직
+  const handleExportAdminCSV = () => {
+    if (adminAllRecords.length === 0) { alert('데이터가 없습니다.'); return; }
+    const headers = ['일자', '출발지', '도착지', '운임', '대납비', '운임입금', '대납입금'];
+    const rows = adminAllRecords.map((r) => [r.date, `"${r.departure}"`, `"${r.destination}"`, r.grossAmount, r.fuelAmount, r.isGrossPaid ? 'O' : 'X', r.isExpensePaid ? 'O' : 'X']);
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a'); link.href = url; link.setAttribute('download', `JunDriver_전체운행.csv`);
+    document.body.appendChild(link); link.click(); document.body.removeChild(link);
   };
 
   const openAdminUserDetail = (user: MemberProfile) => {
@@ -474,10 +493,6 @@ export default function App() {
                     <input type="checkbox" id="agreeChk" checked={agreePrivacy} onChange={(e) => setAgreePrivacy(e.target.checked)} className="mt-0.5 w-4 h-4 rounded text-[#8B5CF6]" />
                     <label htmlFor="agreeChk" className="text-xs text-slate-200 font-medium leading-relaxed cursor-pointer">[필수] 서비스 품질 향상 및 통계 데이터 수집·활용에 동의합니다.</label>
                   </div>
-                  <div className="flex items-center justify-between text-[11px] text-slate-400 pl-6 mt-1">
-                    <span className="text-[#38BDF8]">계좌는 기기 로컬에만 보관됩니다.</span>
-                    <button type="button" onClick={() => setShowPrivacyModal(true)} className="text-[#8B5CF6] underline font-semibold">전문보기</button>
-                  </div>
                 </div>
               </div>
               {authError && <div className="p-2.5 bg-[#EC4899]/10 text-[#EC4899] text-xs rounded-lg">{authError}</div>}
@@ -485,16 +500,6 @@ export default function App() {
             </form>
           )}
         </div>
-        {showPrivacyModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-            <div className="w-full max-w-lg glass-card rounded-2xl p-6 shadow-2xl relative z-20">
-              <button onClick={() => setShowPrivacyModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 cursor-pointer"><X className="w-5 h-5" /></button>
-              <h3 className="text-sm font-bold text-white mb-3">개인정보 수집 및 이용 방침</h3>
-              <p className="text-xs text-slate-300 leading-relaxed mb-4">JunDriver는 탁송 운행 기록 및 주유비 청구 내역을 클라우드에 안전하게 보관합니다. 송금용 계좌 정보 등은 외부로 전송되지 않고 본인의 기기에만 보관됩니다.</p>
-              <button type="button" onClick={() => { setAgreePrivacy(true); setShowPrivacyModal(false); }} className="w-full py-2.5 hp-primary-btn font-bold text-xs rounded-xl cursor-pointer">확인 및 동의</button>
-            </div>
-          </div>
-        )}
       </div>
     );
   }
@@ -521,7 +526,15 @@ export default function App() {
       </header>
 
       <main className="max-w-[1400px] mx-auto px-4 lg:px-8 pt-5 space-y-5 h-full">
-        {/* 모든 8개 탭 정상 복구 */}
+        
+        {activeNotice && activeTab !== 'admin' && (
+          <section className="bg-gradient-to-r from-[#0B1120] via-[#8B5CF6]/20 to-[#0B1120] border border-[#8B5CF6]/40 rounded-2xl p-4 flex items-center justify-between shadow-lg"><div className="flex items-center gap-3"><Megaphone className="w-5 h-5 text-[#8B5CF6] animate-pulse shrink-0" /><div><div className="text-xs font-extrabold text-[#8B5CF6]">{activeNotice.title}</div><div className="text-xs text-slate-200 mt-0.5">{activeNotice.content}</div></div></div></section>
+        )}
+
+        {totalUnpaidAmount > 0 && activeTab !== 'admin' && (
+          <section className="bg-[#EC4899]/10 border border-[#EC4899]/40 rounded-2xl p-4 flex items-center justify-between shadow-[0_0_15px_rgba(236,72,153,0.1)] fade-in-text"><div className="flex items-center gap-3"><AlertTriangle className="w-5 h-5 text-[#EC4899]" /><div><span className="text-xs font-bold text-[#EC4899]">미입금 내역 ({unpaidRecords.length}건) 회수 필요</span><div className="text-xl font-extrabold text-white">총 {totalUnpaidAmount.toLocaleString()}원</div></div></div><button onClick={() => setActiveTab('claims')} className="px-4 py-2 hp-primary-btn rounded-xl text-xs font-bold cursor-pointer">청구 관리</button></section>
+        )}
+
         <div className="bg-[#0B1120] p-1.5 rounded-2xl border border-white/10 shadow-lg">
           <div className="grid grid-cols-4 md:flex md:flex-wrap gap-1.5">
             <button onClick={() => setActiveTab('records')} className={`py-2 px-1 text-center rounded-xl text-xs font-bold transition-all ${activeTab === 'records' ? 'hp-primary-btn shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'bg-white/5 text-slate-300 hover:text-white'}`}>운행 일지</button>
@@ -530,16 +543,14 @@ export default function App() {
             </button>
             <button onClick={() => setActiveTab('expense')} className={`py-2 px-1 text-center rounded-xl text-xs font-bold transition-all ${activeTab === 'expense' ? 'hp-primary-btn shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'bg-white/5 text-slate-300 hover:text-white'}`}>경비 장부</button>
             <button onClick={() => setActiveTab('analytics')} className={`py-2 px-1 text-center rounded-xl text-xs font-bold transition-all ${activeTab === 'analytics' ? 'hp-primary-btn shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'bg-white/5 text-slate-300 hover:text-white'}`}>통계 요약</button>
-            
-            {/* 2번째 줄 */}
             <button onClick={() => setActiveTab('wallet')} className={`py-2 px-1 text-center rounded-xl text-xs font-bold transition-all ${activeTab === 'wallet' ? 'hp-primary-btn shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'bg-white/5 text-slate-300 hover:text-white'}`}>계좌 관리</button>
             <button onClick={() => setActiveTab('trade_centers')} className={`py-2 px-1 text-center rounded-xl text-xs font-bold transition-all ${activeTab === 'trade_centers' ? 'hp-primary-btn shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'bg-white/5 text-slate-300 hover:text-white'}`}>매매단지</button>
             <button onClick={() => setActiveTab('auctions')} className={`py-2 px-1 text-center rounded-xl text-xs font-bold transition-all ${activeTab === 'auctions' ? 'hp-primary-btn shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'bg-white/5 text-slate-300 hover:text-white'}`}>경매장</button>
-            {isAdminUser ? <button onClick={() => { fetchAdminData(); setActiveTab('admin'); }} className={`py-2 px-1 text-center rounded-xl text-xs font-bold transition-all ${activeTab === 'admin' ? 'bg-[#38BDF8] text-[#0B1120] font-extrabold shadow-[0_2px_10px_#38BDF8]' : 'bg-[#38BDF8]/10 text-[#38BDF8] border border-[#38BDF8]/30'}`}>관제탑</button> : <div className="hidden md:block"></div>}
+            {isAdminUser && <button onClick={() => { fetchAdminData(); setActiveTab('admin'); }} className={`py-2 px-1 text-center rounded-xl text-xs font-bold transition-all ${activeTab === 'admin' ? 'bg-[#38BDF8] text-[#0B1120] font-extrabold shadow-[0_2px_10px_#38BDF8]' : 'bg-[#38BDF8]/10 text-[#38BDF8] border border-[#38BDF8]/30'}`}>관제탑</button>}
           </div>
         </div>
 
-        {/* 1. 운행 일지 탭 (분리 미수금 적용) */}
+        {/* 운행 일지 탭 */}
         {activeTab === 'records' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 fade-in-text">
             <div className="glass-card rounded-xl p-6 shadow-lg h-fit">
@@ -575,7 +586,6 @@ export default function App() {
                       <div className="flex flex-col gap-3 pb-3 border-b border-white/10">
                         <div className="flex items-center gap-3"><div className="p-2 rounded-lg bg-[#8B5CF6]/10 text-[#8B5CF6]"><MapPin className="w-4 h-4" /></div><div><div className="text-sm font-bold text-white flex items-center gap-1.5"><span>{r.departure}</span><ChevronRight className="w-4 h-4 text-[#8B5CF6]" /><span>{r.destination}</span></div><div className="text-xs text-slate-400 mt-1">{r.date}</div></div></div>
                         
-                        {/* 분리 미수금 뱃지 UI */}
                         <div className="flex flex-wrap gap-2 pt-1">
                           <button onClick={() => toggleGrossPaid(r.id)} className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all ${r.isGrossPaid ? 'bg-[#38BDF8]/20 text-[#38BDF8] border border-[#38BDF8]/40' : 'bg-[#EC4899]/20 text-[#EC4899] border border-[#EC4899]/40'}`}>
                             {r.isGrossPaid ? <CheckCircle2 className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />} 운임 {r.grossAmount.toLocaleString()}원
@@ -599,7 +609,7 @@ export default function App() {
           </div>
         )}
 
-        {/* 2. 청구 문자 탭 */}
+        {/* 2. 청구 관리 탭 */}
         {activeTab === 'claims' && (
           <div className="glass-card rounded-xl p-6 shadow-lg fade-in-text">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
@@ -714,7 +724,7 @@ export default function App() {
           </div>
         )}
 
-        {/* 6. 전국 매매단지 안내 탭 */}
+        {/* 6. 전국 매매단지 탭 */}
         {activeTab === 'trade_centers' && (
           <div className="space-y-5 fade-in-text">
             <div className="glass-card rounded-xl p-5 shadow-lg border border-[#8B5CF6]/30">
@@ -772,34 +782,88 @@ export default function App() {
           </div>
         )}
 
-        {/* 8. 관제탑 (업그레이드 버전) */}
+        {/* 8. 관제탑 (완벽 복구 + 업그레이드) */}
         {activeTab === 'admin' && isAdminUser && (
           <div className="space-y-6 fade-in-text">
             <div className="mb-2"><h3 className="text-sm font-bold text-[#38BDF8] flex items-center gap-2"><Crown className="w-5 h-5" />플랫폼 관리자 관제탑 (Data Center)</h3><p className="text-[11px] text-slate-400 mt-1 ml-7">가입자의 접속 패턴과 운행 실적을 분석하여 PRO 전환 및 기사단 스카우트에 활용하세요.</p></div>
             
-            <div className="flex gap-2 border-b border-white/10 pb-2">
-              <button onClick={() => setAdminSubTab('members')} className={`px-3 py-1.5 rounded text-xs font-bold transition-colors ${adminSubTab === 'members' ? 'bg-[#38BDF8] text-[#0B1120]' : 'bg-[#0B1120] text-slate-400 hover:text-white border border-white/10'}`}>가입자 접속 현황 ({adminMemberList.length}명)</button>
-              <button onClick={() => setAdminSubTab('analytics')} className={`px-3 py-1.5 rounded text-xs font-bold transition-colors ${adminSubTab === 'analytics' ? 'bg-[#38BDF8] text-[#0B1120]' : 'bg-[#0B1120] text-slate-400 hover:text-white border border-white/10'}`}>통계 보드</button>
+            {/* 복구됨: 서브 탭 3개 유지 (공지보관함 복구) */}
+            <div className="flex gap-2 border-b border-white/10 pb-2 overflow-x-auto scrollbar-hide">
+              <button onClick={() => setAdminSubTab('campaign')} className={`px-3 py-1.5 rounded text-xs font-bold shrink-0 transition-colors ${adminSubTab === 'campaign' ? 'bg-[#38BDF8] text-[#0B1120]' : 'bg-[#0B1120] text-slate-400 hover:text-white border border-white/10'}`}>공지/이벤트 문구보관함</button>
+              <button onClick={() => setAdminSubTab('members')} className={`px-3 py-1.5 rounded text-xs font-bold shrink-0 transition-colors ${adminSubTab === 'members' ? 'bg-[#38BDF8] text-[#0B1120]' : 'bg-[#0B1120] text-slate-400 hover:text-white border border-white/10'}`}>가입자 접속 현황 ({adminMemberList.length}명)</button>
+              <button onClick={() => setAdminSubTab('analytics')} className={`px-3 py-1.5 rounded text-xs font-bold shrink-0 transition-colors ${adminSubTab === 'analytics' ? 'bg-[#38BDF8] text-[#0B1120]' : 'bg-[#0B1120] text-slate-400 hover:text-white border border-white/10'}`}>통계 보드</button>
             </div>
 
+            {/* 복구됨: 공지사항 관리 탭 내용 */}
+            {adminSubTab === 'campaign' && (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="glass-card p-6 rounded-xl space-y-4 h-fit">
+                  <div className="flex items-center justify-between"><h4 className="font-bold text-white text-sm flex items-center gap-1.5"><BookmarkPlus className="w-4 h-4 text-[#8B5CF6]" />{editingNoticeId ? '문구 수정하기' : '새 공지 문구 저장'}</h4>{editingNoticeId && <button onClick={() => { setEditingNoticeId(null); setInputNoticeTitle(''); setInputNoticeContent(''); }} className="text-[11px] text-[#38BDF8] hover:text-white cursor-pointer">신규 작성</button>}</div>
+                  <form onSubmit={handleSaveNoticeTemplate} className="space-y-3">
+                    <input type="text" value={inputNoticeTitle} onChange={(e) => setInputNoticeTitle(e.target.value)} placeholder="제목 (예: 11월 프로모션 안내)" required className="w-full px-3 py-2 rounded-lg text-xs" />
+                    <textarea rows={4} value={inputNoticeContent} onChange={(e) => setInputNoticeContent(e.target.value)} placeholder="앱 최상단 배너에 노출될 내용" required className="w-full px-3 py-2 rounded-lg text-xs" />
+                    <button type="submit" disabled={noticeLoading} className="w-full py-2.5 hp-primary-btn font-bold rounded-lg text-xs cursor-pointer">{noticeLoading ? '처리 중...' : editingNoticeId ? '수정 내용 저장' : '보관함에 저장하기'}</button>
+                  </form>
+                  {activeNotice && <div className="pt-3 border-t border-white/10"><button onClick={handleDeactivateAllNotices} disabled={noticeLoading} className="w-full py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-[#EC4899] text-xs font-semibold rounded-lg cursor-pointer">현재 메인 배너 송출 중단</button></div>}
+                </div>
+                <div className="lg:col-span-2 glass-card p-6 rounded-xl space-y-4">
+                  <div className="flex items-center justify-between"><div><h4 className="font-bold text-white text-sm">공지 문구 라이브러리</h4></div><span className="text-xs font-mono text-[#8B5CF6] font-bold">{noticeList.length}개 보관 중</span></div>
+                  <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
+                    {noticeList.map((n) => (
+                      <div key={n.id} className={`p-4 rounded-xl border transition-all ${n.isActive ? 'bg-[#8B5CF6]/10 border-[#8B5CF6]' : 'bg-[#0B1120] border-white/10'}`}>
+                        <div className="flex items-start justify-between gap-3 mb-2"><div className="flex items-center gap-2">{n.isActive ? <span className="px-2 py-0.5 text-[10px] font-extrabold bg-[#38BDF8] text-[#0B1120] rounded flex items-center gap-1"><Radio className="w-3 h-3 animate-pulse" />송출 중</span> : <span className="px-2 py-0.5 text-[10px] font-bold bg-white/10 text-slate-400 rounded">보관 중</span>}<h5 className="font-bold text-white text-xs">{n.title}</h5></div><span className="text-[10px] text-slate-500 font-mono">{n.updatedAt}</span></div>
+                        <p className="text-xs text-slate-300 leading-relaxed mb-3 bg-[#0B1120] p-3 rounded-lg border border-white/5">{n.content}</p>
+                        <div className="flex items-center justify-end gap-2">
+                          <button onClick={() => { setInputNoticeTitle(n.title); setInputNoticeContent(n.content); setEditingNoticeId(n.id); }} className="px-2.5 py-1.5 bg-white/10 hover:bg-white/20 text-slate-200 text-[11px] rounded font-semibold flex items-center gap-1"><Edit2 className="w-3 h-3" />불러오기</button>
+                          <button onClick={() => handleDeleteNotice(n.id)} className="p-1 text-slate-500 hover:text-[#EC4899]"><Trash2 className="w-4 h-4" /></button>
+                          {!n.isActive && <button onClick={() => handleActivateNotice(n)} disabled={noticeLoading} className="px-3 py-1.5 bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-[11px] font-bold rounded flex items-center gap-1 border-0"><Send className="w-3 h-3" />메인 송출</button>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 복구됨: 가입자 테이블에 연락처, 이메일, 권한 드롭다운 원복 + 새 기능 추가 */}
             {adminSubTab === 'members' && (
               <div className="glass-card p-6 rounded-xl space-y-4">
                 <input type="text" placeholder="이름 / 전화번호 검색..." value={adminSearchTerm} onChange={(e) => setAdminSearchTerm(e.target.value)} className="px-3 py-2 rounded-lg text-xs w-full max-w-xs" />
                 <div className="overflow-x-auto rounded-lg border border-white/10">
                   <table className="w-full text-left text-xs whitespace-nowrap">
-                    <thead className="bg-[#0B1120] text-slate-400 border-b border-white/10"><tr><th className="p-3">기사 이름</th><th className="p-3">가입일</th><th className="p-3">최근 앱 접속일</th><th className="p-3 text-center">누적 접속</th><th className="p-3 text-center">등록 실적</th><th className="p-3 text-center">권한</th><th className="p-3 text-right">CS 상세 열람</th></tr></thead>
+                    <thead className="bg-[#0B1120] text-slate-400 border-b border-white/10">
+                      <tr>
+                        <th className="p-3">이름</th>
+                        <th className="p-3">연락처</th>
+                        <th className="p-3">이메일</th>
+                        <th className="p-3">가입일</th>
+                        <th className="p-3 text-center">최근 접속일</th>
+                        <th className="p-3 text-center">접속/실적</th>
+                        <th className="p-3 text-center">권한 변경</th>
+                        <th className="p-3 text-right">CS 열람</th>
+                      </tr>
+                    </thead>
                     <tbody className="divide-y divide-white/5">
                       {adminMemberList.filter(m => m.name.includes(adminSearchTerm) || m.phone.includes(adminSearchTerm)).map((m) => {
                         const isHighEngaged = (m.recordCount || 0) >= 10;
                         return (
                           <tr key={m.id} className="hover:bg-white/5">
-                            <td className="p-3 text-white font-bold flex items-center gap-2">{m.name} {isHighEngaged && <span className="px-1.5 py-0.5 bg-[#EC4899]/20 text-[#EC4899] text-[9px] rounded font-bold">에이스</span>}</td>
+                            <td className="p-3 text-white font-bold">{m.name} {isHighEngaged && <span className="ml-1 px-1.5 py-0.5 bg-[#EC4899]/20 text-[#EC4899] text-[9px] rounded font-bold">에이스</span>}</td>
+                            <td className="p-3 font-mono text-[#38BDF8]">{formatPhoneNumber(m.phone)}</td>
+                            <td className="p-3 text-slate-300">{m.email}</td>
                             <td className="p-3 text-slate-500 font-mono">{m.createdAt}</td>
-                            <td className="p-3 text-[#38BDF8] font-mono">{m.lastLoginAt}</td>
-                            <td className="p-3 text-center text-slate-300 font-bold">{m.loginCount}회</td>
-                            <td className="p-3 text-center text-[#8B5CF6] font-bold">{m.recordCount}건</td>
-                            <td className="p-3 text-center">{m.role === 'pro_driver' ? <span className="text-emerald-400 font-bold">PRO</span> : <span className="text-slate-400">일반</span>}</td>
-                            <td className="p-3 text-right"><button onClick={() => openAdminUserDetail(m)} className="px-2.5 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded text-[10px] font-bold flex items-center gap-1 ml-auto"><Search className="w-3 h-3" />상세 보기</button></td>
+                            <td className="p-3 text-[#38BDF8] font-mono text-center">{m.lastLoginAt}</td>
+                            <td className="p-3 text-center text-slate-300 font-bold">{m.loginCount}회 / <span className="text-[#8B5CF6]">{m.recordCount}건</span></td>
+                            <td className="p-3 text-center">
+                              <select value={m.role} onChange={(e) => handleUpdateMemberRole(m.id, e.target.value)} className="bg-[#0B1120] border border-white/20 text-white rounded px-2 py-1 text-[11px] cursor-pointer outline-none focus:border-[#8B5CF6]">
+                                <option value="user">일반 기사</option>
+                                <option value="pro_driver">PRO 기사</option>
+                                <option value="vip_driver">VIP 기사</option>
+                                <option value="manager">운영 직원</option>
+                                <option value="super_admin">최고 관리자</option>
+                              </select>
+                            </td>
+                            <td className="p-3 text-right"><button onClick={() => openAdminUserDetail(m)} className="px-2.5 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded text-[10px] font-bold flex items-center gap-1 ml-auto"><Search className="w-3 h-3" />상세</button></td>
                           </tr>
                         );
                       })}
@@ -809,24 +873,30 @@ export default function App() {
               </div>
             )}
             
+            {/* 복구됨: CSV 추출 버튼 통계 탭에 원복 */}
             {adminSubTab === 'analytics' && (
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="glass-card p-5 rounded-xl"><span className="text-xs text-slate-400">플랫폼 총 가입자</span><div className="text-2xl font-bold text-white mt-1">{adminMemberList.length}명</div></div>
-                <div className="glass-card p-5 rounded-xl"><span className="text-xs text-slate-400">플랫폼 누적 접속 횟수</span><div className="text-2xl font-bold text-[#8B5CF6] mt-1">{adminMemberList.reduce((acc, m) => acc + (m.loginCount || 0), 0)}회</div></div>
-                <div className="glass-card p-5 rounded-xl"><span className="text-xs text-slate-400">총 등록 운행 데이터</span><div className="text-2xl font-bold text-[#38BDF8] mt-1">{adminAllRecords.length}건</div></div>
+              <div className="space-y-4">
+                <div className="flex justify-end mb-2">
+                  <button onClick={handleExportAdminCSV} className="px-3 py-2 bg-[#0B1120] hover:bg-white/10 border border-white/20 text-slate-300 text-xs font-bold rounded-lg cursor-pointer transition-colors flex items-center gap-1.5"><Download className="w-3.5 h-3.5" />전체 기사 운행내역 CSV 다운로드</button>
+                </div>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="glass-card p-5 rounded-xl"><span className="text-xs text-slate-400">플랫폼 총 가입자</span><div className="text-2xl font-bold text-white mt-1">{adminMemberList.length}명</div></div>
+                  <div className="glass-card p-5 rounded-xl"><span className="text-xs text-slate-400">플랫폼 누적 접속 횟수</span><div className="text-2xl font-bold text-[#8B5CF6] mt-1">{adminMemberList.reduce((acc, m) => acc + (m.loginCount || 0), 0)}회</div></div>
+                  <div className="glass-card p-5 rounded-xl"><span className="text-xs text-slate-400">총 등록 운행 데이터</span><div className="text-2xl font-bold text-[#38BDF8] mt-1">{adminAllRecords.length}건</div></div>
+                </div>
               </div>
             )}
           </div>
         )}
       </main>
 
-      {/* 모달: 관리자 기사 상세 조회 */}
+      {/* 모달: 관리자 기사 상세 조회 (CS 모달) */}
       {adminSelectedUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="w-full max-w-xl glass-card rounded-2xl p-6 shadow-2xl relative max-h-[80vh] flex flex-col">
             <button onClick={() => setAdminSelectedUser(null)} className="absolute top-4 right-4 text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
             <h3 className="text-sm font-bold text-[#38BDF8] mb-4 flex items-center gap-2"><Search className="w-5 h-5" /> [ {adminSelectedUser.name} ] 기사님 상세 리포트</h3>
-            <div className="flex gap-4 mb-4 text-xs text-slate-300 bg-[#0B1120] p-3 rounded-lg border border-white/10"><span>최근 접속: {adminSelectedUser.lastLoginAt}</span><span>누적 운행: {adminSelectedUser.recordCount}건</span></div>
+            <div className="flex gap-4 mb-4 text-xs text-slate-300 bg-[#0B1120] p-3 rounded-lg border border-white/10"><span>연락처: {formatPhoneNumber(adminSelectedUser.phone)}</span><span>누적 접속: {adminSelectedUser.loginCount}회</span></div>
             <div className="overflow-y-auto pr-2 space-y-3 flex-1">
               <h4 className="text-xs font-bold text-white border-b border-white/10 pb-2 mb-2">최근 운행 내역 (최대 10건)</h4>
               {adminSelectedUserRecords.length === 0 ? <div className="text-center text-xs text-slate-500 py-4">운행 기록이 없습니다.</div> : adminSelectedUserRecords.map((r) => {
@@ -836,80 +906,12 @@ export default function App() {
                   <div key={r.id} className="bg-[#0B1120] border border-white/10 p-3 rounded-lg text-xs">
                     <div className="flex justify-between text-slate-400 mb-1"><span>{r.date}</span><span className={unpaid > 0 ? 'text-[#EC4899] font-bold' : 'text-emerald-400 font-bold'}>{unpaid > 0 ? `미수금 ${unpaid.toLocaleString()}원` : '전액 정산완료'}</span></div>
                     <div className="font-bold text-white">{r.departure} → {r.destination}</div>
-                    <div className="text-slate-400 mt-1">청구총액: {totalClaim.toLocaleString()}원 (운임 {r.grossAmount.toLocaleString()} / 대납 {r.fuelAmount.toLocaleString()})</div>
+                    <div className="text-slate-400 mt-1">청구총액: {totalClaim.toLocaleString()}원 (운임 {r.grossAmount.toLocaleString()} / 대납 {(r.fuelAmount + r.extraExpenseAmount).toLocaleString()})</div>
                   </div>
                 );
               })}
             </div>
             <button onClick={() => setAdminSelectedUser(null)} className="w-full mt-4 py-3 bg-white/10 hover:bg-white/20 text-white font-bold rounded-lg text-xs transition-colors">닫기</button>
-          </div>
-        </div>
-      )}
-
-      {/* 모달: 계정 설정 및 프로필 (완벽 복구) */}
-      {showProfileModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
-          <div className="w-full max-w-sm glass-card rounded-2xl p-6 shadow-2xl relative z-20">
-            <button onClick={() => setShowProfileModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 cursor-pointer"><X className="w-5 h-5" /></button>
-            <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2"><User className="w-4 h-4 text-[#8B5CF6]" />기사 프로필 및 계정 관리</h3>
-            
-            <div className="bg-[#0B1120] border border-white/10 rounded-xl p-3.5 space-y-2 mb-5">
-              <div className="flex justify-between items-center text-xs"><span className="text-slate-400">기사 성함</span><span className="text-white font-bold">{currentUserProfile?.name || userName}</span></div>
-              <div className="flex justify-between items-center text-xs"><span className="text-slate-400">연락처</span><span className="text-[#38BDF8] font-mono font-semibold">{formatPhoneNumber(currentUserProfile?.phone || '') || '미등록'}</span></div>
-              <div className="flex justify-between items-center text-xs"><span className="text-slate-400">계정 이메일</span><span className="text-slate-200 font-mono text-[11px]">{session?.user?.email}</span></div>
-              <div className="flex justify-between items-center text-xs"><span className="text-slate-400">가입 일자</span><span className="text-slate-400 font-mono">{currentUserProfile?.createdAt}</span></div>
-              <div className="flex justify-between items-center text-xs pt-1 border-t border-white/5">
-                <span className="text-slate-400">회원 등급</span>
-                <div>
-                  {currentUserRole === 'super_admin' ? <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#8B5CF6]/20 text-[#8B5CF6]">최고 관리자</span> :
-                   currentUserRole === 'pro_driver' ? <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400">PRO 기사</span> :
-                   <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-white/10 text-slate-300">일반 기사</span>}
-                </div>
-              </div>
-            </div>
-
-            <form onSubmit={handlePasswordChange} className="space-y-3 mb-5">
-              <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">새 비밀번호 변경 (6자리 이상)</label><input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required placeholder="새로운 비밀번호 입력" className="w-full px-3 py-2 rounded-lg" /></div>
-              {pwdMessage && <div className={`p-2.5 rounded-lg text-xs font-semibold ${pwdMessage.type === 'success' ? 'bg-[#38BDF8]/20 text-[#38BDF8]' : 'bg-[#EC4899]/20 text-[#EC4899]'}`}>{pwdMessage.text}</div>}
-              <button type="submit" disabled={pwdLoading} className="w-full py-2.5 bg-white/10 hover:bg-white/20 text-white font-semibold rounded-lg text-xs cursor-pointer border border-white/10">{pwdLoading ? '변경 중...' : '비밀번호 변경'}</button>
-            </form>
-            <button onClick={() => setShowProfileModal(false)} className="w-full py-2.5 hp-primary-btn font-bold rounded-lg text-xs cursor-pointer">닫기</button>
-          </div>
-        </div>
-      )}
-
-      {/* 모달: 운행 일지 수정 */}
-      {editingRecord && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="w-full max-w-sm glass-card rounded-2xl p-6 shadow-2xl relative">
-            <div className="flex justify-between items-center mb-4"><h3 className="text-sm font-bold text-white flex items-center gap-1.5"><Edit2 className="w-4 h-4 text-[#8B5CF6]" /> 운행 내역 수정</h3><button onClick={() => setEditingRecord(null)} className="text-slate-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button></div>
-            <form onSubmit={handleUpdateRecord} className="space-y-3.5">
-              <div><label className="block text-[11px] font-semibold text-[#38BDF8] mb-1">운행 일자 변경</label><input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="w-full px-3 py-2 rounded-lg" required /></div>
-              <div className="grid grid-cols-2 gap-2"><div><label className="block text-[11px] font-semibold text-slate-300 mb-1">출발지</label><input type="text" value={editDeparture} onChange={(e) => setEditDeparture(e.target.value)} className="w-full px-3 py-2 rounded-lg" required /></div><div><label className="block text-[11px] font-semibold text-slate-300 mb-1">도착지</label><input type="text" value={editDestination} onChange={(e) => setEditDestination(e.target.value)} className="w-full px-3 py-2 rounded-lg" required /></div></div>
-              <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">운임(원)</label><input type="text" value={editGross} onChange={(e) => setEditGross(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" required /></div>
-              <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">대납 주유비</label><input type="text" value={editFuel} onChange={(e) => setEditFuel(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" /></div>
-              <button type="submit" className="w-full mt-2 py-3 hp-primary-btn font-bold rounded-lg text-xs cursor-pointer">수정 완료</button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* 모달: 청구 문자 직접 편집 */}
-      {claimModalOpen && selectedClaimRecord && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="w-full max-w-lg glass-card rounded-2xl p-6 shadow-2xl relative">
-            <button onClick={() => setClaimModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 cursor-pointer"><X className="w-5 h-5" /></button>
-            <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2"><MessageSquare className="w-5 h-5 text-[#8B5CF6]" />정산 청구 문자 편집 및 복사</h3>
-            <div className="flex gap-4 mb-4 pb-4 border-b border-white/10">
-              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 cursor-pointer"><input type="checkbox" checked={includeGross} onChange={() => handleToggleInclude('gross')} className="rounded text-[#8B5CF6]" /> 기본 운임</label>
-              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 cursor-pointer"><input type="checkbox" checked={includeFuel} onChange={() => handleToggleInclude('fuel')} className="rounded text-[#8B5CF6]" disabled={selectedClaimRecord.fuelAmount === 0} /> 주유비</label>
-              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 cursor-pointer"><input type="checkbox" checked={includeExtra} onChange={() => handleToggleInclude('extra')} className="rounded text-[#8B5CF6]" disabled={selectedClaimRecord.extraExpenseAmount === 0} /> 추가경비</label>
-            </div>
-            <textarea rows={10} value={claimMessageText} onChange={(e) => setClaimMessageText(e.target.value)} className="w-full p-4 rounded-xl text-xs font-mono mb-4 bg-[#FFFFFF] text-[#000000] focus:shadow-[0_0_12px_#8B5CF6] transition-all outline-none" />
-            <div className="flex gap-2">
-              <button onClick={() => setClaimModalOpen(false)} className="flex-1 py-3 bg-[#0B1120] border border-white/10 text-white font-semibold rounded-lg text-xs cursor-pointer">닫기</button>
-              <button onClick={() => { navigator.clipboard.writeText(claimMessageText); alert('문자가 복사되었습니다.'); setClaimModalOpen(false); }} className="flex-1 py-3 hp-primary-btn text-white font-bold rounded-lg text-xs cursor-pointer flex items-center justify-center gap-1.5"><Copy className="w-3.5 h-3.5" />복사하기</button>
-            </div>
           </div>
         </div>
       )}
