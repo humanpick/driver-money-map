@@ -111,7 +111,6 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'records' | 'claims' | 'expense' | 'analytics' | 'wallet' | 'trade_centers' | 'auctions' | 'admin'>('records');
   const [adminSubTab, setAdminSubTab] = useState<'campaign' | 'members' | 'analytics'>('members');
   
-  // 💡 앱 접속 시 당일, 당월 날짜로 100% 자동 세팅
   const [viewMode, setViewMode] = useState<'daily' | 'monthly'>('daily');
   const [selectedDate, setSelectedDate] = useState<string>(() => getTodayKST());
   const [selectedMonth, setSelectedMonth] = useState<string>(() => getTodayKST().substring(0, 7));
@@ -297,22 +296,27 @@ export default function App() {
     setPwdLoading(false);
   };
 
-  // 💡 달별/일별 데이터 일괄 삭제 기능
-  const handleDeleteViewRecords = async () => {
+  // 💡 월별 / 연도별 일괄 삭제 기능
+  const handleDeleteRecordsByPeriod = async (period: 'month' | 'year') => {
     if (!session) return;
-    const isMonthly = viewMode === 'monthly';
-    const target = isMonthly ? selectedMonth : selectedDate;
-    const displayTarget = isMonthly ? `${selectedMonth.replace('-', '년 ')}월` : `${selectedDate.replace(/-/g, '.')} 당일`;
+    
+    const activeDate = viewMode === 'daily' ? selectedDate : selectedMonth;
+    const targetYear = activeDate.substring(0, 4);
+    const targetMonth = activeDate.substring(5, 7);
+    
+    const targetPrefix = period === 'month' ? `${targetYear}-${targetMonth}` : targetYear;
+    const displayTarget = period === 'month' ? `${targetYear}년 ${targetMonth}월` : `${targetYear}년 전체`;
 
     if (!window.confirm(`⚠️ 경고: [${displayTarget}]에 등록된 모든 운행 일지 데이터가 즉시 삭제됩니다.\n\n정말 일괄 삭제하시겠습니까?`)) return;
     
-    const { error } = isMonthly
-      ? await supabase.from('driving_records').delete().eq('user_id', session.user.id).like('date', `${target}%`)
-      : await supabase.from('driving_records').delete().eq('user_id', session.user.id).eq('date', target);
+    const { error } = await supabase.from('driving_records')
+      .delete()
+      .eq('user_id', session.user.id)
+      .like('date', `${targetPrefix}%`);
 
     if (!error) {
-      setRecords(records.filter(r => isMonthly ? !r.date.startsWith(target) : r.date !== target));
-      alert(`[${displayTarget}] 데이터가 모두 삭제되었습니다.`);
+      setRecords(records.filter(r => !r.date.startsWith(targetPrefix)));
+      alert(`[${displayTarget}] 데이터가 성공적으로 삭제되었습니다.`);
     } else {
       alert('삭제 중 오류가 발생했습니다: ' + error.message);
     }
@@ -348,9 +352,7 @@ export default function App() {
 
       if (cleanArray.length === 0) {
         alert('유효한 운행 데이터(출발/도착/운임)를 찾을 수 없습니다. 입출금 찌꺼기 내역만 있거나 양식이 다릅니다.');
-        setImporting(false);
-        e.target.value = '';
-        return;
+        setImporting(false); e.target.value = ''; return;
       }
 
       const newRecords = cleanArray.filter(r => !isDuplicateRecord(r));
@@ -364,8 +366,7 @@ export default function App() {
         }
         setImportPreview(newRecords);
       }
-      setImporting(false);
-      e.target.value = ''; 
+      setImporting(false); e.target.value = ''; 
     };
 
     if (fileName.endsWith('.csv')) {
@@ -729,10 +730,11 @@ export default function App() {
     setAdminSelectedUserRecords(userRecs);
   };
 
-  // 💡 렉을 줄이는 달별(월간)/일간 보기 필터링 로직
   const filteredRecords = viewMode === 'daily' 
     ? records.filter((r) => r.date === selectedDate)
     : records.filter((r) => r.date.startsWith(selectedMonth));
+
+  const displayRecords = filterAllDates ? records.slice(0, 100) : filteredRecords.slice(0, 100);
 
   const unpaidRecords = records.filter((r) => !r.isGrossPaid || (!r.isExpensePaid && (r.fuelAmount > 0 || r.extraExpenseAmount > 0)));
   const totalUnpaidAmount = unpaidRecords.reduce((acc, r) => {
@@ -946,7 +948,7 @@ export default function App() {
                   <p className="text-[11px] text-[#38BDF8] font-medium mt-1 ml-6">운임과 대납 경비의 입금 상태를 분리해서 관리하세요.</p>
                 </div>
                 
-                {/* 💡 월간/일간 뷰 토글 및 렉 방지 삭제 버튼 */}
+                {/* 💡 월간/일간 뷰 토글 및 분리된 삭제 버튼 */}
                 <div className="flex flex-col items-end gap-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <button onClick={() => setImportModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#8B5CF6]/10 hover:bg-[#8B5CF6]/20 text-[#8B5CF6] text-xs font-bold rounded-lg border border-[#8B5CF6]/30 transition-all cursor-pointer"><Database className="w-3.5 h-3.5" />타사 장부 불러오기</button>
@@ -966,17 +968,22 @@ export default function App() {
                       <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="bg-white text-black font-bold text-xs px-2 py-1.5 rounded-lg border-0 focus:ring-2 focus:ring-[#8B5CF6]" />
                     )}
                   </div>
-                  <button onClick={handleDeleteViewRecords} className="text-[11px] text-[#EC4899] hover:text-rose-400 font-bold underline cursor-pointer mr-1">
-                    {viewMode === 'monthly' ? `🗑️ ${selectedMonth.replace('-', '년 ')}월 일괄 삭제` : `🗑️ ${selectedDate.replace(/-/g, '.')} 일괄 삭제`}
-                  </button>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button onClick={() => handleDeleteRecordsByPeriod('month')} className="text-[11px] text-[#EC4899] hover:text-rose-400 font-bold underline cursor-pointer">
+                      🗑️ 선택 월({viewMode === 'monthly' ? selectedMonth.substring(5,7) : selectedDate.substring(5,7)}월) 일괄삭제
+                    </button>
+                    <button onClick={() => handleDeleteRecordsByPeriod('year')} className="text-[11px] text-rose-500 hover:text-rose-400 font-bold underline cursor-pointer">
+                      🗑️ 선택 연도({viewMode === 'monthly' ? selectedMonth.substring(0,4) : selectedDate.substring(0,4)}년) 일괄삭제
+                    </button>
+                  </div>
                 </div>
               </div>
 
               <div className="space-y-3 max-h-[650px] overflow-y-auto pr-1">
-                {filteredRecords.length === 0 ? (
+                {displayRecords.length === 0 ? (
                   <div className="text-center py-12 text-slate-500 text-xs">해당 조건에 등록된 운행이 없습니다.</div>
                 ) : (
-                  filteredRecords.map((r) => {
+                  displayRecords.map((r) => {
                     const elapsed = getElapsedDays(r.date);
                     const hasExpense = r.fuelAmount > 0 || r.extraExpenseAmount > 0;
                     const expenseTotal = r.fuelAmount + r.extraExpenseAmount;
@@ -1023,6 +1030,12 @@ export default function App() {
                       </div>
                     );
                   })
+                )}
+                {/* 💡 속도 최적화 렌더링 메시지 */}
+                {(filterAllDates || viewMode === 'monthly') && filteredRecords.length > 100 && (
+                  <div className="text-center text-xs font-semibold text-[#8B5CF6] pt-4 pb-2">
+                    빠른 속도를 위해 최근 100건만 표시됩니다. (해당 기간 총 {filteredRecords.length}건 등록됨)
+                  </div>
                 )}
               </div>
             </div>
@@ -1396,7 +1409,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 💡 모달: 타사 엑셀(CSV) 및 DB(SQLite) 불러오기 (Import) - 초강력 찌꺼기 차단 */}
+      {/* 💡 모달: 타사 엑셀(CSV) 및 DB(SQLite) 불러오기 (Import) */}
       {importModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="w-full max-w-lg glass-card rounded-2xl p-6 shadow-2xl relative">
