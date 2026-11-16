@@ -8,7 +8,7 @@ import {
   Fuel, AlertTriangle, MessageSquare, Check, Edit2, Coins, Sparkles, Phone,
   RefreshCw, UserX, ShieldAlert, BarChart3, Megaphone, Users, Download,
   Award, Crown, BookmarkPlus, Radio, Send, Building2, Info, Map, Target, Navigation, Search,
-  Upload, FileSpreadsheet
+  Upload, FileSpreadsheet, Database
 } from 'lucide-react';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
@@ -91,11 +91,9 @@ const AUCTION_SCHEDULES = [
 export default function App() {
   const { needRefresh: [needRefresh, setNeedRefresh], updateServiceWorker } = useRegisterSW({ onRegistered(r) {}, onRegisterError(error) {} });
 
-  // 💡 모바일 환경 최적화: 팝업창 없이 새 버전 발견 시 백그라운드 즉시 100% 자동 업데이트
+  // 💡 백그라운드 강제 무설정 업데이트
   useEffect(() => {
-    if (needRefresh) {
-      updateServiceWorker(true);
-    }
+    if (needRefresh) updateServiceWorker(true);
   }, [needRefresh, updateServiceWorker]);
 
   const [session, setSession] = useState<any>(null);
@@ -137,7 +135,7 @@ export default function App() {
   const [includeGross, setIncludeGross] = useState(true); const [includeFuel, setIncludeFuel] = useState(true);
   const [includeExtra, setIncludeExtra] = useState(true); const [claimMessageText, setClaimMessageText] = useState('');
   
-  // CSV Import State (타사 가계부 1초 환승)
+  // CSV & DB Import State
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importPreview, setImportPreview] = useState<any[]>([]);
   const [importing, setImporting] = useState(false);
@@ -308,67 +306,136 @@ export default function App() {
     setPwdLoading(false);
   };
 
-  // 💡 기존 앱 장부(CSV) 1초 환승 업로드 파싱 로직
-  const handleCsvImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // 💡 CSV 및 DB(SQLite) 파일 통합 파싱 로직
+  const handleFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
+
+    const fileName = file.name.toLowerCase();
+
+    // 1. CSV 파싱 로직
+    if (fileName.endsWith('.csv')) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const text = event.target?.result as string;
+          const lines = text.split('\n').filter(line => line.trim() !== '');
+          if (lines.length < 2) { alert('데이터가 없거나 파일 양식이 올바르지 않습니다.'); return; }
+          
+          const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+          const dateIdx = headers.findIndex(h => h.includes('날짜') || h.includes('일자'));
+          const depIdx = headers.findIndex(h => h.includes('출발'));
+          const destIdx = headers.findIndex(h => h.includes('도착'));
+          const grossIdx = headers.findIndex(h => h.includes('운임') || h.includes('요금') || h.includes('수입'));
+          
+          if (dateIdx === -1 || grossIdx === -1) { alert('필수 항목(날짜, 요금)을 찾을 수 없습니다.'); return; }
+
+          const parsed = lines.slice(1).map(line => {
+            const cols = line.split(',').map(c => c.trim().replace(/"/g, ''));
+            let d = cols[dateIdx] || '';
+            if (d && !d.includes('-')) d = d.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3');
+            
+            const gross = cleanNumber(cols[grossIdx]);
+            const net = Math.round(gross * 0.8); 
+            return {
+              date: d || getTodayKST(), departure: depIdx !== -1 ? cols[depIdx] : '알수없음', destination: destIdx !== -1 ? cols[destIdx] : '알수없음',
+              gross_amount: gross, fee_rate: 20, fuel_amount: 0, extra_expense_amount: 0, tip_amount: 0, is_gross_paid: true, is_expense_paid: true, net_amount: net, total_claim_amount: gross
+            };
+          }).filter(r => r.gross_amount > 0);
+          setImportPreview(parsed);
+        } catch (err) { alert('파일을 분석하는 중 오류가 발생했습니다.'); }
+      };
+      reader.readAsText(file, "utf-8");
+    } 
+    // 2. DB(SQLite) 파싱 로직 (대리가계부 등 dcb_teras.db 100% 호환)
+    else if (fileName.endsWith('.db') || fileName.endsWith('.sqlite')) {
       try {
-        const text = event.target?.result as string;
-        const lines = text.split('\n').filter(line => line.trim() !== '');
-        if (lines.length < 2) { alert('데이터가 없거나 파일 양식이 올바르지 않습니다.'); return; }
+        setImporting(true);
+        // WebAssembly SQLite 라이브러리(sql.js) 동적 로드 (CDN)
+        if (!(window as any).initSqlJs) {
+          await new Promise<void>((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js';
+            script.onload = () => resolve();
+            script.onerror = () => reject();
+            document.body.appendChild(script);
+          });
+        }
         
-        const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
-        const dateIdx = headers.findIndex(h => h.includes('날짜') || h.includes('일자'));
-        const depIdx = headers.findIndex(h => h.includes('출발'));
-        const destIdx = headers.findIndex(h => h.includes('도착'));
-        const grossIdx = headers.findIndex(h => h.includes('운임') || h.includes('요금') || h.includes('수입'));
+        const initSqlJs = (window as any).initSqlJs;
+        const SQL = await initSqlJs({ locateFile: (f: string) => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${f}` });
         
-        if (dateIdx === -1 || depIdx === -1 || destIdx === -1 || grossIdx === -1) {
-          alert('필수 항목(날짜, 출발, 도착, 운임)을 찾을 수 없습니다. 엑셀 양식을 확인해주세요.');
-          return;
+        const buffer = await file.arrayBuffer();
+        const db = new SQL.Database(new Uint8Array(buffer));
+        
+        const tablesRes = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'");
+        if (tablesRes.length === 0) { alert('DB에 테이블이 없습니다.'); setImporting(false); return; }
+        
+        // 데이터가 가장 많은 메인 테이블(운행기록) 찾기
+        let targetTable = tablesRes[0].values[0][0]; 
+        let bestData: any[] = [];
+        let bestCols: string[] = [];
+
+        for (let i = 0; i < tablesRes[0].values.length; i++) {
+          const tName = tablesRes[0].values[i][0];
+          const dRes = db.exec(`SELECT * FROM "${tName}" LIMIT 2000`);
+          if (dRes.length > 0 && dRes[0].values.length > bestData.length) {
+            targetTable = tName;
+            bestData = dRes[0].values;
+            bestCols = dRes[0].columns;
+          }
         }
 
-        const parsed = lines.slice(1).map(line => {
-          const cols = line.split(',').map(c => c.trim().replace(/"/g, ''));
-          let d = cols[dateIdx] || '';
-          if (d && !d.includes('-')) d = d.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3');
+        const headers = bestCols.map(h => String(h).toLowerCase());
+        const dateIdx = headers.findIndex(h => h.includes('date') || h.includes('날짜') || h.includes('일자') || h.includes('time'));
+        const depIdx = headers.findIndex(h => h.includes('start') || h.includes('출발'));
+        const destIdx = headers.findIndex(h => h.includes('end') || h.includes('도착'));
+        const grossIdx = headers.findIndex(h => h.includes('price') || h.includes('요금') || h.includes('운임') || h.includes('금액') || h.includes('income'));
+
+        if (dateIdx === -1 || grossIdx === -1) {
+          alert('DB 파일에서 필수 항목(날짜, 금액)을 찾을 수 없습니다.');
+          setImporting(false); return;
+        }
+
+        const parsed = bestData.map(row => {
+          let d = row[dateIdx] ? String(row[dateIdx]) : '';
           
-          const gross = cleanNumber(cols[grossIdx]);
-          const net = Math.round(gross * 0.8); // 수수료율 20% 일괄 적용
+          // Timestamp to YYYY-MM-DD (대리가계부 안드로이드 밀리초 포맷 지원)
+          if (d.length >= 10 && !isNaN(Number(d))) {
+             const dateObj = new Date(Number(d) > 9999999999 ? Number(d) : Number(d) * 1000);
+             d = dateObj.toISOString().split('T')[0];
+          } else if (d && !d.includes('-')) {
+             d = d.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3');
+          }
+          
+          const gross = cleanNumber(String(row[grossIdx]));
+          const net = Math.round(gross * 0.8);
+          
           return {
             date: d || getTodayKST(),
-            departure: cols[depIdx] || '알수없음',
-            destination: cols[destIdx] || '알수없음',
-            gross_amount: gross,
-            fee_rate: 20,
-            fuel_amount: 0,
-            extra_expense_amount: 0,
-            tip_amount: 0,
-            is_gross_paid: true, // 과거 데이터이므로 전액 정산완료 간주
-            is_expense_paid: true,
-            net_amount: net,
-            total_claim_amount: gross
+            departure: depIdx !== -1 && row[depIdx] ? String(row[depIdx]) : '알수없음',
+            destination: destIdx !== -1 && row[destIdx] ? String(row[destIdx]) : '알수없음',
+            gross_amount: gross, fee_rate: 20, fuel_amount: 0, extra_expense_amount: 0, tip_amount: 0,
+            is_gross_paid: true, is_expense_paid: true, net_amount: net, total_claim_amount: gross
           };
         }).filter(r => r.gross_amount > 0);
-
+        
         setImportPreview(parsed);
+        setImporting(false);
       } catch (err) {
-        alert('파일을 분석하는 중 오류가 발생했습니다.');
+        alert('DB 파일을 분석하는 중 오류가 발생했습니다. 손상된 파일일 수 있습니다.');
+        setImporting(false);
       }
-    };
-    reader.readAsText(file, "utf-8");
+    } else {
+      alert('.csv 또는 .db 확장자 파일만 업로드 가능합니다.');
+    }
   };
 
   const executeImport = async () => {
     if (!session || importPreview.length === 0) return;
     setImporting(true);
     const payloads = importPreview.map(r => ({
-      ...r,
-      id: 'rec_' + Math.random().toString(36).substr(2, 9) + Date.now(),
-      user_id: session.user.id,
-      start_time: '-', end_time: '-'
+      ...r, id: 'rec_' + Math.random().toString(36).substr(2, 9) + Date.now(), user_id: session.user.id, start_time: '-', end_time: '-'
     }));
 
     const { error } = await supabase.from('driving_records').insert(payloads);
@@ -376,9 +443,7 @@ export default function App() {
       alert('데이터 저장 중 오류가 발생했습니다: ' + error.message);
     } else {
       alert(`${payloads.length}건의 과거 운행 일지가 성공적으로 환승되었습니다!`);
-      setImportModalOpen(false);
-      setImportPreview([]);
-      fetchUserData(session.user.id, session.user.email);
+      setImportModalOpen(false); setImportPreview([]); fetchUserData(session.user.id, session.user.email);
     }
     setImporting(false);
   };
@@ -692,7 +757,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* 1. 운행 일지 탭 (분리 미수금 + CSV 환승 버튼 적용) */}
+        {/* 1. 운행 일지 탭 (CSV & DB 자동 환승 업로드 기능 탑재) */}
         {activeTab === 'records' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 fade-in-text">
             <div className="glass-card rounded-xl p-6 shadow-lg h-fit">
@@ -726,10 +791,10 @@ export default function App() {
                   <p className="text-[11px] text-[#38BDF8] font-medium mt-1 ml-6">운임과 대납 경비의 입금 상태를 분리해서 관리하세요.</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <button onClick={() => setImportModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#8B5CF6]/10 hover:bg-[#8B5CF6]/20 text-[#8B5CF6] text-xs font-bold rounded-lg border border-[#8B5CF6]/30 transition-all cursor-pointer"><Upload className="w-3.5 h-3.5" />타사 장부 불러오기</button>
+                  <button onClick={() => setImportModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#8B5CF6]/10 hover:bg-[#8B5CF6]/20 text-[#8B5CF6] text-xs font-bold rounded-lg border border-[#8B5CF6]/30 transition-all cursor-pointer"><Database className="w-3.5 h-3.5" />타사 앱 장부 불러오기</button>
                   <div className="flex items-center gap-2 bg-[#0B1120] px-3 py-1.5 rounded-lg border border-white/10">
                     <input type="checkbox" id="allDates" checked={filterAllDates} onChange={(e) => setFilterAllDates(e.target.checked)} className="w-3.5 h-3.5 rounded text-[#8B5CF6] cursor-pointer" />
-                    <label htmlFor="allDates" className="text-xs text-slate-300 font-semibold cursor-pointer">전체 누적 보기</label>
+                    <label htmlFor="allDates" className="text-xs text-slate-300 font-semibold cursor-pointer">전체 보기</label>
                   </div>
                   {!filterAllDates && <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="bg-white text-black font-bold text-xs px-2 py-1.5 rounded-lg border-0 focus:ring-2 focus:ring-[#8B5CF6]" />}
                 </div>
@@ -1159,26 +1224,33 @@ export default function App() {
         </div>
       )}
 
-      {/* 모달: 타사 엑셀 불러오기 (Import) - 대리가계부 완벽 호환 */}
+      {/* 💡 모달: 타사 엑셀(CSV) 및 DB(SQLite) 불러오기 (Import) */}
       {importModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="w-full max-w-lg glass-card rounded-2xl p-6 shadow-2xl relative">
             <button onClick={() => setImportModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 cursor-pointer"><X className="w-5 h-5" /></button>
-            <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2"><FileSpreadsheet className="w-5 h-5 text-[#8B5CF6]" />타사 앱 장부 불러오기</h3>
-            <p className="text-xs text-slate-400 mb-4 leading-relaxed">대리가계부 등 타사 앱에서 다운로드한 CSV(엑셀) 파일을 선택해주세요.<br/>날짜, 출발, 도착, 요금 항목을 자동으로 인식하여 1초 만에 환승됩니다.</p>
+            <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2"><Database className="w-5 h-5 text-[#8B5CF6]" />타사 앱 장부 불러오기</h3>
+            <p className="text-xs text-slate-400 mb-4 leading-relaxed">대리가계부 등 타사 앱에서 추출한 <strong className="text-[#38BDF8]">CSV(엑셀)</strong> 또는 <strong className="text-[#38BDF8]">DB 파일(dcb_teras.db 등)</strong>을 선택해주세요. 내용을 자동으로 인식하여 1초 만에 환승됩니다.</p>
             
             <div className="bg-[#0B1120] border border-white/10 rounded-xl p-6 flex flex-col items-center justify-center mb-4 border-dashed cursor-pointer hover:border-[#8B5CF6]/50 transition-colors">
-              <label htmlFor="csv-upload" className="flex flex-col items-center cursor-pointer w-full">
+              <label htmlFor="file-upload" className="flex flex-col items-center cursor-pointer w-full">
                 <Upload className="w-8 h-8 text-[#8B5CF6] mb-3" />
-                <span className="text-xs font-bold text-slate-300">이곳을 터치하여 CSV 파일 선택</span>
-                <input id="csv-upload" type="file" accept=".csv" onChange={handleCsvImport} className="hidden" />
+                <span className="text-xs font-bold text-slate-300 text-center">이곳을 터치하여<br/>CSV 또는 DB(.db) 파일 선택</span>
+                <input id="file-upload" type="file" accept=".csv, .db, .sqlite" onChange={handleFileImport} className="hidden" />
               </label>
             </div>
 
-            {importPreview.length > 0 && (
+            {importing && (
+              <div className="flex flex-col items-center justify-center p-4">
+                <RefreshCw className="w-6 h-6 text-[#8B5CF6] animate-spin mb-2" />
+                <span className="text-xs text-slate-300">파일을 분석 중입니다...</span>
+              </div>
+            )}
+
+            {importPreview.length > 0 && !importing && (
               <div className="mb-4">
                 <div className="flex justify-between items-center mb-2">
-                  <span className="text-xs font-bold text-[#38BDF8]">미리보기 (총 {importPreview.length}건)</span>
+                  <span className="text-xs font-bold text-[#38BDF8]">미리보기 (총 {importPreview.length}건 성공)</span>
                 </div>
                 <div className="bg-[#0B1120] border border-white/10 rounded-lg p-3 max-h-40 overflow-y-auto space-y-2">
                   {importPreview.slice(0, 5).map((r, i) => (
@@ -1195,8 +1267,8 @@ export default function App() {
             <div className="flex gap-2">
               <button onClick={() => { setImportModalOpen(false); setImportPreview([]); }} className="flex-1 py-3 bg-[#0B1120] border border-white/10 text-white font-semibold rounded-lg text-xs cursor-pointer transition-colors">취소</button>
               <button onClick={executeImport} disabled={importPreview.length === 0 || importing} className="flex-1 py-3 hp-primary-btn text-white font-bold rounded-lg text-xs cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5">
-                {importing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                {importing ? '저장 중...' : `${importPreview.length}건 전체 저장하기`}
+                <Upload className="w-4 h-4" />
+                {importPreview.length}건 전체 저장하기
               </button>
             </div>
           </div>
