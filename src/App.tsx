@@ -294,12 +294,46 @@ export default function App() {
     setPwdLoading(false);
   };
 
-  // 💡 초강력 DB 파싱 로직 (대리가계부 T_CASH ▷ T_CALL 완벽 조인 및 수수료 필터링)
+  // 💡 중복 방지 로직 (동일 날짜, 금액, 출발, 도착 시 업로드 제외)
+  const isDuplicateRecord = (newRec: any) => {
+    return records.some(r => 
+      r.date === newRec.date &&
+      r.grossAmount === newRec.gross_amount &&
+      r.departure === newRec.departure &&
+      r.destination === newRec.destination
+    );
+  };
+
+  // 💡 파일 분석 통합 함수 (CSV + DB)
   const handleFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const fileName = file.name.toLowerCase();
+
+    const processParsedData = (parsedArray: any[]) => {
+      if (parsedArray.length === 0) {
+        alert('데이터를 변환할 수 없습니다. 빈 파일이거나 알 수 없는 양식입니다.');
+        setImporting(false);
+        e.target.value = ''; // 💡 파일 재선택을 위해 초기화
+        return;
+      }
+
+      // 💡 중복 데이터 걸러내기 (Deduplication)
+      const newRecords = parsedArray.filter(r => !isDuplicateRecord(r));
+      
+      if (newRecords.length === 0) {
+        alert(`분석된 ${parsedArray.length}건 모두 앱에 이미 등록된 중복 데이터입니다.`);
+        setImportPreview([]);
+      } else {
+        if (parsedArray.length !== newRecords.length) {
+          alert(`분석된 ${parsedArray.length}건 중 기존 중복 데이터 ${parsedArray.length - newRecords.length}건을 제외하고 ${newRecords.length}건을 환승합니다.`);
+        }
+        setImportPreview(newRecords);
+      }
+      setImporting(false);
+      e.target.value = ''; // 💡 초기화 (버튼 무반응 해결)
+    };
 
     if (fileName.endsWith('.csv')) {
       const reader = new FileReader();
@@ -307,7 +341,7 @@ export default function App() {
         try {
           const text = event.target?.result as string;
           const lines = text.split('\n').filter(line => line.trim() !== '');
-          if (lines.length < 2) { alert('데이터가 없거나 파일 양식이 올바르지 않습니다.'); return; }
+          if (lines.length < 2) { alert('데이터가 없거나 파일 양식이 올바르지 않습니다.'); e.target.value = ''; return; }
           
           const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, '').toLowerCase());
           const dateIdx = headers.findIndex(h => h.includes('날짜') || h.includes('일자') || h.includes('date'));
@@ -316,7 +350,7 @@ export default function App() {
           const grossIdx = headers.findIndex(h => h.includes('운임') || h.includes('요금') || h.includes('수입') || h.includes('금액') || h.includes('price') || h.includes('cash'));
           
           if (dateIdx === -1 || grossIdx === -1) { 
-            alert('필수 항목(날짜, 요금)을 찾을 수 없습니다. 열 이름을 확인해주세요.'); return; 
+            alert('필수 항목(날짜, 요금)을 찾을 수 없습니다. 열 이름을 확인해주세요.'); e.target.value = ''; return; 
           }
 
           const parsed = lines.slice(1).map(line => {
@@ -331,8 +365,9 @@ export default function App() {
               gross_amount: gross, fee_rate: 20, fuel_amount: 0, extra_expense_amount: 0, tip_amount: 0, is_gross_paid: true, is_expense_paid: true, net_amount: net, total_claim_amount: gross
             };
           }).filter(r => r.gross_amount > 0);
-          setImportPreview(parsed);
-        } catch (err) { alert('파일을 분석하는 중 오류가 발생했습니다.'); }
+          
+          processParsedData(parsed);
+        } catch (err) { alert('파일을 분석하는 중 오류가 발생했습니다.'); e.target.value = ''; }
       };
       reader.readAsText(file, "utf-8");
     } 
@@ -355,7 +390,6 @@ export default function App() {
         const buffer = await file.arrayBuffer();
         const db = new SQL.Database(new Uint8Array(buffer));
         
-        // 1순위: 대리가계부 전용 테이블(T_CASH)이 존재하는지 확인
         const hasTCash = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='T_CASH'").length > 0;
         
         if (hasTCash) {
@@ -385,12 +419,10 @@ export default function App() {
               let callEnd = String(row[4] || '');
               let itemName = String(row[5] || '');
               
-              // 💡 1. 지출(수수료, 보험료, 출금 등) 필터링: JunDriver는 20%를 자동 계산하므로 제외
               if (summary.includes('수수료') || itemName.includes('수수료') || itemName.includes('지출') || summary.includes('출금') || itemName.includes('출금')) {
                  continue;
               }
               
-              // 💡 2. 날짜 포맷 변환
               if (d.includes(' ')) d = d.split(' ')[0]; 
               else if (d.length >= 10 && !isNaN(Number(d))) {
                  const dateObj = new Date(Number(d) > 9999999999 ? Number(d) : Number(d) * 1000);
@@ -402,12 +434,11 @@ export default function App() {
               let dep = callStart;
               let dest = callEnd;
               
-              // 💡 3. T_CALL 테이블이 끊어져 있더라도 CASH_SUMMARY에서 "신둔 ▷ 분당" 추출
               if (!dep || !dest) {
                 if (summary.includes('▷')) {
                   const parts = summary.split('▷');
                   dep = parts[0].trim();
-                  dest = parts[1].split('(')[0].trim(); // "( 오픈마일 )" 같은 괄호 제거
+                  dest = parts[1].split('(')[0].trim();
                 } else if (summary.includes('-')) {
                   const parts = summary.split('-');
                   dep = parts[0].trim();
@@ -417,7 +448,6 @@ export default function App() {
                 }
               }
               
-              // 💡 4. "요금"이나 "수입" 글자 필터링
               if (!dep || dep === '요금' || dep === '수입') dep = '출발지 미상';
               if (!dest) dest = '도착지 미상';
               
@@ -433,16 +463,15 @@ export default function App() {
             }
             
             if (parsed.length > 0) {
-              setImportPreview(parsed);
-              setImporting(false);
-              return; // 성공 시 종료
+              processParsedData(parsed);
+              return;
             }
           }
         }
         
-        // 2순위: T_CASH 테이블이 없거나 실패한 경우, 전체 테이블을 탐색하는 범용 AI 로직 (Fallback)
+        // Fallback for unknown DB structures
         const tablesRes = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'");
-        if (tablesRes.length === 0) { alert('DB에 테이블이 없습니다.'); setImporting(false); return; }
+        if (tablesRes.length === 0) { alert('DB에 테이블이 없습니다.'); setImporting(false); e.target.value = ''; return; }
         
         let bestData: any[] = [];
         let bestCols: string[] = [];
@@ -492,18 +521,15 @@ export default function App() {
           };
         }).filter(r => r.gross_amount > 0);
         
-        if (parsedFallback.length === 0) {
-          alert('데이터를 변환할 수 없습니다. 빈 파일이거나 알 수 없는 양식입니다.');
-        } else {
-          setImportPreview(parsedFallback);
-        }
-        setImporting(false);
+        processParsedData(parsedFallback);
       } catch (err) {
         alert('DB 파일을 분석하는 중 오류가 발생했습니다. 손상된 파일일 수 있습니다.');
         setImporting(false);
+        e.target.value = '';
       }
     } else {
       alert('.csv 또는 .db 확장자 파일만 업로드 가능합니다.');
+      e.target.value = '';
     }
   };
 
@@ -1188,7 +1214,7 @@ export default function App() {
           </div>
         )}
 
-        {/* 8. 관제탑 관리자 탭 (DB 오류 없이 완벽 동작) */}
+        {/* 8. 관제탑 관리자 탭 */}
         {activeTab === 'admin' && isAdminUser && (
           <div className="space-y-6 fade-in-text">
             <div className="mb-2">
@@ -1318,6 +1344,102 @@ export default function App() {
               })}
             </div>
             <button onClick={() => setAdminSelectedUser(null)} className="w-full mt-4 py-3 bg-white/10 hover:bg-white/20 text-white font-bold rounded-lg text-xs transition-colors cursor-pointer">닫기</button>
+          </div>
+        </div>
+      )}
+
+      {/* 💡 모달: 타사 엑셀(CSV) 및 DB(SQLite) 불러오기 (Import) - 초강력 패턴 인식 */}
+      {importModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="w-full max-w-lg glass-card rounded-2xl p-6 shadow-2xl relative">
+            <button onClick={() => setImportModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 cursor-pointer"><X className="w-5 h-5" /></button>
+            <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2"><Database className="w-5 h-5 text-[#8B5CF6]" />타사 앱 장부 불러오기</h3>
+            <p className="text-xs text-slate-400 mb-4 leading-relaxed">대리가계부 등 타사 앱에서 추출한 <strong className="text-[#38BDF8]">CSV(엑셀)</strong> 또는 <strong className="text-[#38BDF8]">DB 파일(dcb_teras.db 등)</strong>을 선택해주세요. 내용을 자동으로 인식하여 1초 만에 환승됩니다.</p>
+            
+            <div className="bg-[#0B1120] border border-white/10 rounded-xl p-6 flex flex-col items-center justify-center mb-4 border-dashed cursor-pointer hover:border-[#8B5CF6]/50 transition-colors">
+              <label htmlFor="file-upload" className="flex flex-col items-center cursor-pointer w-full">
+                <Upload className="w-8 h-8 text-[#8B5CF6] mb-3" />
+                <span className="text-xs font-bold text-slate-300 text-center">이곳을 터치하여<br/>CSV 또는 DB(.db) 파일 선택</span>
+                <input id="file-upload" type="file" accept=".csv, .db, .sqlite, application/x-sqlite3" onChange={handleFileImport} className="hidden" />
+              </label>
+            </div>
+
+            {importing && (
+              <div className="flex flex-col items-center justify-center p-4">
+                <RefreshCw className="w-6 h-6 text-[#8B5CF6] animate-spin mb-2" />
+                <span className="text-xs text-slate-300">파일을 분석 중입니다...</span>
+              </div>
+            )}
+
+            {importPreview.length > 0 && !importing && (
+              <div className="mb-4">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-bold text-[#38BDF8]">미리보기 (총 {importPreview.length}건 성공)</span>
+                </div>
+                <div className="bg-[#0B1120] border border-white/10 rounded-lg p-3 max-h-40 overflow-y-auto space-y-2">
+                  {importPreview.slice(0, 5).map((r, i) => (
+                    <div key={i} className="text-[11px] text-slate-300 flex justify-between border-b border-white/5 pb-1">
+                      <span>{r.date} | {r.departure} → {r.destination}</span>
+                      <span className="font-bold text-white">{r.gross_amount.toLocaleString()}원</span>
+                    </div>
+                  ))}
+                  {importPreview.length > 5 && <div className="text-[10px] text-center text-slate-500 pt-1">외 {importPreview.length - 5}건...</div>}
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <button onClick={() => { setImportModalOpen(false); setImportPreview([]); }} className="flex-1 py-3 bg-[#0B1120] border border-white/10 text-white font-semibold rounded-lg text-xs cursor-pointer transition-colors">취소</button>
+              <button onClick={executeImport} disabled={importPreview.length === 0 || importing} className="flex-1 py-3 hp-primary-btn text-white font-bold rounded-lg text-xs cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5">
+                <Upload className="w-4 h-4" />
+                {importPreview.length}건 전체 저장하기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 모달: 운행 일지 수정 (분리 미수금 호환) */}
+      {editingRecord && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="w-full max-w-sm glass-card rounded-2xl p-6 shadow-2xl relative">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-sm font-bold text-white flex items-center gap-1.5"><Edit2 className="w-4 h-4 text-[#8B5CF6]" /> 운행 내역 수정</h3>
+              <button onClick={() => setEditingRecord(null)} className="text-slate-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
+            </div>
+            <form onSubmit={handleUpdateRecord} className="space-y-3.5">
+              <div><label className="block text-[11px] font-semibold text-[#38BDF8] mb-1">운행 일자 변경</label><input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="w-full px-3 py-2 rounded-lg" required /></div>
+              <div className="grid grid-cols-2 gap-2">
+                <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">출발지</label><input type="text" value={editDeparture} onChange={(e) => setEditDeparture(e.target.value)} className="w-full px-3 py-2 rounded-lg" required /></div>
+                <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">도착지</label><input type="text" value={editDestination} onChange={(e) => setEditDestination(e.target.value)} className="w-full px-3 py-2 rounded-lg" required /></div>
+              </div>
+              <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">운임(원)</label><input type="text" value={editGross} onChange={(e) => setEditGross(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" required /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">대납 주유비</label><input type="text" value={editFuel} onChange={(e) => setEditFuel(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">통행료 등 추가경비</label><input type="text" value={editExtra} onChange={(e) => setEditExtra(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">기사 팁</label><input type="text" value={editTip} onChange={(e) => setEditTip(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" /></div>
+              <button type="submit" className="w-full mt-2 py-3 hp-primary-btn font-bold rounded-lg text-xs cursor-pointer">수정 완료</button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 모달: 청구 문자 직접 편집 생성 (분리 미수금 호환) */}
+      {claimModalOpen && selectedClaimRecord && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="w-full max-w-lg glass-card rounded-2xl p-6 shadow-2xl relative">
+            <button onClick={() => setClaimModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 cursor-pointer"><X className="w-5 h-5" /></button>
+            <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2"><MessageSquare className="w-5 h-5 text-[#8B5CF6]" />정산 청구 문자 편집 및 복사</h3>
+            <p className="text-xs text-slate-400 mb-4">미입금된 내역만 자동으로 체크되어 문구가 생성됩니다. 수정한 후 복사하세요.</p>
+            <div className="flex gap-4 mb-4 pb-4 border-b border-white/10">
+              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 cursor-pointer"><input type="checkbox" checked={includeGross} onChange={() => handleToggleInclude('gross')} className="rounded text-[#8B5CF6]" disabled={selectedClaimRecord.isGrossPaid} /> 기본 운임</label>
+              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 cursor-pointer"><input type="checkbox" checked={includeFuel} onChange={() => handleToggleInclude('fuel')} className="rounded text-[#8B5CF6]" disabled={selectedClaimRecord.fuelAmount === 0 || selectedClaimRecord.isExpensePaid} /> 주유비</label>
+              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 cursor-pointer"><input type="checkbox" checked={includeExtra} onChange={() => handleToggleInclude('extra')} className="rounded text-[#8B5CF6]" disabled={selectedClaimRecord.extraExpenseAmount === 0 || selectedClaimRecord.isExpensePaid} /> 추가경비</label>
+            </div>
+            <textarea rows={10} value={claimMessageText} onChange={(e) => setClaimMessageText(e.target.value)} className="w-full p-4 rounded-xl text-xs font-mono mb-4 leading-relaxed bg-[#FFFFFF] text-[#000000] focus:shadow-[0_0_12px_#8B5CF6] focus:border-[#8B5CF6] transition-all outline-none" />
+            <div className="flex gap-2">
+              <button onClick={() => setClaimModalOpen(false)} className="flex-1 py-3 bg-[#0B1120] border border-white/10 hover:bg-white/10 text-white font-semibold rounded-lg text-xs cursor-pointer transition-colors">닫기</button>
+              <button onClick={() => { navigator.clipboard.writeText(claimMessageText); alert('수정된 정산 청구 문자가 복사되었습니다.'); setClaimModalOpen(false); }} className="flex-1 py-3 hp-primary-btn text-white font-bold rounded-lg text-xs cursor-pointer shadow-md flex items-center justify-center gap-1.5"><Copy className="w-3.5 h-3.5" />복사하기</button>
+            </div>
           </div>
         </div>
       )}
