@@ -112,11 +112,12 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'records' | 'claims' | 'expense' | 'analytics' | 'wallet' | 'trade_centers' | 'auctions' | 'admin'>('records');
   const [adminSubTab, setAdminSubTab] = useState<'campaign' | 'members' | 'analytics'>('members');
   
-  const [dateFilter, setDateFilter] = useState<'today' | 'month' | 'year' | 'custom'>('month');
+  // 💡 [업그레이드] 필터 구조 단순화: 기준 날짜(customDate)에 맞춰 일/월/년 필터 적용
   const [customDate, setCustomDate] = useState<string>(() => getTodayKST());
+  const [dateFilter, setDateFilter] = useState<'day' | 'month' | 'year'>('month');
+  
   const [analyticsMode, setAnalyticsMode] = useState<'month' | 'year'>('month');
   const [analyticsYear, setAnalyticsYear] = useState<string>(new Date().getFullYear().toString());
-
   const [tradeFilter, setTradeFilter] = useState<'전체' | 'S등급' | 'A등급' | '수도권' | '충청권' | '영남권' | '호남권'>('전체');
 
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -211,14 +212,16 @@ export default function App() {
       lastLoginAt: profilePayload.last_login_at, loginCount: profilePayload.login_count
     });
 
-    // 💡 [치명적 버그 수정] 서버 에러 방지를 위해 .limit 제거 후 자연스러운 오름차순 호출
-    const { data: recordsData } = await supabase.from('driving_records').select('*').eq('user_id', userId).order('date', { ascending: true });
+    // DB에서 최신순으로 가져오되 화면에는 오름차순(1일부터) 정렬
+    const { data: recordsData } = await supabase.from('driving_records').select('*').eq('user_id', userId).order('date', { ascending: false }).limit(2000);
     if (recordsData) {
-      setRecords(recordsData.map((r: any) => ({
+      const mappedRecords = recordsData.map((r: any) => ({
         id: r.id, date: r.date, startTime: r.start_time || '-', endTime: r.end_time || '-', departure: r.departure, destination: r.destination,
         grossAmount: Number(r.gross_amount), feeRate: Number(r.fee_rate), fuelAmount: Number(r.fuel_amount), extraExpenseAmount: Number(r.extra_expense_amount),
         tipAmount: Number(r.tip_amount), isGrossPaid: Boolean(r.is_gross_paid), isExpensePaid: Boolean(r.is_expense_paid), netAmount: Number(r.net_amount), totalClaimAmount: Number(r.total_claim_amount),
-      })));
+      }));
+      mappedRecords.sort((a, b) => a.date.localeCompare(b.date));
+      setRecords(mappedRecords);
     }
 
     const { data: expensesData } = await supabase.from('expenses').select('*').eq('user_id', userId).order('date', { ascending: true });
@@ -229,7 +232,7 @@ export default function App() {
 
   const fetchAdminData = async () => {
     const { data: profiles } = await supabase.from('profiles').select('*').order('last_login_at', { ascending: false });
-    const { data: allRecs } = await supabase.from('driving_records').select('*');
+    const { data: allRecs } = await supabase.from('driving_records').select('*').limit(20000);
     if (profiles && allRecs) {
       setAdminMemberList(profiles.map((p: any) => ({ 
         id: p.id, email: p.email, name: p.name, phone: p.phone, role: p.role || 'user', 
@@ -347,10 +350,10 @@ export default function App() {
     const { error } = await supabase.from('driving_records').insert([payload]);
     if (!error) {
       const updated = [{ ...payload, startTime: payload.start_time, endTime: payload.end_time, grossAmount: gross, feeRate, fuelAmount: fuel, extraExpenseAmount: extraExp, tipAmount: tip, isGrossPaid: false, isExpensePaid: false, netAmount: Math.round(net), totalClaimAmount: Math.round(claimTotal) }, ...records];
-      updated.sort((a, b) => a.date.localeCompare(b.date)); // 💡 오름차순 유지
+      updated.sort((a, b) => a.date.localeCompare(b.date));
       setRecords(updated); 
-      setCustomDate(newDate); // 💡 오타/버그 변수 완전 교체 (setSelectedDate -> setCustomDate)
-      setDateFilter('custom'); 
+      setCustomDate(newDate); // 추가된 날짜로 달력 이동
+      setDateFilter('month'); // 등록 시 해당 월로 뷰 고정
       setNewDeparture(''); setNewDestination(''); setNewGross(''); setNewFuel(''); setNewExtraExpense(''); setNewTip('');
     }
   };
@@ -490,12 +493,11 @@ export default function App() {
     setAdminSelectedUserRecords(userRecs);
   };
 
+  // 💡 [업그레이드 2] 선택한 날짜(customDate)를 기준으로 일간/월간/연간 필터를 동기화
   const filteredRecords = records.filter((r) => {
-    if (dateFilter === 'all') return true;
-    if (dateFilter === 'today') return r.date === getTodayKST();
-    if (dateFilter === 'month') return r.date.startsWith(getTodayKST().substring(0, 7));
-    if (dateFilter === 'year') return r.date.startsWith(getTodayKST().substring(0, 4));
-    if (dateFilter === 'custom') return r.date === customDate;
+    if (dateFilter === 'day') return r.date === customDate;
+    if (dateFilter === 'month') return r.date.startsWith(customDate.substring(0, 7));
+    if (dateFilter === 'year') return r.date.startsWith(customDate.substring(0, 4));
     return true;
   });
 
@@ -600,7 +602,6 @@ export default function App() {
             </form>
           )}
         </div>
-
         {showPrivacyModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
             <div className="w-full max-w-lg glass-card rounded-2xl p-6 shadow-2xl relative z-20">
@@ -712,11 +713,11 @@ export default function App() {
                 
                 <div className="flex flex-col gap-2 shrink-0">
                   <div className="flex items-center gap-1 bg-[#0B1120] p-1 rounded-lg border border-white/10 text-[11px] font-bold">
-                    <button onClick={() => setDateFilter('today')} className={`px-2.5 py-1.5 rounded transition-colors cursor-pointer ${dateFilter === 'today' ? 'bg-[#8B5CF6] text-white' : 'text-slate-400 hover:text-white'}`}>당일</button>
-                    <button onClick={() => setDateFilter('month')} className={`px-2.5 py-1.5 rounded transition-colors cursor-pointer ${dateFilter === 'month' ? 'bg-[#8B5CF6] text-white' : 'text-slate-400 hover:text-white'}`}>당월</button>
-                    <button onClick={() => setDateFilter('year')} className={`px-2.5 py-1.5 rounded transition-colors cursor-pointer ${dateFilter === 'year' ? 'bg-[#8B5CF6] text-white' : 'text-slate-400 hover:text-white'}`}>올해</button>
+                    <button onClick={() => setDateFilter('day')} className={`px-2.5 py-1.5 rounded transition-colors cursor-pointer ${dateFilter === 'day' ? 'bg-[#8B5CF6] text-white' : 'text-slate-400 hover:text-white'}`}>일간</button>
+                    <button onClick={() => setDateFilter('month')} className={`px-2.5 py-1.5 rounded transition-colors cursor-pointer ${dateFilter === 'month' ? 'bg-[#8B5CF6] text-white' : 'text-slate-400 hover:text-white'}`}>월간</button>
+                    <button onClick={() => setDateFilter('year')} className={`px-2.5 py-1.5 rounded transition-colors cursor-pointer ${dateFilter === 'year' ? 'bg-[#8B5CF6] text-white' : 'text-slate-400 hover:text-white'}`}>연간</button>
                   </div>
-                  <input type="date" value={customDate} onChange={(e) => { setCustomDate(e.target.value); setDateFilter('custom'); }} className={`bg-white text-black font-bold text-[11px] px-2 py-1.5 rounded-lg border-0 focus:ring-2 focus:ring-[#8B5CF6] cursor-pointer w-full ${dateFilter === 'custom' ? 'ring-2 ring-[#8B5CF6]' : ''}`} />
+                  <input type="date" value={customDate} onChange={(e) => setCustomDate(e.target.value)} className={`bg-white text-black font-bold text-[11px] px-2 py-1.5 rounded-lg border-0 focus:ring-2 focus:ring-[#8B5CF6] cursor-pointer w-full`} />
                 </div>
               </div>
 
