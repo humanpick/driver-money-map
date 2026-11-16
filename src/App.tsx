@@ -6,13 +6,12 @@ import {
   KeyRound, X, CheckCircle2, AlertCircle, PlusCircle, CreditCard, Receipt, Trash2,
   Copy, Car, Filter, RotateCcw, CalendarDays, ShieldCheck, ChevronRight, Smartphone,
   Fuel, AlertTriangle, MessageSquare, Check, Edit2, Coins, Sparkles, Phone,
-  RefreshCw, UserX, BarChart3, Megaphone, Users, Download,
-  Award, Crown, BookmarkPlus, Radio, Send, Building2, Info, Map, Target, Navigation, Search,
-  Upload, HardDrive // 💡 신규 아이콘 에러 방지를 위해 구버전 호환 아이콘으로 교체
+  RefreshCw, UserX, ShieldAlert, BarChart3, Megaphone, Users, Download,
+  Award, Crown, BookmarkPlus, Radio, Send, Building2, Info, Map, Target, Navigation, Search
 } from 'lucide-react';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder-key';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const ADMIN_DEFAULT_EMAIL = 'beat4989@naver.com';
@@ -60,24 +59,24 @@ interface MemberProfile { id: string; email: string; name: string; phone: string
 interface NoticeItem { id: string; title: string; content: string; isActive: boolean; updatedAt?: string; }
 
 const TRADE_CENTERS = [
-  { id: '1', name: '수원 도이치오토월드', tier: 'S', region: '수도권', addr: '경기 수원시 권선구 권선로 308-5', desc: '전국 최대 실내 복합단지.' },
-  { id: '2', name: '수원 SK V1 모터스', tier: 'S', region: '수도권', addr: '경기 수원시 권선구 평동로79번길 45', desc: '도이치오토월드 바로 옆 대형 실내 단지.' },
-  { id: '3', name: '인천 엠파크 (허브/타워)', tier: 'S', region: '수도권', addr: '인천 서구 봉수대로 158', desc: '인천 권역 최대 메가 허브.' },
-  { id: '4', name: '용인 오토허브', tier: 'S', region: '수도권', addr: '경기 용인시 기흥구 중부대로 242', desc: '접근성 우수한 초대형 복합단지.' },
-  { id: '5', name: '서울 서서울모터리움', tier: 'A', region: '수도권', addr: '서울 강서구 양천로53길 30', desc: '서울 서부권 최대 실내 자동차 백화점.' },
-  { id: '6', name: '김포 국민차매매단지 (공항점)', tier: 'A', region: '수도권', addr: '경기 김포시 고촌읍 아라육로152번길 45', desc: '수도권 서북부 대형 실내 단지.' },
-  { id: '7', name: '부산 경동오토필드', tier: 'A', region: '영남권', addr: '부산 기장군 장안읍 반룡산단3로 95', desc: '영남 최대 복합단지. 상행 콜 다수.' },
-  { id: '8', name: '대구 엠월드', tier: 'A', region: '영남권', addr: '대구 서구 문화로 37', desc: '대구/경북권 최대 규모 실내 매매단지.' },
-  { id: '9', name: '부산 사직오토랜드', tier: 'A', region: '영남권', addr: '부산 연제구 경기장로 15', desc: '도심 내 장거리 종착 요충지.' },
-  { id: '10', name: '대전 디오토몰', tier: 'A', region: '충청권', addr: '대전 유성구 복용동로 35', desc: '영호남 이동 시 중간 복귀콜 전초기지.' },
-  { id: '11', name: '대전 오토월드', tier: 'A', region: '충청권', addr: '대전 유성구 유성대로 510', desc: '풍부한 지방 이동 콜 거점.' },
-  { id: '12', name: '광주 풍암매매단지', tier: 'A', region: '호남권', addr: '광주 서구 매월1로 50', desc: '호남권 최대 중고차 거래 거점.' },
-  { id: '13', name: '광주 엠플러스 (M-PLUS)', tier: 'A', region: '호남권', addr: '광주 서구 매월1로62번길 24', desc: '호남권 딜러 출고 집중지.' },
-  { id: '14', name: '부천 국민차매매단지', tier: 'B', region: '수도권', addr: '경기 부천시 송내대로 450', desc: '수도권 서부권역 주요 전통 단지.' },
-  { id: '15', name: '부천 DY카랜드', tier: 'B', region: '수도권', addr: '경기 부천시 신흥로 399번길 50', desc: '경인고속도로 부천IC 인접.' },
-  { id: '16', name: '천안 북천안매매단지', tier: 'B', region: '충청권', addr: '충남 천안시 서북구 번영로 608', desc: '수도권 복귀콜 다수 발생.' },
-  { id: '17', name: '전주 장동매매단지', tier: 'B', region: '호남권', addr: '전북 전주시 덕진구 장동유통로 12', desc: '호남IC 인근 접근성 양호.' },
-  { id: '18', name: '창원 디오토몰', tier: 'B', region: '영남권', addr: '경남 창원시 성산구 공단로 18', desc: '경남 대표 신축 실내 단지.' }
+  { id: '1', name: '수원 도이치오토월드', tier: 'S', region: '수도권', addr: '경기 수원시 권선구 권선로 308-5', desc: '전국 최대 실내 복합단지. 지하~지상 층별 상사 밀집 (전국 탁송 출고 최다 지역)' },
+  { id: '2', name: '수원 SK V1 모터스', tier: 'S', region: '수도권', addr: '경기 수원시 권선구 평동로79번길 45', desc: '도이치오토월드 바로 옆 대형 실내 단지. 탁송 콜 집중 발생 구역.' },
+  { id: '3', name: '인천 엠파크 (허브/타워)', tier: 'S', region: '수도권', addr: '인천 서구 봉수대로 158', desc: '인천 권역 최대 메가 허브. 허브동과 타워동 위치 구분 필수.' },
+  { id: '4', name: '용인 오토허브', tier: 'S', region: '수도권', addr: '경기 용인시 기흥구 중부대로 242', desc: '경부고속도로 신갈IC 인근. 접근성 매우 우수한 초대형 복합단지.' },
+  { id: '5', name: '서울 서서울모터리움', tier: 'A', region: '수도권', addr: '서울 강서구 양천로53길 30', desc: '서울 서부권 최대 실내 자동차 백화점. 올림픽대로/가양대교 인접 출고 활발.' },
+  { id: '6', name: '김포 국민차매매단지 (공항점)', tier: 'A', region: '수도권', addr: '경기 김포시 고촌읍 아라육로152번길 45', desc: '김포 아라뱃길 물류축 위치. 수도권 서북부 대형 실내 단지.' },
+  { id: '7', name: '부산 경동오토필드', tier: 'A', region: '영남권', addr: '부산 기장군 장안읍 반룡산단3로 95', desc: '영남 최대 3만6천평급 실내 백화점식 복합단지. 동해고속도로 장안IC 인근 상행 콜 다수.' },
+  { id: '8', name: '대구 엠월드', tier: 'A', region: '영남권', addr: '대구 서구 문화로 37', desc: '대구 및 경북권 최대 규모 실내 매매단지. 서대구역 인근 위치.' },
+  { id: '9', name: '부산 사직오토랜드', tier: 'A', region: '영남권', addr: '부산 연제구 경기장로 15', desc: '부산 권역 전통 대표 매매단지. 도심 내 장거리 종착 및 신규 출발 요충지.' },
+  { id: '10', name: '대전 디오토몰', tier: 'A', region: '충청권', addr: '대전 유성구 복용동로 35', desc: '충청권 핵심 실내 단지. 영호남 이동 시 중간 복귀콜 환적 전초기지.' },
+  { id: '11', name: '대전 오토월드', tier: 'A', region: '충청권', addr: '대전 유성구 유성대로 510', desc: '디오토몰 인근 복용동 매매단지 핵심 거점. 풍부한 지방 이동 콜.' },
+  { id: '12', name: '광주 풍암매매단지', tier: 'A', region: '호남권', addr: '광주 서구 매월1로 50', desc: '호남권 최대 중고차 거래 거점. 대규모 단지 및 상사 밀집.' },
+  { id: '13', name: '광주 엠플러스 (M-PLUS)', tier: 'A', region: '호남권', addr: '광주 서구 매월1로62번길 24', desc: '풍암지구 내 신축 대형 실내 복합 백화점. 호남권 딜러 출고 집중지.' },
+  { id: '14', name: '부천 국민차매매단지', tier: 'B', region: '수도권', addr: '경기 부천시 송내대로 450', desc: '수도권 서부권역 주요 전통 매매단지.' },
+  { id: '15', name: '부천 DY카랜드', tier: 'B', region: '수도권', addr: '경기 부천시 신흥로 399번길 50', desc: '경인고속도로 부천IC 인접. 오정동 대형 매매단지.' },
+  { id: '16', name: '천안 북천안매매단지', tier: 'B', region: '충청권', addr: '충남 천안시 서북구 번영로 608', desc: '천안아산역 인근 위치. 수도권 복귀콜이 자주 발생하는 곳.' },
+  { id: '17', name: '전주 장동매매단지', tier: 'B', region: '호남권', addr: '전북 전주시 덕진구 장동유통로 12', desc: '전북 권역 핵심 단지. 호남IC 인근 접근성 양호.' },
+  { id: '18', name: '창원 디오토몰', tier: 'B', region: '영남권', addr: '경남 창원시 성산구 공단로 18', desc: '경남 지역의 대표적인 신축 실내 복합 매매단지.' }
 ];
 
 const AUCTION_SCHEDULES = [
@@ -89,14 +88,13 @@ const AUCTION_SCHEDULES = [
 ];
 
 export default function App() {
-  // 💡 PWA 충돌 방지: 반환값이 없는 경우(구버전 PWA 플러그인)를 대비한 안전 로직 적용
-  const pwa = useRegisterSW({ onRegistered(r) {}, onRegisterError(error) {} });
-  const needRefresh = pwa?.needRefresh?.[0] || false;
-  const setNeedRefresh = pwa?.needRefresh?.[1] || (() => {});
-  const updateServiceWorker = pwa?.updateServiceWorker || (() => {});
+  const { needRefresh: [needRefresh], updateServiceWorker } = useRegisterSW({ onRegistered(r) {}, onRegisterError(error) {} });
 
+  // 💡 PWA 자동 강제 업데이트 로직 (팝업창 없이 즉시 새버전 로드)
   useEffect(() => {
-    if (needRefresh) updateServiceWorker(true);
+    if (needRefresh) {
+      updateServiceWorker(true);
+    }
   }, [needRefresh, updateServiceWorker]);
 
   const [session, setSession] = useState<any>(null);
@@ -115,10 +113,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'records' | 'claims' | 'expense' | 'analytics' | 'wallet' | 'trade_centers' | 'auctions' | 'admin'>('records');
   const [adminSubTab, setAdminSubTab] = useState<'campaign' | 'members' | 'analytics'>('members');
   
-  const [viewMode, setViewMode] = useState<'daily' | 'monthly'>('daily');
   const [selectedDate, setSelectedDate] = useState<string>(() => getTodayKST());
-  const [selectedMonth, setSelectedMonth] = useState<string>(() => getTodayKST().substring(0, 7));
-  
+  const [filterAllDates, setFilterAllDates] = useState<boolean>(false);
   const [tradeFilter, setTradeFilter] = useState<'전체' | 'S등급' | 'A등급' | '수도권' | '충청권' | '영남권' | '호남권'>('전체');
 
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -140,10 +136,6 @@ export default function App() {
   const [includeGross, setIncludeGross] = useState(true); const [includeFuel, setIncludeFuel] = useState(true);
   const [includeExtra, setIncludeExtra] = useState(true); const [claimMessageText, setClaimMessageText] = useState('');
   
-  const [importModalOpen, setImportModalOpen] = useState(false);
-  const [importPreview, setImportPreview] = useState<any[]>([]);
-  const [importing, setImporting] = useState(false);
-
   const [records, setRecords] = useState<DrivingRecord[]>([]);
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
   const [accounts, setAccounts] = useState<BankAccount[]>(() => {
@@ -172,78 +164,72 @@ export default function App() {
   useEffect(() => { localStorage.setItem('jundriver_local_accounts_merged', JSON.stringify(accounts)); }, [accounts]);
 
   const fetchNotices = async () => {
-    try {
-      const { data, error } = await supabase.from('announcements').select('*').order('updated_at', { ascending: false });
-      if (data && !error) {
-        const formatted: NoticeItem[] = data.map((d: any) => ({
-          id: d.id, title: d.title, content: d.content, isActive: Boolean(d.is_active), updatedAt: d.updated_at ? d.updated_at.substring(0, 16).replace('T', ' ') : '',
-        }));
-        setNoticeList(formatted);
-        setActiveNotice(formatted.find((n) => n.isActive) || null);
-      }
-    } catch (e) { console.error(e); }
+    const { data, error } = await supabase.from('announcements').select('*').order('updated_at', { ascending: false });
+    if (data && !error) {
+      const formatted: NoticeItem[] = data.map((d: any) => ({
+        id: d.id, title: d.title, content: d.content, isActive: Boolean(d.is_active), updatedAt: d.updated_at ? d.updated_at.substring(0, 16).replace('T', ' ') : '',
+      }));
+      setNoticeList(formatted);
+      setActiveNotice(formatted.find((n) => n.isActive) || null);
+    }
   };
 
   const fetchUserData = async (userId: string, userEmail: string, userMeta?: any, userCreatedAt?: string) => {
-    try {
-      let role = 'user';
-      const cleanMail = userEmail.toLowerCase();
-      const metaName = userMeta?.name || (cleanMail === ADMIN_DEFAULT_EMAIL ? ADMIN_DEFAULT_NAME : '기사님');
-      const metaPhone = userMeta?.phone || (cleanMail === ADMIN_DEFAULT_EMAIL ? ADMIN_DEFAULT_PHONE : '');
+    let role = 'user';
+    const cleanMail = userEmail.toLowerCase();
+    const metaName = userMeta?.name || (cleanMail === ADMIN_DEFAULT_EMAIL ? ADMIN_DEFAULT_NAME : '기사님');
+    const metaPhone = userMeta?.phone || (cleanMail === ADMIN_DEFAULT_EMAIL ? ADMIN_DEFAULT_PHONE : '');
 
-      const { data: profile } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
-      role = cleanMail === ADMIN_DEFAULT_EMAIL ? 'super_admin' : (profile?.role || 'user');
-      setCurrentUserRole(role);
+    const { data: profile } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+    role = cleanMail === ADMIN_DEFAULT_EMAIL ? 'super_admin' : (profile?.role || 'user');
+    setCurrentUserRole(role);
 
-      const currentCount = profile?.login_count || 0;
-      const nowIso = new Date().toISOString();
-      const profilePayload = {
-        id: userId, email: cleanMail, name: profile?.name || metaName, phone: profile?.phone || metaPhone,
-        role: role, created_at: profile?.created_at || userCreatedAt || nowIso,
-        last_login_at: nowIso, login_count: currentCount + 1
-      };
-      await supabase.from('profiles').upsert(profilePayload);
+    const currentCount = profile?.login_count || 0;
+    const nowIso = new Date().toISOString();
+    const profilePayload = {
+      id: userId, email: cleanMail, name: profile?.name || metaName, phone: profile?.phone || metaPhone,
+      role: role, created_at: profile?.created_at || userCreatedAt || nowIso,
+      last_login_at: nowIso, login_count: currentCount + 1
+    };
+    await supabase.from('profiles').upsert(profilePayload);
 
-      setCurrentUserProfile({
-        id: userId, email: cleanMail, name: profilePayload.name, phone: profilePayload.phone, role: profilePayload.role,
-        createdAt: (profilePayload.created_at || '').substring(0, 10),
-        lastLoginAt: profilePayload.last_login_at, loginCount: profilePayload.login_count
-      });
+    setCurrentUserProfile({
+      id: userId, email: cleanMail, name: profilePayload.name, phone: profilePayload.phone, role: profilePayload.role,
+      createdAt: (profilePayload.created_at || '').substring(0, 10),
+      lastLoginAt: profilePayload.last_login_at, loginCount: profilePayload.login_count
+    });
 
-      const { data: recordsData } = await supabase.from('driving_records').select('*').eq('user_id', userId).order('date', { ascending: false }).limit(5000);
-      if (recordsData) {
-        setRecords(recordsData.map((r: any) => ({
-          id: r.id, date: r.date, startTime: r.start_time || '-', endTime: r.end_time || '-', departure: r.departure, destination: r.destination,
-          grossAmount: Number(r.gross_amount), feeRate: Number(r.fee_rate), fuelAmount: Number(r.fuel_amount), extraExpenseAmount: Number(r.extra_expense_amount),
-          tipAmount: Number(r.tip_amount), isGrossPaid: Boolean(r.is_gross_paid), isExpensePaid: Boolean(r.is_expense_paid), netAmount: Number(r.net_amount), totalClaimAmount: Number(r.total_claim_amount),
-        })));
-      }
+    const { data: recordsData } = await supabase.from('driving_records').select('*').eq('user_id', userId).order('date', { ascending: false });
+    if (recordsData) {
+      setRecords(recordsData.map((r: any) => ({
+        id: r.id, date: r.date, startTime: r.start_time || '-', endTime: r.end_time || '-', departure: r.departure, destination: r.destination,
+        grossAmount: Number(r.gross_amount), feeRate: Number(r.fee_rate), fuelAmount: Number(r.fuel_amount), extraExpenseAmount: Number(r.extra_expense_amount),
+        tipAmount: Number(r.tip_amount), isGrossPaid: Boolean(r.is_gross_paid), isExpensePaid: Boolean(r.is_expense_paid), netAmount: Number(r.net_amount), totalClaimAmount: Number(r.total_claim_amount),
+      })));
+    }
 
-      const { data: expensesData } = await supabase.from('expenses').select('*').eq('user_id', userId).order('date', { ascending: false }).limit(5000);
-      if (expensesData) setExpenses(expensesData.map((e: any) => ({ id: e.id, date: e.date, category: e.category, amount: Number(e.amount), memo: e.memo || '' })));
-      
-      if (role === 'super_admin' || role === 'manager') fetchAdminData();
-    } catch (e) { console.error(e); }
+    const { data: expensesData } = await supabase.from('expenses').select('*').eq('user_id', userId).order('date', { ascending: false });
+    if (expensesData) setExpenses(expensesData.map((e: any) => ({ id: e.id, date: e.date, category: e.category, amount: Number(e.amount), memo: e.memo || '' })));
+    
+    if (role === 'super_admin' || role === 'manager') fetchAdminData();
   };
 
   const fetchAdminData = async () => {
-    try {
-      const { data: profiles } = await supabase.from('profiles').select('*').order('last_login_at', { ascending: false });
-      const { data: allRecs } = await supabase.from('driving_records').select('*');
-      if (profiles && allRecs) {
-        setAdminMemberList(profiles.map((p: any) => ({ 
-          id: p.id, email: p.email, name: p.name, phone: p.phone, role: p.role || 'user', 
-          createdAt: p.created_at ? p.created_at.substring(0, 10) : '-', 
-          lastLoginAt: p.last_login_at ? p.last_login_at.substring(0, 16).replace('T', ' ') : '기록없음',
-          loginCount: p.login_count || 0,
-          recordCount: allRecs.filter((r: any) => r.user_id === p.id).length 
-        })));
-        setAdminAllRecords(allRecs.map((r: any) => ({ 
-          id: r.id, userId: r.user_id, date: r.date, startTime: r.start_time || '-', endTime: r.end_time || '-', departure: r.departure, destination: r.destination, 
-          grossAmount: Number(r.gross_amount), fuelAmount: Number(r.fuel_amount), feeRate: Number(r.fee_rate), extraExpenseAmount: Number(r.extra_expense_amount), tipAmount: Number(r.tip_amount), isGrossPaid: Boolean(r.is_gross_paid), isExpensePaid: Boolean(r.is_expense_paid), netAmount: Number(r.net_amount), totalClaimAmount: Number(r.total_claim_amount) 
-        })));
-      }
-    } catch (e) { console.error(e); }
+    const { data: profiles } = await supabase.from('profiles').select('*').order('last_login_at', { ascending: false });
+    const { data: allRecs } = await supabase.from('driving_records').select('*');
+    if (profiles && allRecs) {
+      setAdminMemberList(profiles.map((p: any) => ({ 
+        id: p.id, email: p.email, name: p.name, phone: p.phone, role: p.role || 'user', 
+        createdAt: p.created_at ? p.created_at.substring(0, 10) : '-', 
+        lastLoginAt: p.last_login_at ? p.last_login_at.substring(0, 16).replace('T', ' ') : '기록없음',
+        loginCount: p.login_count || 0,
+        recordCount: allRecs.filter((r: any) => r.user_id === p.id).length 
+      })));
+      setAdminAllRecords(allRecs.map((r: any) => ({ 
+        id: r.id, userId: r.user_id, date: r.date, startTime: r.start_time || '-', endTime: r.end_time || '-', departure: r.departure, destination: r.destination, 
+        grossAmount: Number(r.gross_amount), fuelAmount: Number(r.fuel_amount), feeRate: Number(r.fee_rate), extraExpenseAmount: Number(r.extra_expense_amount), tipAmount: Number(r.tip_amount), isGrossPaid: Boolean(r.is_gross_paid), isExpensePaid: Boolean(r.is_expense_paid), netAmount: Number(r.net_amount), totalClaimAmount: Number(r.total_claim_amount) 
+      })));
+    }
   };
 
   useEffect(() => {
@@ -262,10 +248,8 @@ export default function App() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault(); setAuthLoading(true); setAuthError(''); setAuthSuccess('');
-    try {
-      const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password: password.trim() });
-      if (error) setAuthError('이메일 또는 비밀번호가 일치하지 않습니다.');
-    } catch (err) { setAuthError('서버와 통신할 수 없습니다.'); }
+    const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password: password.trim() });
+    if (error) setAuthError('이메일 또는 비밀번호가 일치하지 않습니다.');
     setAuthLoading(false);
   };
 
@@ -284,13 +268,23 @@ export default function App() {
     const { data, error } = await supabase.auth.signUp({
       email: cleanEmail,
       password: password.trim(),
-      options: { data: { name: trimmedName, phone: cleanPhone, privacy_policy_agreed: true, created_at: nowIso } }
+      options: {
+        data: {
+          name: trimmedName,
+          phone: cleanPhone,
+          privacy_policy_agreed: true,
+          created_at: nowIso
+        }
+      }
     });
 
     if (error) { setAuthError('가입 실패: ' + error.message); }
     else {
       if (data.user) {
-        await supabase.from('profiles').upsert([{ id: data.user.id, email: cleanEmail, name: trimmedName, phone: cleanPhone, role: cleanEmail === ADMIN_DEFAULT_EMAIL ? 'super_admin' : 'user', created_at: nowIso, last_login_at: nowIso, login_count: 1 }]);
+        await supabase.from('profiles').upsert([{
+          id: data.user.id, email: cleanEmail, name: trimmedName, phone: cleanPhone,
+          role: cleanEmail === ADMIN_DEFAULT_EMAIL ? 'super_admin' : 'user', created_at: nowIso, last_login_at: nowIso, login_count: 1
+        }]);
       }
       setAuthSuccess('회원가입이 완료되었습니다. 로그인해 주세요.'); setAuthMode('login');
     }
@@ -308,287 +302,6 @@ export default function App() {
     setPwdLoading(false);
   };
 
-  const handleDeleteRecordsByPeriod = async (period: 'month' | 'year') => {
-    if (!session) return;
-    
-    const activeDate = viewMode === 'daily' ? selectedDate : selectedMonth;
-    const targetYear = activeDate.substring(0, 4);
-    const targetMonth = activeDate.substring(5, 7);
-    
-    const targetPrefix = period === 'month' ? `${targetYear}-${targetMonth}` : targetYear;
-    const displayTarget = period === 'month' ? `${targetYear}년 ${targetMonth}월` : `${targetYear}년 전체`;
-
-    if (!window.confirm(`⚠️ 경고: [${displayTarget}]에 등록된 모든 운행 일지 데이터가 즉시 삭제됩니다.\n\n정말 일괄 삭제하시겠습니까?`)) return;
-    
-    const { error } = await supabase.from('driving_records')
-      .delete()
-      .eq('user_id', session.user.id)
-      .like('date', `${targetPrefix}%`);
-
-    if (!error) {
-      setRecords(records.filter(r => !r.date.startsWith(targetPrefix)));
-      alert(`[${displayTarget}] 데이터가 성공적으로 삭제되었습니다.`);
-    } else {
-      alert('삭제 중 오류가 발생했습니다: ' + error.message);
-    }
-  };
-
-  const isBannedWord = (text: string) => {
-    const junkWords = ['수수료', '요금', '수입', '출금', '입금', '보험', '취소', '포인트', '지원금', '충전'];
-    return junkWords.some(w => text.includes(w));
-  };
-
-  const isDuplicateRecord = (newRec: any) => {
-    return records.some(r => 
-      r.date === newRec.date &&
-      r.grossAmount === newRec.gross_amount &&
-      r.departure === newRec.departure &&
-      r.destination === newRec.destination
-    );
-  };
-
-  const handleFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const fileName = file.name.toLowerCase();
-
-    const processParsedData = (parsedArray: any[]) => {
-      const cleanArray = parsedArray.filter(r => 
-        r.gross_amount > 0 &&
-        !isBannedWord(r.departure) && 
-        !isBannedWord(r.destination) &&
-        r.departure !== '출발지 미상'
-      );
-
-      if (cleanArray.length === 0) {
-        alert('유효한 운행 데이터(출발/도착/운임)를 찾을 수 없습니다.');
-        setImporting(false); e.target.value = ''; return;
-      }
-
-      const newRecords = cleanArray.filter(r => !isDuplicateRecord(r));
-      
-      if (newRecords.length === 0) {
-        alert(`분석된 ${cleanArray.length}건 모두 앱에 이미 등록된 중복 데이터입니다.`);
-        setImportPreview([]);
-      } else {
-        if (cleanArray.length !== newRecords.length) {
-          alert(`분석된 ${cleanArray.length}건 중 기존 중복 데이터 ${cleanArray.length - newRecords.length}건을 제외하고 ${newRecords.length}건만 환승합니다.`);
-        }
-        setImportPreview(newRecords);
-      }
-      setImporting(false); e.target.value = ''; 
-    };
-
-    if (fileName.endsWith('.csv')) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        try {
-          const text = event.target?.result as string;
-          const lines = text.split('\n').filter(line => line.trim() !== '');
-          if (lines.length < 2) { alert('파일 양식이 올바르지 않습니다.'); e.target.value = ''; return; }
-          
-          const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, '').toLowerCase());
-          const dateIdx = headers.findIndex(h => h.includes('날짜') || h.includes('일자') || h.includes('date'));
-          const depIdx = headers.findIndex(h => h.includes('출발') || h.includes('start'));
-          const destIdx = headers.findIndex(h => h.includes('도착') || h.includes('end'));
-          const grossIdx = headers.findIndex(h => h.includes('운임') || h.includes('요금') || h.includes('수입') || h.includes('금액') || h.includes('price') || h.includes('cash'));
-          
-          if (dateIdx === -1 || grossIdx === -1) { 
-            alert('필수 항목(날짜, 요금)을 찾을 수 없습니다.'); e.target.value = ''; return; 
-          }
-
-          const parsed = lines.slice(1).map(line => {
-            const cols = line.split(',').map(c => c.trim().replace(/"/g, ''));
-            let d = cols[dateIdx] || '';
-            if (d && !d.includes('-')) d = d.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3');
-            
-            const gross = cleanNumber(cols[grossIdx]);
-            const net = Math.round(gross * 0.8); 
-            return {
-              date: d || getTodayKST(), departure: depIdx !== -1 ? cols[depIdx] : '알수없음', destination: destIdx !== -1 ? cols[destIdx] : '알수없음',
-              gross_amount: gross, fee_rate: 20, fuel_amount: 0, extra_expense_amount: 0, tip_amount: 0, is_gross_paid: true, is_expense_paid: true, net_amount: net, total_claim_amount: gross
-            };
-          });
-          
-          processParsedData(parsed);
-        } catch (err) { alert('오류가 발생했습니다.'); e.target.value = ''; }
-      };
-      reader.readAsText(file, "utf-8");
-    } 
-    else if (fileName.endsWith('.db') || fileName.endsWith('.sqlite')) {
-      try {
-        setImporting(true);
-        if (!(window as any).initSqlJs) {
-          await new Promise<void>((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js';
-            script.onload = () => resolve();
-            script.onerror = () => reject();
-            document.body.appendChild(script);
-          });
-        }
-        
-        const initSqlJs = (window as any).initSqlJs;
-        const SQL = await initSqlJs({ locateFile: (f: string) => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${f}` });
-        
-        const buffer = await file.arrayBuffer();
-        const db = new SQL.Database(new Uint8Array(buffer));
-        
-        const hasTCash = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='T_CASH'").length > 0;
-        
-        if (hasTCash) {
-          const hasTCall = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='T_CALL'").length > 0;
-          const hasTItem = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='T_ITEMMST'").length > 0;
-          
-          let query = "SELECT c.CASH_DATETIME, c.CASH_MONEY, c.CASH_SUMMARY";
-          if (hasTCall) query += ", t.CALL_START, t.CALL_END";
-          else query += ", '' AS CALL_START, '' AS CALL_END";
-          if (hasTItem) query += ", i.ITEM_NAME";
-          else query += ", '' AS ITEM_NAME";
-          query += " FROM T_CASH c ";
-          if (hasTCall) query += " LEFT JOIN T_CALL t ON c.CALL_ID = t._id ";
-          if (hasTItem) query += " LEFT JOIN T_ITEMMST i ON c.ITEM_ID = i._id ";
-          query += " WHERE c.CASH_MONEY > 0";
-          
-          const cashRes = db.exec(query);
-          if (cashRes.length > 0) {
-            const parsed = [];
-            for(let row of cashRes[0].values) {
-              let d = String(row[0] || '');
-              let money = Number(row[1] || 0);
-              let summary = String(row[2] || '');
-              let callStart = String(row[3] || '');
-              let callEnd = String(row[4] || '');
-              let itemName = String(row[5] || '');
-              
-              if (isBannedWord(summary) || isBannedWord(itemName)) continue;
-              
-              if (d.includes(' ')) d = d.split(' ')[0]; 
-              else if (d.length >= 10 && !isNaN(Number(d))) {
-                 const dateObj = new Date(Number(d) > 9999999999 ? Number(d) : Number(d) * 1000);
-                 d = dateObj.toISOString().split('T')[0];
-              } else if (d && !d.includes('-')) {
-                 d = d.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3');
-              }
-              
-              let dep = callStart;
-              let dest = callEnd;
-              
-              if (!dep || !dest) {
-                if (summary.includes('▷')) {
-                  const parts = summary.split('▷');
-                  dep = parts[0].trim();
-                  dest = parts[1].split('(')[0].trim();
-                } else if (summary.includes('-')) {
-                  const parts = summary.split('-');
-                  dep = parts[0].trim();
-                  dest = parts[1].split('(')[0].trim();
-                } else {
-                  if (!dep) dep = summary.substring(0, 12);
-                }
-              }
-              
-              if (!dep || isBannedWord(dep)) dep = '출발지 미상';
-              if (!dest || isBannedWord(dest)) dest = '도착지 미상';
-              if (dep === '출발지 미상' && dest === '도착지 미상') continue;
-              
-              parsed.push({
-                date: d || getTodayKST(), departure: dep, destination: dest, gross_amount: money,
-                fee_rate: 20, fuel_amount: 0, extra_expense_amount: 0, tip_amount: 0,
-                is_gross_paid: true, is_expense_paid: true, 
-                net_amount: Math.round(money * 0.8), total_claim_amount: money
-              });
-            }
-            
-            if (parsed.length > 0) {
-              processParsedData(parsed);
-              return;
-            }
-          }
-        }
-        
-        const tablesRes = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'");
-        if (tablesRes.length === 0) { alert('DB에 테이블이 없습니다.'); setImporting(false); e.target.value = ''; return; }
-        
-        let bestData: any[] = [];
-        let bestCols: string[] = [];
-
-        for (let i = 0; i < tablesRes[0].values.length; i++) {
-          const tName = tablesRes[0].values[i][0];
-          const dRes = db.exec(`SELECT * FROM "${tName}" LIMIT 3000`);
-          if (dRes.length > 0 && dRes[0].values.length > bestData.length) {
-            bestData = dRes[0].values;
-            bestCols = dRes[0].columns;
-          }
-        }
-
-        const headers = bestCols.map(h => String(h).toLowerCase());
-        const dateIdx = headers.findIndex(h => h.includes('date') || h.includes('time') || h.includes('날짜') || h.includes('일자'));
-        const depIdx = headers.findIndex(h => h.includes('start') || h.includes('출발'));
-        const destIdx = headers.findIndex(h => h.includes('end') || h.includes('도착'));
-        const grossIdx = headers.findIndex(h => h.includes('price') || h.includes('cash') || h.includes('money') || h.includes('amount') || h.includes('요금') || h.includes('운임') || h.includes('금액'));
-
-        let finalDateIdx = dateIdx !== -1 ? dateIdx : 1; 
-        
-        const parsedFallback = bestData.map((row: any) => {
-          const rowStr = String(row).toLowerCase();
-          if (isBannedWord(rowStr)) return null;
-
-          let d = row[finalDateIdx] ? String(row[finalDateIdx]) : '';
-          
-          if (d.length >= 10 && !isNaN(Number(d))) {
-             const dateObj = new Date(Number(d) > 9999999999 ? Number(d) : Number(d) * 1000);
-             d = dateObj.toISOString().split('T')[0];
-          } else if (d && !d.includes('-')) {
-             d = d.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3');
-          }
-          
-          let gross = 0;
-          if (grossIdx !== -1) {
-            gross = cleanNumber(String(row[grossIdx]));
-          } else {
-            const numbers = row.map((v:any) => cleanNumber(String(v))).filter((v:number) => v > 5000);
-            if(numbers.length > 0) gross = Math.max(...numbers);
-          }
-          const net = Math.round(gross * 0.8);
-          
-          return {
-            date: d || getTodayKST(), departure: depIdx !== -1 && row[depIdx] ? String(row[depIdx]) : '출발지 미상',
-            destination: destIdx !== -1 && row[destIdx] ? String(row[destIdx]) : '도착지 미상',
-            gross_amount: gross, fee_rate: 20, fuel_amount: 0, extra_expense_amount: 0, tip_amount: 0,
-            is_gross_paid: true, is_expense_paid: true, net_amount: net, total_claim_amount: gross
-          };
-        }).filter(r => r !== null);
-        
-        processParsedData(parsedFallback);
-      } catch (err) {
-        alert('분석 오류가 발생했습니다.');
-        setImporting(false); e.target.value = '';
-      }
-    } else {
-      alert('.csv 또는 .db 확장자 파일만 업로드 가능합니다.');
-      e.target.value = '';
-    }
-  };
-
-  const executeImport = async () => {
-    if (!session || importPreview.length === 0) return;
-    setImporting(true);
-    const payloads = importPreview.map(r => ({
-      ...r, id: 'rec_' + Math.random().toString(36).substr(2, 9) + Date.now(), user_id: session.user.id, start_time: '-', end_time: '-'
-    }));
-
-    const { error } = await supabase.from('driving_records').insert(payloads);
-    if (error) {
-      alert('데이터 저장 중 오류가 발생했습니다: ' + error.message);
-    } else {
-      alert(`${payloads.length}건의 과거 운행 일지가 성공적으로 환승되었습니다!`);
-      setImportModalOpen(false); setImportPreview([]); fetchUserData(session.user.id, session.user.email);
-    }
-    setImporting(false);
-  };
-
   const handleSaveNoticeTemplate = async (e: React.FormEvent) => {
     e.preventDefault(); if (!inputNoticeTitle.trim() || !inputNoticeContent.trim()) return;
     setNoticeLoading(true);
@@ -597,17 +310,20 @@ export default function App() {
     if (!error) { alert(editingNoticeId ? '수정되었습니다.' : '저장되었습니다.'); setInputNoticeTitle(''); setInputNoticeContent(''); setEditingNoticeId(null); fetchNotices(); }
     setNoticeLoading(false);
   };
+
   const handleActivateNotice = async (targetNotice: NoticeItem) => {
     setNoticeLoading(true); await supabase.from('announcements').update({ is_active: false }).neq('id', 'dummy');
     const { error } = await supabase.from('announcements').update({ is_active: true, updated_at: new Date().toISOString() }).eq('id', targetNotice.id);
     if (!error) { alert('메인 배너로 활성화되었습니다.'); fetchNotices(); }
     setNoticeLoading(false);
   };
+
   const handleDeactivateAllNotices = async () => {
     setNoticeLoading(true); const { error } = await supabase.from('announcements').update({ is_active: false }).neq('id', 'dummy');
     if (!error) { alert('메인 배너 송출이 중단되었습니다.'); fetchNotices(); }
     setNoticeLoading(false);
   };
+
   const handleDeleteNotice = async (id: string) => {
     if (!window.confirm('삭제하시겠습니까?')) return;
     await supabase.from('announcements').delete().eq('id', id); fetchNotices();
@@ -741,12 +457,7 @@ export default function App() {
     setAdminSelectedUserRecords(userRecs);
   };
 
-  const filteredRecords = viewMode === 'daily' 
-    ? records.filter((r) => r.date === selectedDate)
-    : records.filter((r) => r.date.startsWith(selectedMonth));
-
-  const displayRecords = filterAllDates ? records.slice(0, 100) : filteredRecords.slice(0, 100);
-
+  const filteredRecords = filterAllDates ? records : records.filter((r) => r.date === selectedDate);
   const unpaidRecords = records.filter((r) => !r.isGrossPaid || (!r.isExpensePaid && (r.fuelAmount > 0 || r.extraExpenseAmount > 0)));
   const totalUnpaidAmount = unpaidRecords.reduce((acc, r) => {
     let amt = 0;
@@ -804,7 +515,7 @@ export default function App() {
     return (
       <div className="min-h-screen bg-[#0B1120] text-slate-100 flex items-center justify-center p-4 relative overflow-hidden">
         {injectStyles()}
-        
+
         <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[380px] h-[380px] bg-[#8B5CF6]/10 rounded-full blur-[100px] pointer-events-none" />
         <div className="w-full max-w-[420px] glass-card rounded-2xl p-7 shadow-2xl relative z-10">
           <div className="flex flex-col items-center mb-6">
@@ -892,6 +603,7 @@ export default function App() {
             <button onClick={() => setActiveTab('expense')} className={`py-2 px-1 text-center rounded-xl text-xs font-bold cursor-pointer transition-all ${activeTab === 'expense' ? 'hp-primary-btn shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'bg-white/5 text-slate-300 hover:text-white'}`}>경비 장부</button>
             <button onClick={() => setActiveTab('analytics')} className={`py-2 px-1 text-center rounded-xl text-xs font-bold cursor-pointer transition-all ${activeTab === 'analytics' ? 'hp-primary-btn shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'bg-white/5 text-slate-300 hover:text-white'}`}>통계 요약</button>
             
+            {/* 2번째 줄 */}
             <button onClick={() => setActiveTab('wallet')} className={`py-2 px-1 text-center rounded-xl text-xs font-bold cursor-pointer transition-all ${activeTab === 'wallet' ? 'hp-primary-btn shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'bg-white/5 text-slate-300 hover:text-white'}`}>계좌 관리</button>
             <button onClick={() => setActiveTab('trade_centers')} className={`py-2 px-1 text-center rounded-xl text-xs font-bold cursor-pointer transition-all ${activeTab === 'trade_centers' ? 'hp-primary-btn shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'bg-white/5 text-slate-300 hover:text-white'}`}>매매단지</button>
             <button onClick={() => setActiveTab('auctions')} className={`py-2 px-1 text-center rounded-xl text-xs font-bold cursor-pointer transition-all ${activeTab === 'auctions' ? 'hp-primary-btn shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'bg-white/5 text-slate-300 hover:text-white'}`}>경매장</button>
@@ -903,7 +615,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* 1. 운행 일지 탭 */}
+        {/* 1. 운행 일지 탭 (분리 미수금 적용된 버전) */}
         {activeTab === 'records' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 fade-in-text">
             <div className="glass-card rounded-xl p-6 shadow-lg h-fit">
@@ -936,42 +648,20 @@ export default function App() {
                   <h3 className="text-sm font-bold text-white flex items-center gap-2"><FileText className="w-4 h-4 text-[#8B5CF6]" />운행 일지 및 정산 현황 ({filteredRecords.length}건)</h3>
                   <p className="text-[11px] text-[#38BDF8] font-medium mt-1 ml-6">운임과 대납 경비의 입금 상태를 분리해서 관리하세요.</p>
                 </div>
-                
-                <div className="flex flex-col items-end gap-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button onClick={() => setImportModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#8B5CF6]/10 hover:bg-[#8B5CF6]/20 text-[#8B5CF6] text-xs font-bold rounded-lg border border-[#8B5CF6]/30 transition-all cursor-pointer"><Database className="w-3.5 h-3.5" />타사 장부 불러오기</button>
-                    <div className="flex items-center gap-2 bg-[#0B1120] px-2 py-1 rounded-lg border border-white/10">
-                      <select 
-                        value={viewMode} 
-                        onChange={(e) => setViewMode(e.target.value as 'daily' | 'monthly')}
-                        className="bg-transparent text-[#38BDF8] text-xs font-bold outline-none cursor-pointer"
-                      >
-                        <option value="daily">일간 보기</option>
-                        <option value="monthly">월별 보기</option>
-                      </select>
-                    </div>
-                    {viewMode === 'daily' ? (
-                      <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="bg-white text-black font-bold text-xs px-2 py-1.5 rounded-lg border-0 focus:ring-2 focus:ring-[#8B5CF6]" />
-                    ) : (
-                      <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="bg-white text-black font-bold text-xs px-2 py-1.5 rounded-lg border-0 focus:ring-2 focus:ring-[#8B5CF6]" />
-                    )}
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 bg-[#0B1120] px-3 py-1.5 rounded-lg border border-white/10">
+                    <input type="checkbox" id="allDates" checked={filterAllDates} onChange={(e) => setFilterAllDates(e.target.checked)} className="w-3.5 h-3.5 rounded text-[#8B5CF6] cursor-pointer" />
+                    <label htmlFor="allDates" className="text-xs text-slate-300 font-semibold cursor-pointer">전체 누적 보기</label>
                   </div>
-                  <div className="flex flex-wrap items-center gap-3">
-                    <button onClick={() => handleDeleteRecordsByPeriod('month')} className="text-[11px] text-[#EC4899] hover:text-rose-400 font-bold underline cursor-pointer">
-                      🗑️ 선택 월({viewMode === 'monthly' ? selectedMonth.substring(5,7) : selectedDate.substring(5,7)}월) 일괄삭제
-                    </button>
-                    <button onClick={() => handleDeleteRecordsByPeriod('year')} className="text-[11px] text-rose-500 hover:text-rose-400 font-bold underline cursor-pointer">
-                      🗑️ 선택 연도({viewMode === 'monthly' ? selectedMonth.substring(0,4) : selectedDate.substring(0,4)}년) 일괄삭제
-                    </button>
-                  </div>
+                  {!filterAllDates && <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="bg-white text-black font-bold text-xs px-2 py-1.5 rounded-lg border-0 focus:ring-2 focus:ring-[#8B5CF6]" />}
                 </div>
               </div>
 
               <div className="space-y-3 max-h-[650px] overflow-y-auto pr-1">
-                {displayRecords.length === 0 ? (
+                {filteredRecords.length === 0 ? (
                   <div className="text-center py-12 text-slate-500 text-xs">해당 조건에 등록된 운행이 없습니다.</div>
                 ) : (
-                  displayRecords.map((r) => {
+                  filteredRecords.map((r) => {
                     const elapsed = getElapsedDays(r.date);
                     const hasExpense = r.fuelAmount > 0 || r.extraExpenseAmount > 0;
                     const expenseTotal = r.fuelAmount + r.extraExpenseAmount;
@@ -988,6 +678,7 @@ export default function App() {
                             </div>
                           </div>
                           
+                          {/* 분리 미수금 뱃지 UI */}
                           <div className="flex flex-wrap gap-2 pt-1 ml-11">
                             <button onClick={() => toggleGrossPaid(r.id)} className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${r.isGrossPaid ? 'bg-[#38BDF8]/20 text-[#38BDF8] border border-[#38BDF8]/40' : 'bg-[#EC4899]/20 text-[#EC4899] border border-[#EC4899]/40 animate-pulse'}`}>
                               {r.isGrossPaid ? <CheckCircle2 className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />} 운임 {r.grossAmount.toLocaleString()}원
@@ -1019,17 +710,12 @@ export default function App() {
                     );
                   })
                 )}
-                {(filterAllDates || viewMode === 'monthly') && filteredRecords.length > 100 && (
-                  <div className="text-center text-xs font-semibold text-[#8B5CF6] pt-4 pb-2">
-                    빠른 속도를 위해 최근 100건만 표시됩니다. (해당 기간 총 {filteredRecords.length}건 등록됨)
-                  </div>
-                )}
               </div>
             </div>
           </div>
         )}
 
-        {/* 2. 청구문자 탭 */}
+        {/* 2. 청구문자 탭 (분리 미수금 호환) */}
         {activeTab === 'claims' && (
           <div className="glass-card rounded-xl p-6 shadow-lg fade-in-text">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
@@ -1159,7 +845,7 @@ export default function App() {
           </div>
         )}
 
-        {/* 6. 전국 매매단지 안내 탭 */}
+        {/* 6. 전국 매매단지 안내 탭 (18개 거점 복구 완료) */}
         {activeTab === 'trade_centers' && (
           <div className="space-y-5 fade-in-text">
             <div className="glass-card rounded-xl p-5 shadow-lg border border-[#8B5CF6]/30">
@@ -1212,7 +898,7 @@ export default function App() {
           </div>
         )}
 
-        {/* 7. 경매장 일정 탭 */}
+        {/* 7. 경매장 일정 탭 (데이터 전체 복구) */}
         {activeTab === 'auctions' && (
           <div className="space-y-6 fade-in-text">
             <div className="glass-card rounded-xl p-6 shadow-lg border border-[#8B5CF6]/30">
@@ -1262,7 +948,7 @@ export default function App() {
           </div>
         )}
 
-        {/* 8. 관제탑 관리자 탭 */}
+        {/* 8. 관제탑 관리자 탭 (접속 데이터 포함 풀버전) */}
         {activeTab === 'admin' && isAdminUser && (
           <div className="space-y-6 fade-in-text">
             <div className="mb-2">
@@ -1396,52 +1082,46 @@ export default function App() {
         </div>
       )}
 
-      {/* 모달: 타사 앱 장부 불러오기 */}
-      {importModalOpen && (
+      {/* 모달: 운행 일지 수정 (분리 미수금 호환) */}
+      {editingRecord && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="w-full max-w-sm glass-card rounded-2xl p-6 shadow-2xl relative">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-sm font-bold text-white flex items-center gap-1.5"><Edit2 className="w-4 h-4 text-[#8B5CF6]" /> 운행 내역 수정</h3>
+              <button onClick={() => setEditingRecord(null)} className="text-slate-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
+            </div>
+            <form onSubmit={handleUpdateRecord} className="space-y-3.5">
+              <div><label className="block text-[11px] font-semibold text-[#38BDF8] mb-1">운행 일자 변경</label><input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="w-full px-3 py-2 rounded-lg" required /></div>
+              <div className="grid grid-cols-2 gap-2">
+                <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">출발지</label><input type="text" value={editDeparture} onChange={(e) => setEditDeparture(e.target.value)} className="w-full px-3 py-2 rounded-lg" required /></div>
+                <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">도착지</label><input type="text" value={editDestination} onChange={(e) => setEditDestination(e.target.value)} className="w-full px-3 py-2 rounded-lg" required /></div>
+              </div>
+              <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">운임(원)</label><input type="text" value={editGross} onChange={(e) => setEditGross(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" required /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">대납 주유비</label><input type="text" value={editFuel} onChange={(e) => setEditFuel(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">통행료 등 추가경비</label><input type="text" value={editExtra} onChange={(e) => setEditExtra(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">기사 팁</label><input type="text" value={editTip} onChange={(e) => setEditTip(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" /></div>
+              <button type="submit" className="w-full mt-2 py-3 hp-primary-btn font-bold rounded-lg text-xs cursor-pointer">수정 완료</button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 모달: 청구 문자 직접 편집 생성 (분리 미수금 호환) */}
+      {claimModalOpen && selectedClaimRecord && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="w-full max-w-lg glass-card rounded-2xl p-6 shadow-2xl relative">
-            <button onClick={() => setImportModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 cursor-pointer"><X className="w-5 h-5" /></button>
-            <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2"><Database className="w-5 h-5 text-[#8B5CF6]" />타사 앱 장부 불러오기</h3>
-            <p className="text-xs text-slate-400 mb-4 leading-relaxed">대리가계부 등 타사 앱에서 추출한 <strong className="text-[#38BDF8]">CSV(엑셀)</strong> 또는 <strong className="text-[#38BDF8]">DB 파일(dcb_teras.db 등)</strong>을 선택해주세요. 내용을 자동으로 인식하여 1초 만에 환승됩니다.</p>
-            
-            <div className="bg-[#0B1120] border border-white/10 rounded-xl p-6 flex flex-col items-center justify-center mb-4 border-dashed cursor-pointer hover:border-[#8B5CF6]/50 transition-colors">
-              <label htmlFor="file-upload" className="flex flex-col items-center cursor-pointer w-full">
-                <Upload className="w-8 h-8 text-[#8B5CF6] mb-3" />
-                <span className="text-xs font-bold text-slate-300 text-center">이곳을 터치하여<br/>CSV 또는 DB(.db) 파일 선택</span>
-                <input id="file-upload" type="file" accept=".csv, .db, .sqlite, application/x-sqlite3" onChange={handleFileImport} className="hidden" />
-              </label>
+            <button onClick={() => setClaimModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 cursor-pointer"><X className="w-5 h-5" /></button>
+            <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2"><MessageSquare className="w-5 h-5 text-[#8B5CF6]" />정산 청구 문자 편집 및 복사</h3>
+            <p className="text-xs text-slate-400 mb-4">미입금된 내역만 자동으로 체크되어 문구가 생성됩니다. 수정한 후 복사하세요.</p>
+            <div className="flex gap-4 mb-4 pb-4 border-b border-white/10">
+              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 cursor-pointer"><input type="checkbox" checked={includeGross} onChange={() => handleToggleInclude('gross')} className="rounded text-[#8B5CF6]" disabled={selectedClaimRecord.isGrossPaid} /> 기본 운임</label>
+              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 cursor-pointer"><input type="checkbox" checked={includeFuel} onChange={() => handleToggleInclude('fuel')} className="rounded text-[#8B5CF6]" disabled={selectedClaimRecord.fuelAmount === 0 || selectedClaimRecord.isExpensePaid} /> 주유비</label>
+              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 cursor-pointer"><input type="checkbox" checked={includeExtra} onChange={() => handleToggleInclude('extra')} className="rounded text-[#8B5CF6]" disabled={selectedClaimRecord.extraExpenseAmount === 0 || selectedClaimRecord.isExpensePaid} /> 추가경비</label>
             </div>
-
-            {importing && (
-              <div className="flex flex-col items-center justify-center p-4">
-                <RefreshCw className="w-6 h-6 text-[#8B5CF6] animate-spin mb-2" />
-                <span className="text-xs text-slate-300">파일을 분석 중입니다...</span>
-              </div>
-            )}
-
-            {importPreview.length > 0 && !importing && (
-              <div className="mb-4">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-xs font-bold text-[#38BDF8]">미리보기 (총 {importPreview.length}건 성공)</span>
-                </div>
-                <div className="bg-[#0B1120] border border-white/10 rounded-lg p-3 max-h-40 overflow-y-auto space-y-2">
-                  {importPreview.slice(0, 5).map((r, i) => (
-                    <div key={i} className="text-[11px] text-slate-300 flex justify-between border-b border-white/5 pb-1">
-                      <span>{r.date} | {r.departure} → {r.destination}</span>
-                      <span className="font-bold text-white">{r.gross_amount.toLocaleString()}원</span>
-                    </div>
-                  ))}
-                  {importPreview.length > 5 && <div className="text-[10px] text-center text-slate-500 pt-1">외 {importPreview.length - 5}건...</div>}
-                </div>
-              </div>
-            )}
-
+            <textarea rows={10} value={claimMessageText} onChange={(e) => setClaimMessageText(e.target.value)} className="w-full p-4 rounded-xl text-xs font-mono mb-4 leading-relaxed bg-[#FFFFFF] text-[#000000] focus:shadow-[0_0_12px_#8B5CF6] focus:border-[#8B5CF6] transition-all outline-none" />
             <div className="flex gap-2">
-              <button onClick={() => { setImportModalOpen(false); setImportPreview([]); }} className="flex-1 py-3 bg-[#0B1120] border border-white/10 text-white font-semibold rounded-lg text-xs cursor-pointer transition-colors">취소</button>
-              <button onClick={executeImport} disabled={importPreview.length === 0 || importing} className="flex-1 py-3 hp-primary-btn text-white font-bold rounded-lg text-xs cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5">
-                <Upload className="w-4 h-4" />
-                {importPreview.length}건 전체 저장하기
-              </button>
+              <button onClick={() => setClaimModalOpen(false)} className="flex-1 py-3 bg-[#0B1120] border border-white/10 hover:bg-white/10 text-white font-semibold rounded-lg text-xs cursor-pointer transition-colors">닫기</button>
+              <button onClick={() => { navigator.clipboard.writeText(claimMessageText); alert('수정된 정산 청구 문자가 복사되었습니다.'); setClaimModalOpen(false); }} className="flex-1 py-3 hp-primary-btn text-white font-bold rounded-lg text-xs cursor-pointer shadow-md flex items-center justify-center gap-1.5"><Copy className="w-3.5 h-3.5" />복사하기</button>
             </div>
           </div>
         </div>
