@@ -7,7 +7,7 @@ import {
   Copy, Car, Filter, RotateCcw, CalendarDays, ShieldCheck, ChevronRight, Smartphone,
   Fuel, AlertTriangle, MessageSquare, Check, Edit2, Coins, Sparkles, Phone,
   RefreshCw, UserX, ShieldAlert, BarChart3, Megaphone, Users, Download,
-  Award, Crown, BookmarkPlus, Radio, Send, Building2, Info, Map, Target, Navigation, Search, PieChart
+  Award, Crown, BookmarkPlus, Radio, Send, Building2, Info, Map, Target, Navigation, Search, PieChart, Activity
 } from 'lucide-react';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
@@ -55,12 +55,7 @@ interface DrivingRecord {
 }
 interface ExpenseRecord { id: string; date: string; category: string; amount: number; memo: string; }
 interface BankAccount { id: string; bankName: string; accountNumber: string; holder: string; }
-
-// 💡 [업그레이드 1] 관제탑 스카우트 분석용 monthlyGross 속성 추가
-interface MemberProfile { 
-  id: string; email: string; name: string; phone: string; role: string; createdAt: string; 
-  lastLoginAt?: string; loginCount?: number; recordCount?: number; monthlyGross?: number; 
-}
+interface MemberProfile { id: string; email: string; name: string; phone: string; role: string; createdAt: string; lastLoginAt?: string; loginCount?: number; recordCount?: number; monthlyGross?: number; }
 interface NoticeItem { id: string; title: string; content: string; isActive: boolean; updatedAt?: string; }
 
 const TRADE_CENTERS = [
@@ -75,7 +70,7 @@ const TRADE_CENTERS = [
   { id: '9', name: '부산 사직오토랜드', tier: 'A', region: '영남권', addr: '부산 연제구 경기장로 15', desc: '부산 권역 전통 대표 매매단지. 도심 내 장거리 종착 및 신규 출발 요충지.' },
   { id: '10', name: '대전 디오토몰', tier: 'A', region: '충청권', addr: '대전 유성구 복용동로 35', desc: '충청권 핵심 실내 단지. 영호남 이동 시 중간 복귀콜 환적 전초기지.' },
   { id: '11', name: '대전 오토월드', tier: 'A', region: '충청권', addr: '대전 유성구 유성대로 510', desc: '디오토몰 인근 복용동 매매단지 핵심 거점. 풍부한 지방 이동 콜.' },
-  { id: '12', name: '광주 풍암매매단지', tier: 'A', region: '호남권', addr: '광주 서구 매월1로 50', desc: '호남권 최대 중고차 거래 거점. 대규모 단지 및 상사 밀집.' },
+  { id: '12', name: '광주 풍암매매단지', tier: 'A', region: '호남권', addr: '광주 서구 매월1로 50', desc: '호남권 최대 중고 거래 거점. 대규모 단지 및 상사 밀집.' },
   { id: '13', name: '광주 엠플러스 (M-PLUS)', tier: 'A', region: '호남권', addr: '광주 서구 매월1로62번길 24', desc: '풍암지구 내 신축 대형 실내 복합 백화점. 호남권 딜러 출고 집중지.' },
   { id: '14', name: '부천 국민차매매단지', tier: 'B', region: '수도권', addr: '경기 부천시 송내대로 450', desc: '수도권 서부권역 주요 전통 매매단지.' },
   { id: '15', name: '부천 DY카랜드', tier: 'B', region: '수도권', addr: '경기 부천시 신흥로 399번길 50', desc: '경인고속도로 부천IC 인접. 오정동 대형 매매단지.' },
@@ -163,7 +158,6 @@ export default function App() {
   const [adminMemberList, setAdminMemberList] = useState<MemberProfile[]>([]);
   const [adminAllRecords, setAdminAllRecords] = useState<DrivingRecord[]>([]);
   
-  // 💡 [업그레이드 2] 스카우트 레이더(에이스만 보기) 필터 상태
   const [adminSearchTerm, setAdminSearchTerm] = useState('');
   const [showScoutOnly, setShowScoutOnly] = useState(false);
 
@@ -238,7 +232,6 @@ export default function App() {
     const { data: profiles } = await supabase.from('profiles').select('*').order('last_login_at', { ascending: false });
     const { data: allRecs } = await supabase.from('driving_records').select('*').limit(20000);
     
-    // 💡 [업그레이드 3] 기사별 당월 매출 합산 로직 추가 (스카우트 레이더용)
     const currentMonthStr = getTodayKST().substring(0, 7);
     
     if (profiles && allRecs) {
@@ -368,7 +361,9 @@ export default function App() {
     if (!error) {
       const updated = [{ ...payload, startTime: payload.start_time, endTime: payload.end_time, grossAmount: gross, feeRate, fuelAmount: fuel, extraExpenseAmount: extraExp, tipAmount: tip, isGrossPaid: false, isExpensePaid: false, netAmount: Math.round(net), totalClaimAmount: Math.round(claimTotal) }, ...records];
       updated.sort((a, b) => a.date.localeCompare(b.date));
-      setRecords(updated); setSelectedDate(newDate);
+      setRecords(updated); 
+      setCustomDate(newDate);
+      setDateFilter('day'); // 방금 등록한 날짜의 '일간' 뷰로 고정
       setNewDeparture(''); setNewDestination(''); setNewGross(''); setNewFuel(''); setNewExtraExpense(''); setNewTip('');
     }
   };
@@ -504,20 +499,20 @@ export default function App() {
 
   const openAdminUserDetail = (user: MemberProfile) => {
     setAdminSelectedUser(user);
-    const userRecs = adminAllRecords.filter(r => r.userId === user.id).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10);
-    setAdminSelectedUserRecords(userRecs);
+    // 💡 [관제탑 업그레이드 1] 특정 기사의 모든 데이터를 기반으로 개인 통계 분석 (최대 10건 제약 해제)
+    const allUserRecs = adminAllRecords.filter(r => r.userId === user.id);
+    const recentRecs = allUserRecs.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10);
+    setAdminSelectedUserRecords(recentRecs);
   };
 
-  // 💡 [성능 최적화] 리렌더링마다 new Date() 중복 호출 방지
   const todayKstStr = getTodayKST();
   const thisMonthStr = todayKstStr.substring(0, 7);
   const thisYearStr = todayKstStr.substring(0, 4);
 
   const filteredRecords = records.filter((r) => {
-    if (dateFilter === 'today') return r.date === todayKstStr;
-    if (dateFilter === 'month') return r.date.startsWith(thisMonthStr);
-    if (dateFilter === 'year') return r.date.startsWith(thisYearStr);
-    if (dateFilter === 'custom') return r.date === customDate;
+    if (dateFilter === 'day') return r.date === customDate;
+    if (dateFilter === 'month') return r.date.startsWith(customDate.substring(0, 7));
+    if (dateFilter === 'year') return r.date.startsWith(customDate.substring(0, 4));
     return true;
   });
 
@@ -554,6 +549,27 @@ export default function App() {
     if (tradeFilter === '호남권') return center.region === '호남권';
     return true;
   });
+
+  const displayedMembers = adminMemberList.filter(m => {
+    const matchesSearch = m.name.includes(adminSearchTerm) || m.phone.includes(adminSearchTerm) || m.email.includes(adminSearchTerm);
+    const isAce = (m.monthlyGross || 0) >= 1500000 || (m.recordCount || 0) >= 10;
+    if (showScoutOnly) return matchesSearch && isAce;
+    return matchesSearch;
+  });
+
+  // 💡 [관제탑 업그레이드 2] 플랫폼 전체 핫플레이스(도착지 Top 5) 추출기
+  const getTopDestinations = () => {
+    if (adminAllRecords.length === 0) return [];
+    const counts: Record<string, number> = {};
+    adminAllRecords.forEach(r => { if (r.destination) counts[r.destination] = (counts[r.destination] || 0) + 1; });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  };
+
+  // 💡 [관제탑 업그레이드 3] 전체 기사 매출 상위 랭킹 추출기 (리더보드)
+  const getTopEarners = () => {
+    if (adminMemberList.length === 0) return [];
+    return [...adminMemberList].sort((a, b) => (b.monthlyGross || 0) - (a.monthlyGross || 0)).slice(0, 5);
+  };
 
   const injectStyles = () => (
     <style dangerouslySetInnerHTML={{__html: `
@@ -637,14 +653,6 @@ export default function App() {
   }
 
   const userName = currentUserProfile?.name || session?.user?.user_metadata?.name || ADMIN_DEFAULT_NAME;
-
-  // 💡 [업그레이드 2] 회원 검색 리스트 필터링 (스카우트 버튼 호환)
-  const displayedMembers = adminMemberList.filter(m => {
-    const matchesSearch = m.name.includes(adminSearchTerm) || m.phone.includes(adminSearchTerm) || m.email.includes(adminSearchTerm);
-    const isAce = (m.monthlyGross || 0) >= 1500000 || (m.recordCount || 0) >= 10;
-    if (showScoutOnly) return matchesSearch && isAce;
-    return matchesSearch;
-  });
 
   return (
     <div className="min-h-screen bg-[#0B1120] text-slate-100 pb-20 relative">
@@ -745,7 +753,7 @@ export default function App() {
                     <button onClick={() => setDateFilter('month')} className={`px-2.5 py-1.5 rounded transition-colors cursor-pointer ${dateFilter === 'month' ? 'bg-[#8B5CF6] text-white' : 'text-slate-400 hover:text-white'}`}>월간</button>
                     <button onClick={() => setDateFilter('year')} className={`px-2.5 py-1.5 rounded transition-colors cursor-pointer ${dateFilter === 'year' ? 'bg-[#8B5CF6] text-white' : 'text-slate-400 hover:text-white'}`}>연간</button>
                   </div>
-                  <input type="date" value={customDate} onChange={(e) => setCustomDate(e.target.value)} className={`bg-white text-black font-bold text-[11px] px-2 py-1.5 rounded-lg border-0 focus:ring-2 focus:ring-[#8B5CF6] cursor-pointer w-full`} />
+                  <input type="date" value={customDate} onChange={(e) => { setCustomDate(e.target.value); setDateFilter('custom'); }} className={`bg-white text-black font-bold text-[11px] px-2 py-1.5 rounded-lg border-0 focus:ring-2 focus:ring-[#8B5CF6] cursor-pointer w-full ${dateFilter === 'custom' ? 'ring-2 ring-[#8B5CF6]' : ''}`} />
                 </div>
               </div>
 
@@ -910,6 +918,7 @@ export default function App() {
 
         {activeTab === 'analytics' && (
           <div className="space-y-6 fade-in-text">
+            
             <div className="flex gap-2 bg-[#0B1120] p-1.5 rounded-xl border border-white/10 w-fit">
               <button onClick={() => setAnalyticsMode('month')} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${analyticsMode === 'month' ? 'bg-[#8B5CF6] text-white shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'text-slate-400 hover:text-white'}`}>월간 상세 요약</button>
               <button onClick={() => setAnalyticsMode('year')} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${analyticsMode === 'year' ? 'bg-[#8B5CF6] text-white shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'text-slate-400 hover:text-white'}`}>연간 종합 통계</button>
@@ -1137,18 +1146,18 @@ export default function App() {
           </div>
         )}
 
-        {/* 💡 [업그레이드 2] 관제탑 - 스카우트 레이더(에이스 뱃지, 전용 필터버튼) 추가 적용 */}
+        {/* 💡 [관제탑 업그레이드] 개인 및 플랫폼 매출, 도착지 분석 연동 */}
         {activeTab === 'admin' && isAdminUser && (
           <div className="space-y-6 fade-in-text">
             <div className="mb-2">
               <h3 className="text-sm font-bold text-[#38BDF8] flex items-center gap-2"><Crown className="w-5 h-5" />플랫폼 관리자 (관제탑)</h3>
-              <p className="text-[11px] text-slate-400 mt-1 ml-7">플랫폼 전체의 기사 접속 현황, 권한 관리 및 실시간 공지사항 송출을 관리하는 공간입니다.</p>
+              <p className="text-[11px] text-slate-400 mt-1 ml-7">플랫폼 전체의 기사 접속 현황, 트래픽 핫플레이스 분석 및 실시간 공지사항 송출을 관리하는 공간입니다.</p>
             </div>
             
             <div className="flex gap-2 border-b border-white/10 pb-2 overflow-x-auto scrollbar-hide">
               <button onClick={() => setAdminSubTab('campaign')} className={`px-3 py-1.5 rounded text-xs font-bold cursor-pointer shrink-0 transition-colors ${adminSubTab === 'campaign' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#0B1120] text-slate-400 hover:text-white border border-white/10'}`}>공지/이벤트 문구보관함</button>
               <button onClick={() => setAdminSubTab('members')} className={`px-3 py-1.5 rounded text-xs font-bold cursor-pointer shrink-0 transition-colors ${adminSubTab === 'members' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#0B1120] text-slate-400 hover:text-white border border-white/10'}`}>회원 접속 현황 및 스카우트</button>
-              <button onClick={() => setAdminSubTab('analytics')} className={`px-3 py-1.5 rounded text-xs font-bold cursor-pointer shrink-0 transition-colors ${adminSubTab === 'analytics' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#0B1120] text-slate-400 hover:text-white border border-white/10'}`}>플랫폼 마케팅 통계</button>
+              <button onClick={() => setAdminSubTab('analytics')} className={`px-3 py-1.5 rounded text-xs font-bold cursor-pointer shrink-0 transition-colors ${adminSubTab === 'analytics' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#0B1120] text-slate-400 hover:text-white border border-white/10'}`}>플랫폼 트래픽 및 매출 통계</button>
             </div>
 
             {adminSubTab === 'campaign' && (
@@ -1185,8 +1194,6 @@ export default function App() {
               <div className="glass-card p-6 rounded-xl space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2">
                   <input type="text" placeholder="이름 / 전화번호 / 이메일 검색..." value={adminSearchTerm} onChange={(e) => setAdminSearchTerm(e.target.value)} className="px-3 py-2 rounded-lg text-xs w-full sm:max-w-xs" />
-                  
-                  {/* 스카우트 레이더 버튼 */}
                   <div className="flex items-center gap-2">
                     <button onClick={() => setShowScoutOnly(!showScoutOnly)} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${showScoutOnly ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-[0_0_15px_rgba(245,158,11,0.5)] border-0' : 'bg-[#0B1120] text-slate-400 border border-white/10 hover:border-amber-500/50'}`}>
                       <Award className="w-4 h-4" /> 🏆 에이스 기사만 보기
@@ -1202,7 +1209,7 @@ export default function App() {
                         <th className="p-3 text-center">당월 실적 (건수 / 매출)</th>
                         <th className="p-3 text-center">최근 접속 / 누적</th>
                         <th className="p-3 text-center">권한 변경</th>
-                        <th className="p-3 text-right">CS 열람</th>
+                        <th className="p-3 text-right">CS 열람 및 개인분석</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
@@ -1237,7 +1244,7 @@ export default function App() {
                                   <option value="super_admin">최고 관리자</option>
                                 </select>
                               </td>
-                              <td className="p-3 text-right"><button onClick={() => openAdminUserDetail(m)} className="px-2.5 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded text-[10px] font-bold flex items-center gap-1 ml-auto cursor-pointer"><Search className="w-3 h-3" />상세</button></td>
+                              <td className="p-3 text-right"><button onClick={() => openAdminUserDetail(m)} className="px-2.5 py-1.5 hp-primary-btn hover:bg-white/20 text-white rounded text-[10px] font-bold flex items-center gap-1 ml-auto cursor-pointer"><Search className="w-3 h-3" />상세 리포트</button></td>
                             </tr>
                           );
                         })
@@ -1253,11 +1260,45 @@ export default function App() {
                 <div className="flex justify-end mb-2">
                   <button onClick={handleExportAdminCSV} className="px-3 py-2 bg-[#0B1120] hover:bg-white/10 border border-white/20 text-slate-300 text-xs font-bold rounded-lg cursor-pointer transition-colors flex items-center gap-1.5"><Download className="w-3.5 h-3.5" />전체 기사 운행내역 CSV 다운로드</button>
                 </div>
+                
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="glass-card p-5 rounded-xl"><span className="text-xs text-slate-400">플랫폼 총 가입 기사</span><div className="text-2xl font-bold text-white mt-1">{adminMemberList.length}명</div></div>
                   <div className="glass-card p-5 rounded-xl"><span className="text-xs text-slate-400">누적 접속 횟수</span><div className="text-2xl font-bold text-[#8B5CF6] mt-1">{adminMemberList.reduce((acc, m) => acc + (m.loginCount || 0), 0)}회</div></div>
                   <div className="glass-card p-5 rounded-xl"><span className="text-xs text-slate-400">누적 등록 운행 건수</span><div className="text-2xl font-bold text-[#38BDF8] mt-1">{adminAllRecords.length}건</div></div>
                   <div className="glass-card p-5 rounded-xl"><span className="text-xs text-slate-400">총 대납 주유비 발생액</span><div className="text-2xl font-bold text-[#EC4899] mt-1">{adminAllRecords.reduce((acc, cur) => acc + cur.fuelAmount, 0).toLocaleString()}원</div></div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-6">
+                  {/* 플랫폼 핫플레이스 리스트 */}
+                  <div className="glass-card p-5 rounded-xl border-t-2 border-t-[#EC4899]">
+                    <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2"><MapPin className="w-4 h-4 text-[#EC4899]" /> 플랫폼 누적 도착지 랭킹 (핫플레이스 Top 5)</h3>
+                    <div className="space-y-2">
+                      {getTopDestinations().map(([dest, count], idx) => (
+                        <div key={dest} className="flex justify-between items-center bg-[#0B1120] p-3 rounded-lg border border-white/5">
+                          <span className="text-xs font-bold text-white"><span className="text-slate-500 mr-2">{idx + 1}위</span> {dest}</span>
+                          <span className="text-[#38BDF8] font-mono text-xs font-bold">{count}건 도착</span>
+                        </div>
+                      ))}
+                      {getTopDestinations().length === 0 && <div className="text-xs text-slate-500 py-4 text-center">데이터가 없습니다.</div>}
+                    </div>
+                  </div>
+
+                  {/* 매출 랭킹 리스트 */}
+                  <div className="glass-card p-5 rounded-xl border-t-2 border-t-amber-500">
+                    <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2"><Award className="w-4 h-4 text-amber-500" /> 당월 최고 매출 기사 (리더보드 Top 5)</h3>
+                    <div className="space-y-2">
+                      {getTopEarners().map((m, idx) => (
+                        <div key={m.id} className="flex justify-between items-center bg-[#0B1120] p-3 rounded-lg border border-white/5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-slate-500 text-xs">{idx + 1}위</span>
+                            <span className="text-xs font-bold text-white">{m.name} 기사님</span>
+                          </div>
+                          <span className="text-amber-500 font-mono text-xs font-bold">{(m.monthlyGross || 0).toLocaleString()}원</span>
+                        </div>
+                      ))}
+                      {getTopEarners().length === 0 && <div className="text-xs text-slate-500 py-4 text-center">데이터가 없습니다.</div>}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -1265,33 +1306,82 @@ export default function App() {
         )}
       </main>
 
-      {/* 모달: 관리자 기사 상세 조회 (CS) */}
+      {/* 💡 [관제탑 업그레이드 1] 개인 상세 리포트 고도화 (총 매출 및 주요 활동 지역 노출) */}
       {adminSelectedUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="w-full max-w-xl glass-card rounded-2xl p-6 shadow-2xl relative max-h-[80vh] flex flex-col">
+          <div className="w-full max-w-2xl glass-card rounded-2xl p-6 shadow-2xl relative max-h-[90vh] flex flex-col">
             <button onClick={() => setAdminSelectedUser(null)} className="absolute top-4 right-4 text-slate-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
-            <h3 className="text-sm font-bold text-[#38BDF8] mb-4 flex items-center gap-2"><Search className="w-5 h-5" /> [ {adminSelectedUser.name} ] 기사님 상세 리포트</h3>
-            <div className="flex gap-4 mb-4 text-xs text-slate-300 bg-[#0B1120] p-3 rounded-lg border border-white/10"><span>연락처: {formatPhoneNumber(adminSelectedUser.phone)}</span><span>누적 접속: {adminSelectedUser.loginCount}회</span></div>
-            <div className="overflow-y-auto pr-2 space-y-3 flex-1">
-              <h4 className="text-xs font-bold text-white border-b border-white/10 pb-2 mb-2">최근 운행 내역 (최대 10건)</h4>
-              {adminSelectedUserRecords.length === 0 ? <div className="text-center text-xs text-slate-500 py-4">운행 기록이 없습니다.</div> : adminSelectedUserRecords.map((r) => {
-                const totalClaim = r.grossAmount + r.fuelAmount + r.extraExpenseAmount;
-                const unpaid = (!r.isGrossPaid ? r.grossAmount : 0) + (!r.isExpensePaid ? (r.fuelAmount + r.extraExpenseAmount) : 0);
-                return (
-                  <div key={r.id} className="bg-[#0B1120] border border-white/10 p-3 rounded-lg text-xs">
-                    <div className="flex justify-between text-slate-400 mb-1"><span>{r.date}</span><span className={unpaid > 0 ? 'text-[#EC4899] font-bold' : 'text-emerald-400 font-bold'}>{unpaid > 0 ? `미수금 ${unpaid.toLocaleString()}원` : '전액 정산완료'}</span></div>
-                    <div className="font-bold text-white">{r.departure} → {r.destination}</div>
-                    <div className="text-slate-400 mt-1">청구총액: {totalClaim.toLocaleString()}원 (운임 {r.grossAmount.toLocaleString()} / 대납 {(r.fuelAmount + r.extraExpenseAmount).toLocaleString()})</div>
+            <h3 className="text-base font-bold text-[#38BDF8] mb-4 flex items-center gap-2"><Search className="w-5 h-5" /> {adminSelectedUser.name} 기사님 상세 리포트</h3>
+            
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              <div className="bg-[#0B1120] p-3 rounded-lg border border-white/10 text-center"><div className="text-[10px] text-slate-400 mb-1">총 누적 운행</div><div className="font-bold text-white">{adminSelectedUser.recordCount}건</div></div>
+              <div className="bg-[#0B1120] p-3 rounded-lg border border-white/10 text-center"><div className="text-[10px] text-slate-400 mb-1">당월 매출</div><div className="font-bold text-[#8B5CF6]">{(adminSelectedUser.monthlyGross || 0).toLocaleString()}원</div></div>
+              <div className="bg-[#0B1120] p-3 rounded-lg border border-white/10 text-center col-span-2 md:col-span-2 flex flex-col justify-center"><div className="text-[10px] text-slate-400 mb-1">연락처 / 가입일</div><div className="font-mono text-[#38BDF8] text-xs">{formatPhoneNumber(adminSelectedUser.phone)} <span className="text-slate-500 mx-1">|</span> {adminSelectedUser.createdAt}</div></div>
+            </div>
+
+            <div className="overflow-y-auto pr-2 space-y-4 flex-1 scrollbar-hide">
+              {/* 주요 활동 지역 분석 (Top 3) */}
+              <div className="bg-white/5 border border-white/10 p-4 rounded-xl">
+                <h4 className="text-xs font-bold text-white mb-3 flex items-center gap-1.5"><Activity className="w-4 h-4 text-[#EC4899]" /> 개인 주요 활동 지역 분석 (Top 3)</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <div className="text-[10px] text-slate-400 mb-2 border-b border-white/10 pb-1">가장 많이 출발한 곳</div>
+                    <div className="space-y-1.5">
+                      {(() => {
+                        const allRecs = adminAllRecords.filter(r => r.userId === adminSelectedUser.id);
+                        if(allRecs.length === 0) return <div className="text-xs text-slate-500">기록 없음</div>;
+                        const depCounts: Record<string, number> = {};
+                        allRecs.forEach(r => { if(r.departure) depCounts[r.departure] = (depCounts[r.departure] || 0) + 1; });
+                        const topDeps = Object.entries(depCounts).sort((a,b) => b[1] - a[1]).slice(0, 3);
+                        return topDeps.map(([name, count], i) => (
+                          <div key={name} className="flex justify-between text-xs"><span className="text-slate-300">{i+1}. {name}</span><span className="text-[#38BDF8] font-bold">{count}회</span></div>
+                        ));
+                      })()}
+                    </div>
                   </div>
-                );
-              })}
+                  <div>
+                    <div className="text-[10px] text-slate-400 mb-2 border-b border-white/10 pb-1">가장 많이 도착한 곳</div>
+                    <div className="space-y-1.5">
+                      {(() => {
+                        const allRecs = adminAllRecords.filter(r => r.userId === adminSelectedUser.id);
+                        if(allRecs.length === 0) return <div className="text-xs text-slate-500">기록 없음</div>;
+                        const destCounts: Record<string, number> = {};
+                        allRecs.forEach(r => { if(r.destination) destCounts[r.destination] = (destCounts[r.destination] || 0) + 1; });
+                        const topDests = Object.entries(destCounts).sort((a,b) => b[1] - a[1]).slice(0, 3);
+                        return topDests.map(([name, count], i) => (
+                          <div key={name} className="flex justify-between text-xs"><span className="text-slate-300">{i+1}. {name}</span><span className="text-[#EC4899] font-bold">{count}회</span></div>
+                        ));
+                      })()}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 최근 기록 10건 */}
+              <div>
+                <h4 className="text-xs font-bold text-white border-b border-white/10 pb-2 mb-2">최근 운행 내역 (최대 10건)</h4>
+                {adminSelectedUserRecords.length === 0 ? <div className="text-center text-xs text-slate-500 py-4">운행 기록이 없습니다.</div> : adminSelectedUserRecords.map((r) => {
+                  const totalClaim = r.grossAmount + r.fuelAmount + r.extraExpenseAmount;
+                  const unpaid = (!r.isGrossPaid ? r.grossAmount : 0) + (!r.isExpensePaid ? (r.fuelAmount + r.extraExpenseAmount) : 0);
+                  return (
+                    <div key={r.id} className="bg-[#0B1120] border border-white/10 p-3 rounded-lg text-xs mb-2">
+                      <div className="flex justify-between text-slate-400 mb-1"><span>{r.date}</span><span className={unpaid > 0 ? 'text-[#EC4899] font-bold' : 'text-emerald-400 font-bold'}>{unpaid > 0 ? `미수금 ${unpaid.toLocaleString()}원` : '전액 정산완료'}</span></div>
+                      <div className="font-bold text-white mb-1.5">{r.departure} → {r.destination}</div>
+                      <div className="text-slate-400 flex justify-between">
+                        <span>운임 {r.grossAmount.toLocaleString()}원 | 대납 {(r.fuelAmount + r.extraExpenseAmount).toLocaleString()}원</span>
+                        <span className="font-bold text-[#8B5CF6]">청구총액 {totalClaim.toLocaleString()}원</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
             <button onClick={() => setAdminSelectedUser(null)} className="w-full mt-4 py-3 bg-white/10 hover:bg-white/20 text-white font-bold rounded-lg text-xs transition-colors cursor-pointer">닫기</button>
           </div>
         </div>
       )}
 
-      {/* 모달: 운행 일지 수정 */}
+      {/* 모달: 운행 일지 수정 (분리 미수금 호환) */}
       {editingRecord && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="w-full max-w-sm glass-card rounded-2xl p-6 shadow-2xl relative">
@@ -1315,7 +1405,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 모달: 청구 문자 직접 편집 생성 */}
+      {/* 모달: 청구 문자 직접 편집 생성 (분리 미수금 호환) */}
       {claimModalOpen && selectedClaimRecord && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="w-full max-w-lg glass-card rounded-2xl p-6 shadow-2xl relative">
