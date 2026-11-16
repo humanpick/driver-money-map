@@ -91,7 +91,7 @@ const AUCTION_SCHEDULES = [
 export default function App() {
   const { needRefresh: [needRefresh, setNeedRefresh], updateServiceWorker } = useRegisterSW({ onRegistered(r) {}, onRegisterError(error) {} });
 
-  // 💡 백그라운드 자동 업데이트 로직
+  // 💡 백그라운드 무설정 강제 자동 업데이트
   useEffect(() => {
     if (needRefresh) updateServiceWorker(true);
   }, [needRefresh, updateServiceWorker]);
@@ -296,14 +296,14 @@ export default function App() {
     setPwdLoading(false);
   };
 
-  // 💡 초강력 통합 파싱 로직 (대리가계부 DB 열 이름 오류 완벽 해결)
+  // 💡 초강력 맞춤형 파싱 로직 (대리가계부 앱 완벽 지원)
   const handleFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const fileName = file.name.toLowerCase();
 
-    // 1. CSV 파싱 로직
+    // 1. 일반 CSV 파일 처리
     if (fileName.endsWith('.csv')) {
       const reader = new FileReader();
       reader.onload = (event) => {
@@ -313,8 +313,6 @@ export default function App() {
           if (lines.length < 2) { alert('데이터가 없거나 파일 양식이 올바르지 않습니다.'); return; }
           
           const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, '').toLowerCase());
-          
-          // 대리가계부 예상 패턴 모두 추가
           const dateIdx = headers.findIndex(h => h.includes('날짜') || h.includes('일자') || h.includes('date'));
           const depIdx = headers.findIndex(h => h.includes('출발') || h.includes('start'));
           const destIdx = headers.findIndex(h => h.includes('도착') || h.includes('end'));
@@ -341,7 +339,7 @@ export default function App() {
       };
       reader.readAsText(file, "utf-8");
     } 
-    // 2. DB(SQLite) 초강력 파싱 로직 (dcb_teras.db의 요상한 열 이름 무조건 찾아냄)
+    // 2. 대리가계부 전용 DB(SQLite) 파싱 로직 (dcb_teras.db 구조 100% 매칭)
     else if (fileName.endsWith('.db') || fileName.endsWith('.sqlite')) {
       try {
         setImporting(true);
@@ -361,10 +359,62 @@ export default function App() {
         const buffer = await file.arrayBuffer();
         const db = new SQL.Database(new Uint8Array(buffer));
         
+        // 💡 대리가계부 핵심: 운임과 내역은 T_CASH 테이블에 저장됨
+        const cashRes = db.exec("SELECT CASH_DATETIME, CASH_MONEY, CASH_SUMMARY FROM T_CASH WHERE CASH_MONEY > 0");
+        
+        if (cashRes.length > 0) {
+          // 완벽한 매칭 성공
+          const parsed = cashRes[0].values.map((row: any) => {
+            let d = String(row[0] || ''); // CASH_DATETIME
+            
+            // 날짜 변환 로직 (YYYY-MM-DD HH:MM 형태일 경우 쪼개기)
+            if (d.includes(' ')) d = d.split(' ')[0]; 
+            else if (d.length >= 10 && !isNaN(Number(d))) {
+               const dateObj = new Date(Number(d) > 9999999999 ? Number(d) : Number(d) * 1000);
+               d = dateObj.toISOString().split('T')[0];
+            } else if (d && !d.includes('-')) {
+               d = d.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3');
+            }
+            
+            const gross = Number(row[1] || 0); // CASH_MONEY
+            const summary = String(row[2] || ''); // CASH_SUMMARY (예: 신둔 ▷ 경동오토필드 ( 오픈마일 ))
+            
+            let dep = '출발지 미상';
+            let dest = '도착지 미상';
+            
+            // 💡 대리가계부 특유의 '▷' 화살표 기호 파싱
+            if (summary.includes('▷')) {
+              const parts = summary.split('▷');
+              dep = parts[0].trim();
+              dest = parts[1].split('(')[0].trim(); // 뒤에 붙은 '( 오픈마일 )' 등 앱 이름 제거
+            } else if (summary.includes('-')) {
+              const parts = summary.split('-');
+              dep = parts[0].trim();
+              dest = parts[1].split('(')[0].trim();
+            } else {
+              // 기호가 없으면 앞글자만 출발지로 임시 배정
+              dep = summary.substring(0, 12);
+            }
+            
+            return {
+              date: d || getTodayKST(),
+              departure: dep,
+              destination: dest,
+              gross_amount: gross,
+              fee_rate: 20, fuel_amount: 0, extra_expense_amount: 0, tip_amount: 0,
+              is_gross_paid: true, is_expense_paid: true, net_amount: Math.round(gross * 0.8), total_claim_amount: gross
+            };
+          });
+          
+          setImportPreview(parsed);
+          setImporting(false);
+          return;
+        } 
+        
+        // 만약 T_CASH 테이블이 비어있다면, 일반 테이블 구조 분석으로 넘어감 (방어 코드)
         const tablesRes = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'");
         if (tablesRes.length === 0) { alert('DB에 테이블이 없습니다.'); setImporting(false); return; }
         
-        // 데이터가 가장 많은 메인 테이블(운행기록) 찾기
         let bestData: any[] = [];
         let bestCols: string[] = [];
 
@@ -378,21 +428,16 @@ export default function App() {
         }
 
         const headers = bestCols.map(h => String(h).toLowerCase());
-        
-        // 💡 대리가계부 DB 열 이름 패턴 추가 (CALL_WORK_DATE, CALL_START, CALL_END, CALL_CASH 등)
         const dateIdx = headers.findIndex(h => h.includes('date') || h.includes('time') || h.includes('날짜') || h.includes('일자'));
         const depIdx = headers.findIndex(h => h.includes('start') || h.includes('출발'));
         const destIdx = headers.findIndex(h => h.includes('end') || h.includes('도착'));
         const grossIdx = headers.findIndex(h => h.includes('price') || h.includes('cash') || h.includes('money') || h.includes('amount') || h.includes('요금') || h.includes('운임') || h.includes('금액'));
 
-        // 강제 인덱스 매칭 방어 코드 (만약 열 이름을 도저히 못 찾으면, 데이터 타입을 보고 강제로 때려 맞춤)
         let finalDateIdx = dateIdx !== -1 ? dateIdx : 1; 
-        let finalGrossIdx = grossIdx !== -1 ? grossIdx : bestCols.length - 1; 
         
-        const parsed = bestData.map((row: any) => {
+        const parsedFallback = bestData.map((row: any) => {
           let d = row[finalDateIdx] ? String(row[finalDateIdx]) : '';
           
-          // Timestamp to YYYY-MM-DD (대리가계부 밀리초 포맷)
           if (d.length >= 10 && !isNaN(Number(d))) {
              const dateObj = new Date(Number(d) > 9999999999 ? Number(d) : Number(d) * 1000);
              d = dateObj.toISOString().split('T')[0];
@@ -400,31 +445,28 @@ export default function App() {
              d = d.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3');
           }
           
-          // 금액 열 강제 찾기 로직: grossIdx를 못 찾았을 경우 숫자가 큰 것을 운임으로 간주
           let gross = 0;
           if (grossIdx !== -1) {
             gross = cleanNumber(String(row[grossIdx]));
           } else {
-            // 행의 데이터 중 5000 이상인 가장 큰 숫자를 운임으로 가정
             const numbers = row.map((v:any) => cleanNumber(String(v))).filter((v:number) => v > 5000);
             if(numbers.length > 0) gross = Math.max(...numbers);
           }
-
           const net = Math.round(gross * 0.8);
           
           return {
             date: d || getTodayKST(),
-            departure: depIdx !== -1 && row[depIdx] ? String(row[depIdx]) : '출발지 알수없음',
-            destination: destIdx !== -1 && row[destIdx] ? String(row[destIdx]) : '도착지 알수없음',
+            departure: depIdx !== -1 && row[depIdx] ? String(row[depIdx]) : '출발지 미상',
+            destination: destIdx !== -1 && row[destIdx] ? String(row[destIdx]) : '도착지 미상',
             gross_amount: gross, fee_rate: 20, fuel_amount: 0, extra_expense_amount: 0, tip_amount: 0,
             is_gross_paid: true, is_expense_paid: true, net_amount: net, total_claim_amount: gross
           };
         }).filter(r => r.gross_amount > 0);
         
-        if (parsed.length === 0) {
+        if (parsedFallback.length === 0) {
           alert('데이터를 변환할 수 없습니다. 빈 파일이거나 알 수 없는 양식입니다.');
         } else {
-          setImportPreview(parsed);
+          setImportPreview(parsedFallback);
         }
         setImporting(false);
       } catch (err) {
@@ -786,7 +828,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* 1. 운행 일지 탭 (CSV & DB 자동 환승 업로드 기능 탑재) */}
+        {/* 1. 운행 일지 탭 */}
         {activeTab === 'records' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 fade-in-text">
             <div className="glass-card rounded-xl p-6 shadow-lg h-fit">
@@ -1119,7 +1161,7 @@ export default function App() {
           </div>
         )}
 
-        {/* 8. 관제탑 관리자 탭 */}
+        {/* 8. 관제탑 관리자 탭 (접속 데이터 포함 풀버전) */}
         {activeTab === 'admin' && isAdminUser && (
           <div className="space-y-6 fade-in-text">
             <div className="mb-2">
@@ -1299,51 +1341,6 @@ export default function App() {
                 <Upload className="w-4 h-4" />
                 {importPreview.length}건 전체 저장하기
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 모달: 운행 일지 수정 (분리 미수금 호환) */}
-      {editingRecord && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="w-full max-w-sm glass-card rounded-2xl p-6 shadow-2xl relative">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-sm font-bold text-white flex items-center gap-1.5"><Edit2 className="w-4 h-4 text-[#8B5CF6]" /> 운행 내역 수정</h3>
-              <button onClick={() => setEditingRecord(null)} className="text-slate-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
-            </div>
-            <form onSubmit={handleUpdateRecord} className="space-y-3.5">
-              <div><label className="block text-[11px] font-semibold text-[#38BDF8] mb-1">운행 일자 변경</label><input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="w-full px-3 py-2 rounded-lg" required /></div>
-              <div className="grid grid-cols-2 gap-2">
-                <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">출발지</label><input type="text" value={editDeparture} onChange={(e) => setEditDeparture(e.target.value)} className="w-full px-3 py-2 rounded-lg" required /></div>
-                <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">도착지</label><input type="text" value={editDestination} onChange={(e) => setEditDestination(e.target.value)} className="w-full px-3 py-2 rounded-lg" required /></div>
-              </div>
-              <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">운임(원)</label><input type="text" value={editGross} onChange={(e) => setEditGross(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" required /></div>
-              <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">대납 주유비</label><input type="text" value={editFuel} onChange={(e) => setEditFuel(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" /></div>
-              <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">통행료 등 추가경비</label><input type="text" value={editExtra} onChange={(e) => setEditExtra(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" /></div>
-              <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">기사 팁</label><input type="text" value={editTip} onChange={(e) => setEditTip(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" /></div>
-              <button type="submit" className="w-full mt-2 py-3 hp-primary-btn font-bold rounded-lg text-xs cursor-pointer">수정 완료</button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* 모달: 청구 문자 직접 편집 생성 (분리 미수금 호환) */}
-      {claimModalOpen && selectedClaimRecord && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="w-full max-w-lg glass-card rounded-2xl p-6 shadow-2xl relative">
-            <button onClick={() => setClaimModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 cursor-pointer"><X className="w-5 h-5" /></button>
-            <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2"><MessageSquare className="w-5 h-5 text-[#8B5CF6]" />정산 청구 문자 편집 및 복사</h3>
-            <p className="text-xs text-slate-400 mb-4">미입금된 내역만 자동으로 체크되어 문구가 생성됩니다. 수정한 후 복사하세요.</p>
-            <div className="flex gap-4 mb-4 pb-4 border-b border-white/10">
-              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 cursor-pointer"><input type="checkbox" checked={includeGross} onChange={() => handleToggleInclude('gross')} className="rounded text-[#8B5CF6]" disabled={selectedClaimRecord.isGrossPaid} /> 기본 운임</label>
-              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 cursor-pointer"><input type="checkbox" checked={includeFuel} onChange={() => handleToggleInclude('fuel')} className="rounded text-[#8B5CF6]" disabled={selectedClaimRecord.fuelAmount === 0 || selectedClaimRecord.isExpensePaid} /> 주유비</label>
-              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 cursor-pointer"><input type="checkbox" checked={includeExtra} onChange={() => handleToggleInclude('extra')} className="rounded text-[#8B5CF6]" disabled={selectedClaimRecord.extraExpenseAmount === 0 || selectedClaimRecord.isExpensePaid} /> 추가경비</label>
-            </div>
-            <textarea rows={10} value={claimMessageText} onChange={(e) => setClaimMessageText(e.target.value)} className="w-full p-4 rounded-xl text-xs font-mono mb-4 leading-relaxed bg-[#FFFFFF] text-[#000000] focus:shadow-[0_0_12px_#8B5CF6] focus:border-[#8B5CF6] transition-all outline-none" />
-            <div className="flex gap-2">
-              <button onClick={() => setClaimModalOpen(false)} className="flex-1 py-3 bg-[#0B1120] border border-white/10 hover:bg-white/10 text-white font-semibold rounded-lg text-xs cursor-pointer transition-colors">닫기</button>
-              <button onClick={() => { navigator.clipboard.writeText(claimMessageText); alert('수정된 정산 청구 문자가 복사되었습니다.'); setClaimModalOpen(false); }} className="flex-1 py-3 hp-primary-btn text-white font-bold rounded-lg text-xs cursor-pointer shadow-md flex items-center justify-center gap-1.5"><Copy className="w-3.5 h-3.5" />복사하기</button>
             </div>
           </div>
         </div>
