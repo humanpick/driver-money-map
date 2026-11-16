@@ -55,7 +55,12 @@ interface DrivingRecord {
 }
 interface ExpenseRecord { id: string; date: string; category: string; amount: number; memo: string; }
 interface BankAccount { id: string; bankName: string; accountNumber: string; holder: string; }
-interface MemberProfile { id: string; email: string; name: string; phone: string; role: string; createdAt: string; lastLoginAt?: string; loginCount?: number; recordCount?: number; }
+
+// 💡 [업그레이드 1] 관제탑 스카우트 분석용 monthlyGross 속성 추가
+interface MemberProfile { 
+  id: string; email: string; name: string; phone: string; role: string; createdAt: string; 
+  lastLoginAt?: string; loginCount?: number; recordCount?: number; monthlyGross?: number; 
+}
 interface NoticeItem { id: string; title: string; content: string; isActive: boolean; updatedAt?: string; }
 
 const TRADE_CENTERS = [
@@ -112,12 +117,11 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'records' | 'claims' | 'expense' | 'analytics' | 'wallet' | 'trade_centers' | 'auctions' | 'admin'>('records');
   const [adminSubTab, setAdminSubTab] = useState<'campaign' | 'members' | 'analytics'>('members');
   
-  // 💡 [업그레이드] 필터 구조 단순화: 기준 날짜(customDate)에 맞춰 일/월/년 필터 적용
+  const [dateFilter, setDateFilter] = useState<'today' | 'month' | 'year' | 'custom'>('month');
   const [customDate, setCustomDate] = useState<string>(() => getTodayKST());
-  const [dateFilter, setDateFilter] = useState<'day' | 'month' | 'year'>('month');
-  
   const [analyticsMode, setAnalyticsMode] = useState<'month' | 'year'>('month');
   const [analyticsYear, setAnalyticsYear] = useState<string>(new Date().getFullYear().toString());
+
   const [tradeFilter, setTradeFilter] = useState<'전체' | 'S등급' | 'A등급' | '수도권' | '충청권' | '영남권' | '호남권'>('전체');
 
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -158,7 +162,10 @@ export default function App() {
 
   const [adminMemberList, setAdminMemberList] = useState<MemberProfile[]>([]);
   const [adminAllRecords, setAdminAllRecords] = useState<DrivingRecord[]>([]);
+  
+  // 💡 [업그레이드 2] 스카우트 레이더(에이스만 보기) 필터 상태
   const [adminSearchTerm, setAdminSearchTerm] = useState('');
+  const [showScoutOnly, setShowScoutOnly] = useState(false);
 
   const [newDate, setNewDate] = useState<string>(() => getTodayKST());
   const [newStartTime, setNewStartTime] = useState(''); const [newEndTime, setNewEndTime] = useState('');
@@ -212,16 +219,13 @@ export default function App() {
       lastLoginAt: profilePayload.last_login_at, loginCount: profilePayload.login_count
     });
 
-    // DB에서 최신순으로 가져오되 화면에는 오름차순(1일부터) 정렬
-    const { data: recordsData } = await supabase.from('driving_records').select('*').eq('user_id', userId).order('date', { ascending: false }).limit(2000);
+    const { data: recordsData } = await supabase.from('driving_records').select('*').eq('user_id', userId).order('date', { ascending: true });
     if (recordsData) {
-      const mappedRecords = recordsData.map((r: any) => ({
+      setRecords(recordsData.map((r: any) => ({
         id: r.id, date: r.date, startTime: r.start_time || '-', endTime: r.end_time || '-', departure: r.departure, destination: r.destination,
         grossAmount: Number(r.gross_amount), feeRate: Number(r.fee_rate), fuelAmount: Number(r.fuel_amount), extraExpenseAmount: Number(r.extra_expense_amount),
         tipAmount: Number(r.tip_amount), isGrossPaid: Boolean(r.is_gross_paid), isExpensePaid: Boolean(r.is_expense_paid), netAmount: Number(r.net_amount), totalClaimAmount: Number(r.total_claim_amount),
-      }));
-      mappedRecords.sort((a, b) => a.date.localeCompare(b.date));
-      setRecords(mappedRecords);
+      })));
     }
 
     const { data: expensesData } = await supabase.from('expenses').select('*').eq('user_id', userId).order('date', { ascending: true });
@@ -233,14 +237,27 @@ export default function App() {
   const fetchAdminData = async () => {
     const { data: profiles } = await supabase.from('profiles').select('*').order('last_login_at', { ascending: false });
     const { data: allRecs } = await supabase.from('driving_records').select('*').limit(20000);
+    
+    // 💡 [업그레이드 3] 기사별 당월 매출 합산 로직 추가 (스카우트 레이더용)
+    const currentMonthStr = getTodayKST().substring(0, 7);
+    
     if (profiles && allRecs) {
-      setAdminMemberList(profiles.map((p: any) => ({ 
-        id: p.id, email: p.email, name: p.name, phone: p.phone, role: p.role || 'user', 
-        createdAt: p.created_at ? p.created_at.substring(0, 10) : '-', 
-        lastLoginAt: p.last_login_at ? p.last_login_at.substring(0, 16).replace('T', ' ') : '기록없음',
-        loginCount: p.login_count || 0,
-        recordCount: allRecs.filter((r: any) => r.user_id === p.id).length 
-      })));
+      setAdminMemberList(profiles.map((p: any) => {
+        const userRecords = allRecs.filter((r: any) => r.user_id === p.id);
+        const monthlyGross = userRecords
+          .filter((r: any) => r.date.startsWith(currentMonthStr))
+          .reduce((sum: number, r: any) => sum + Number(r.gross_amount), 0);
+          
+        return { 
+          id: p.id, email: p.email, name: p.name, phone: p.phone, role: p.role || 'user', 
+          createdAt: p.created_at ? p.created_at.substring(0, 10) : '-', 
+          lastLoginAt: p.last_login_at ? p.last_login_at.substring(0, 16).replace('T', ' ') : '기록없음',
+          loginCount: p.login_count || 0,
+          recordCount: userRecords.length,
+          monthlyGross: monthlyGross
+        };
+      }));
+      
       setAdminAllRecords(allRecs.map((r: any) => ({ 
         id: r.id, userId: r.user_id, date: r.date, startTime: r.start_time || '-', endTime: r.end_time || '-', departure: r.departure, destination: r.destination, 
         grossAmount: Number(r.gross_amount), fuelAmount: Number(r.fuel_amount), feeRate: Number(r.fee_rate), extraExpenseAmount: Number(r.extra_expense_amount), tipAmount: Number(r.tip_amount), isGrossPaid: Boolean(r.is_gross_paid), isExpensePaid: Boolean(r.is_expense_paid), netAmount: Number(r.net_amount), totalClaimAmount: Number(r.total_claim_amount) 
@@ -351,9 +368,7 @@ export default function App() {
     if (!error) {
       const updated = [{ ...payload, startTime: payload.start_time, endTime: payload.end_time, grossAmount: gross, feeRate, fuelAmount: fuel, extraExpenseAmount: extraExp, tipAmount: tip, isGrossPaid: false, isExpensePaid: false, netAmount: Math.round(net), totalClaimAmount: Math.round(claimTotal) }, ...records];
       updated.sort((a, b) => a.date.localeCompare(b.date));
-      setRecords(updated); 
-      setCustomDate(newDate); // 추가된 날짜로 달력 이동
-      setDateFilter('month'); // 등록 시 해당 월로 뷰 고정
+      setRecords(updated); setSelectedDate(newDate);
       setNewDeparture(''); setNewDestination(''); setNewGross(''); setNewFuel(''); setNewExtraExpense(''); setNewTip('');
     }
   };
@@ -493,11 +508,16 @@ export default function App() {
     setAdminSelectedUserRecords(userRecs);
   };
 
-  // 💡 [업그레이드 2] 선택한 날짜(customDate)를 기준으로 일간/월간/연간 필터를 동기화
+  // 💡 [성능 최적화] 리렌더링마다 new Date() 중복 호출 방지
+  const todayKstStr = getTodayKST();
+  const thisMonthStr = todayKstStr.substring(0, 7);
+  const thisYearStr = todayKstStr.substring(0, 4);
+
   const filteredRecords = records.filter((r) => {
-    if (dateFilter === 'day') return r.date === customDate;
-    if (dateFilter === 'month') return r.date.startsWith(customDate.substring(0, 7));
-    if (dateFilter === 'year') return r.date.startsWith(customDate.substring(0, 4));
+    if (dateFilter === 'today') return r.date === todayKstStr;
+    if (dateFilter === 'month') return r.date.startsWith(thisMonthStr);
+    if (dateFilter === 'year') return r.date.startsWith(thisYearStr);
+    if (dateFilter === 'custom') return r.date === customDate;
     return true;
   });
 
@@ -520,7 +540,7 @@ export default function App() {
   const monthlyProfit = monthlyNet - monthlyExpense;
 
   const getElapsedDays = (recordDate: string) => {
-    const today = new Date(getTodayKST()); const target = new Date(recordDate);
+    const today = new Date(todayKstStr); const target = new Date(recordDate);
     return Math.floor((today.getTime() - target.getTime()) / (1000 * 60 * 60 * 24));
   };
 
@@ -560,7 +580,7 @@ export default function App() {
         {injectStyles()}
         
         {needRefresh && (
-          <div className="fixed bottom-6 inset-x-0 mx-auto z-[9999] glass-card border border-[#8B5CF6]/50 p-5 rounded-2xl shadow-[0_0_20px_rgba(139,92,246,0.3)] flex flex-col items-center gap-3 w-[90%] max-w-sm fade-in-text">
+          <div className="fixed bottom-6 inset-x-0 mx-auto z-[9999] glass-card border border-[#8B5CF6]/50 p-5 rounded-2xl shadow-[0_0_20px_rgba(139,92,246,0.3)] flex flex-col items-center gap-3 w-[90%] max-w-[340px] fade-in-text">
             <div className="flex items-center gap-2"><RefreshCw className="w-5 h-5 text-[#8B5CF6] animate-spin" /><span className="text-sm font-bold text-white">새로운 버전이 출시되었습니다!</span></div>
             <p className="text-[11px] text-[#38BDF8] text-center font-medium">안정적인 최신 기능 사용을 위해 앱을 업데이트 해주세요.</p>
             <div className="flex gap-2 w-full mt-2">
@@ -617,6 +637,14 @@ export default function App() {
   }
 
   const userName = currentUserProfile?.name || session?.user?.user_metadata?.name || ADMIN_DEFAULT_NAME;
+
+  // 💡 [업그레이드 2] 회원 검색 리스트 필터링 (스카우트 버튼 호환)
+  const displayedMembers = adminMemberList.filter(m => {
+    const matchesSearch = m.name.includes(adminSearchTerm) || m.phone.includes(adminSearchTerm) || m.email.includes(adminSearchTerm);
+    const isAce = (m.monthlyGross || 0) >= 1500000 || (m.recordCount || 0) >= 10;
+    if (showScoutOnly) return matchesSearch && isAce;
+    return matchesSearch;
+  });
 
   return (
     <div className="min-h-screen bg-[#0B1120] text-slate-100 pb-20 relative">
@@ -882,7 +910,6 @@ export default function App() {
 
         {activeTab === 'analytics' && (
           <div className="space-y-6 fade-in-text">
-            
             <div className="flex gap-2 bg-[#0B1120] p-1.5 rounded-xl border border-white/10 w-fit">
               <button onClick={() => setAnalyticsMode('month')} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${analyticsMode === 'month' ? 'bg-[#8B5CF6] text-white shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'text-slate-400 hover:text-white'}`}>월간 상세 요약</button>
               <button onClick={() => setAnalyticsMode('year')} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${analyticsMode === 'year' ? 'bg-[#8B5CF6] text-white shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'text-slate-400 hover:text-white'}`}>연간 종합 통계</button>
@@ -959,7 +986,7 @@ export default function App() {
                           const mStr = `${analyticsYear}-${String(i + 1).padStart(2, '0')}`;
                           const mRecs = records.filter(r => r.date.startsWith(mStr));
                           const mExps = expenses.filter(e => e.date.startsWith(mStr));
-                          if(mRecs.length === 0 && mExps.length === 0) return null; // 데이터 있는 달만 표시
+                          if(mRecs.length === 0 && mExps.length === 0) return null;
 
                           return (
                             <tr key={i} className="hover:bg-white/5 transition-colors">
@@ -1110,6 +1137,7 @@ export default function App() {
           </div>
         )}
 
+        {/* 💡 [업그레이드 2] 관제탑 - 스카우트 레이더(에이스 뱃지, 전용 필터버튼) 추가 적용 */}
         {activeTab === 'admin' && isAdminUser && (
           <div className="space-y-6 fade-in-text">
             <div className="mb-2">
@@ -1119,7 +1147,7 @@ export default function App() {
             
             <div className="flex gap-2 border-b border-white/10 pb-2 overflow-x-auto scrollbar-hide">
               <button onClick={() => setAdminSubTab('campaign')} className={`px-3 py-1.5 rounded text-xs font-bold cursor-pointer shrink-0 transition-colors ${adminSubTab === 'campaign' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#0B1120] text-slate-400 hover:text-white border border-white/10'}`}>공지/이벤트 문구보관함</button>
-              <button onClick={() => setAdminSubTab('members')} className={`px-3 py-1.5 rounded text-xs font-bold cursor-pointer shrink-0 transition-colors ${adminSubTab === 'members' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#0B1120] text-slate-400 hover:text-white border border-white/10'}`}>회원 접속 현황 및 권한 ({adminMemberList.length}명)</button>
+              <button onClick={() => setAdminSubTab('members')} className={`px-3 py-1.5 rounded text-xs font-bold cursor-pointer shrink-0 transition-colors ${adminSubTab === 'members' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#0B1120] text-slate-400 hover:text-white border border-white/10'}`}>회원 접속 현황 및 스카우트</button>
               <button onClick={() => setAdminSubTab('analytics')} className={`px-3 py-1.5 rounded text-xs font-bold cursor-pointer shrink-0 transition-colors ${adminSubTab === 'analytics' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#0B1120] text-slate-400 hover:text-white border border-white/10'}`}>플랫폼 마케팅 통계</button>
             </div>
 
@@ -1155,45 +1183,65 @@ export default function App() {
 
             {adminSubTab === 'members' && (
               <div className="glass-card p-6 rounded-xl space-y-4">
-                <input type="text" placeholder="이름 / 전화번호 / 이메일 검색..." value={adminSearchTerm} onChange={(e) => setAdminSearchTerm(e.target.value)} className="px-3 py-2 rounded-lg text-xs w-full max-w-xs" />
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2">
+                  <input type="text" placeholder="이름 / 전화번호 / 이메일 검색..." value={adminSearchTerm} onChange={(e) => setAdminSearchTerm(e.target.value)} className="px-3 py-2 rounded-lg text-xs w-full sm:max-w-xs" />
+                  
+                  {/* 스카우트 레이더 버튼 */}
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setShowScoutOnly(!showScoutOnly)} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${showScoutOnly ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-[0_0_15px_rgba(245,158,11,0.5)] border-0' : 'bg-[#0B1120] text-slate-400 border border-white/10 hover:border-amber-500/50'}`}>
+                      <Award className="w-4 h-4" /> 🏆 에이스 기사만 보기
+                    </button>
+                  </div>
+                </div>
+                
                 <div className="overflow-x-auto rounded-lg border border-white/10">
                   <table className="w-full text-left text-xs whitespace-nowrap">
                     <thead className="bg-[#0B1120] text-slate-400 border-b border-white/10">
                       <tr>
-                        <th className="p-3">이름</th>
-                        <th className="p-3">연락처</th>
-                        <th className="p-3">이메일</th>
-                        <th className="p-3">가입일</th>
-                        <th className="p-3 text-center">최근 접속일</th>
-                        <th className="p-3 text-center">접속/실적</th>
+                        <th className="p-3">이름/연락처</th>
+                        <th className="p-3 text-center">당월 실적 (건수 / 매출)</th>
+                        <th className="p-3 text-center">최근 접속 / 누적</th>
                         <th className="p-3 text-center">권한 변경</th>
                         <th className="p-3 text-right">CS 열람</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
-                      {adminMemberList.filter(m => m.name.includes(adminSearchTerm) || m.phone.includes(adminSearchTerm) || m.email.includes(adminSearchTerm)).map((m) => {
-                        const isHighEngaged = (m.recordCount || 0) >= 10;
-                        return (
-                          <tr key={m.id} className="hover:bg-white/5">
-                            <td className="p-3 text-white font-bold">{m.name} {isHighEngaged && <span className="ml-1 px-1.5 py-0.5 bg-[#EC4899]/20 text-[#EC4899] text-[9px] rounded font-bold">에이스</span>}</td>
-                            <td className="p-3 font-mono text-[#38BDF8]">{formatPhoneNumber(m.phone)}</td>
-                            <td className="p-3 text-slate-300">{m.email}</td>
-                            <td className="p-3 text-slate-500 font-mono">{m.createdAt}</td>
-                            <td className="p-3 text-[#38BDF8] font-mono text-center">{m.lastLoginAt}</td>
-                            <td className="p-3 text-center text-slate-300 font-bold">{m.loginCount}회 / <span className="text-[#8B5CF6]">{m.recordCount}건</span></td>
-                            <td className="p-3 text-center">
-                              <select value={m.role} onChange={(e) => handleUpdateMemberRole(m.id, e.target.value)} className="bg-[#0B1120] border border-white/20 text-white rounded px-2 py-1.5 text-[11px] cursor-pointer outline-none focus:border-[#8B5CF6]">
-                                <option value="user">일반 기사</option>
-                                <option value="pro_driver">PRO 기사</option>
-                                <option value="vip_driver">VIP 기사</option>
-                                <option value="manager">운영 직원</option>
-                                <option value="super_admin">최고 관리자</option>
-                              </select>
-                            </td>
-                            <td className="p-3 text-right"><button onClick={() => openAdminUserDetail(m)} className="px-2.5 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded text-[10px] font-bold flex items-center gap-1 ml-auto cursor-pointer"><Search className="w-3 h-3" />상세</button></td>
-                          </tr>
-                        );
-                      })}
+                      {displayedMembers.length === 0 ? (
+                        <tr><td colSpan={5} className="p-10 text-center text-slate-500">검색 조건에 맞는 기사님이 없습니다.</td></tr>
+                      ) : (
+                        displayedMembers.map((m) => {
+                          const isAce = (m.monthlyGross || 0) >= 1500000 || (m.recordCount || 0) >= 10;
+                          return (
+                            <tr key={m.id} className={`transition-all ${isAce ? 'bg-amber-500/5 hover:bg-amber-500/10' : 'hover:bg-white/5'}`}>
+                              <td className="p-3">
+                                <div className="text-white font-bold flex items-center gap-1.5">
+                                  {m.name} 
+                                  {isAce && <span className="px-1.5 py-0.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[9px] rounded font-extrabold shadow-sm">🏆 에이스</span>}
+                                </div>
+                                <div className="font-mono text-[#38BDF8] text-[11px] mt-1">{formatPhoneNumber(m.phone)}</div>
+                              </td>
+                              <td className="p-3 text-center">
+                                <div className="font-bold text-white">{m.recordCount}건</div>
+                                <div className="text-[#EC4899] font-semibold mt-1">{(m.monthlyGross || 0).toLocaleString()}원</div>
+                              </td>
+                              <td className="p-3 text-center">
+                                <div className="text-[#38BDF8] font-mono text-[11px]">{m.lastLoginAt}</div>
+                                <div className="text-slate-400 font-bold mt-1">{m.loginCount}회 접속</div>
+                              </td>
+                              <td className="p-3 text-center">
+                                <select value={m.role} onChange={(e) => handleUpdateMemberRole(m.id, e.target.value)} className="bg-[#0B1120] border border-white/20 text-white rounded px-2 py-1.5 text-[11px] cursor-pointer outline-none focus:border-[#8B5CF6]">
+                                  <option value="user">일반 기사</option>
+                                  <option value="pro_driver">PRO 기사</option>
+                                  <option value="vip_driver">VIP 기사 (스카우트)</option>
+                                  <option value="manager">운영 직원</option>
+                                  <option value="super_admin">최고 관리자</option>
+                                </select>
+                              </td>
+                              <td className="p-3 text-right"><button onClick={() => openAdminUserDetail(m)} className="px-2.5 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded text-[10px] font-bold flex items-center gap-1 ml-auto cursor-pointer"><Search className="w-3 h-3" />상세</button></td>
+                            </tr>
+                          );
+                        })
+                      )}
                     </tbody>
                   </table>
                 </div>
