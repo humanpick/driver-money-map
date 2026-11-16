@@ -112,10 +112,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'records' | 'claims' | 'expense' | 'analytics' | 'wallet' | 'trade_centers' | 'auctions' | 'admin'>('records');
   const [adminSubTab, setAdminSubTab] = useState<'campaign' | 'members' | 'analytics'>('members');
   
-  // 💡 [업그레이드] 필터 옵션을 전체(all) 대신 올해(year)로 변경
   const [dateFilter, setDateFilter] = useState<'today' | 'month' | 'year' | 'custom'>('month');
   const [customDate, setCustomDate] = useState<string>(() => getTodayKST());
-  
   const [analyticsMode, setAnalyticsMode] = useState<'month' | 'year'>('month');
   const [analyticsYear, setAnalyticsYear] = useState<string>(new Date().getFullYear().toString());
 
@@ -489,11 +487,16 @@ export default function App() {
     setAdminSelectedUserRecords(userRecs);
   };
 
-  // 💡 [업그레이드 1] 날짜 필터링 로직 (all 대신 year 적용)
+  // 💡 [성능 최적화] 리렌더링마다 new Date()를 수천 번 호출하지 않도록 변수 1번만 할당
+  const todayKstStr = getTodayKST();
+  const thisMonthStr = todayKstStr.substring(0, 7);
+  const thisYearStr = todayKstStr.substring(0, 4);
+
   const filteredRecords = records.filter((r) => {
-    if (dateFilter === 'today') return r.date === getTodayKST();
-    if (dateFilter === 'month') return r.date.startsWith(getTodayKST().substring(0, 7));
-    if (dateFilter === 'year') return r.date.startsWith(getTodayKST().substring(0, 4));
+    if (dateFilter === 'all') return true;
+    if (dateFilter === 'today') return r.date === todayKstStr;
+    if (dateFilter === 'month') return r.date.startsWith(thisMonthStr);
+    if (dateFilter === 'year') return r.date.startsWith(thisYearStr);
     if (dateFilter === 'custom') return r.date === customDate;
     return true;
   });
@@ -517,7 +520,7 @@ export default function App() {
   const monthlyProfit = monthlyNet - monthlyExpense;
 
   const getElapsedDays = (recordDate: string) => {
-    const today = new Date(getTodayKST()); const target = new Date(recordDate);
+    const today = new Date(todayKstStr); const target = new Date(recordDate);
     return Math.floor((today.getTime() - target.getTime()) / (1000 * 60 * 60 * 24));
   };
 
@@ -555,6 +558,17 @@ export default function App() {
     return (
       <div className="min-h-screen bg-[#0B1120] text-slate-100 flex items-center justify-center p-4 relative overflow-hidden">
         {injectStyles()}
+        
+        {needRefresh && (
+          <div className="fixed bottom-6 inset-x-0 mx-auto z-[9999] glass-card border border-[#8B5CF6]/50 p-5 rounded-2xl shadow-[0_0_20px_rgba(139,92,246,0.3)] flex flex-col items-center gap-3 w-[90%] max-w-sm fade-in-text">
+            <div className="flex items-center gap-2"><RefreshCw className="w-5 h-5 text-[#8B5CF6] animate-spin" /><span className="text-sm font-bold text-white">새로운 버전이 출시되었습니다!</span></div>
+            <p className="text-[11px] text-[#38BDF8] text-center font-medium">안정적인 최신 기능 사용을 위해 앱을 업데이트 해주세요.</p>
+            <div className="flex gap-2 w-full mt-2">
+              <button onClick={() => setNeedRefresh(false)} className="flex-1 py-2.5 bg-[#0B1120] border border-white/10 text-slate-300 text-xs font-bold rounded-lg hover:bg-white/5 transition-colors cursor-pointer">나중에</button>
+              <button onClick={() => updateServiceWorker(true)} className="flex-1 py-2.5 hp-primary-btn text-white text-xs font-bold rounded-lg shadow-[0_4px_12px_rgba(139,92,246,0.4)] cursor-pointer">지금 업데이트</button>
+            </div>
+          </div>
+        )}
 
         <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[380px] h-[380px] bg-[#8B5CF6]/10 rounded-full blur-[100px] pointer-events-none" />
         <div className="w-full max-w-[420px] glass-card rounded-2xl p-7 shadow-2xl relative z-10">
@@ -697,7 +711,6 @@ export default function App() {
                   <p className="text-[11px] text-[#38BDF8] font-medium mt-1 ml-6">운임과 대납 경비의 입금 상태를 분리해서 관리하세요.</p>
                 </div>
                 
-                {/* 💡 [업그레이드] 올해 필터로 변경 */}
                 <div className="flex flex-col gap-2 shrink-0">
                   <div className="flex items-center gap-1 bg-[#0B1120] p-1 rounded-lg border border-white/10 text-[11px] font-bold">
                     <button onClick={() => setDateFilter('today')} className={`px-2.5 py-1.5 rounded transition-colors cursor-pointer ${dateFilter === 'today' ? 'bg-[#8B5CF6] text-white' : 'text-slate-400 hover:text-white'}`}>당일</button>
@@ -867,7 +880,6 @@ export default function App() {
           </div>
         )}
 
-        {/* 💡 [업그레이드 2] 월단위/년단위 통계 요약 탭 세부 업그레이드 */}
         {activeTab === 'analytics' && (
           <div className="space-y-6 fade-in-text">
             
@@ -1002,9 +1014,12 @@ export default function App() {
             <div className="glass-card rounded-xl p-5 shadow-lg border border-[#8B5CF6]/30">
               <h3 className="text-sm font-bold text-white mb-2 flex items-center gap-2"><Building2 className="w-5 h-5 text-[#8B5CF6]" />전국 주요 매매단지 거점 현황 ({filteredTradeCenters.length}곳)</h3>
               <p className="text-[11px] text-slate-400 mb-4">장거리 탁송 후 복귀 콜이 쏟아지는 전국 주요 매매단지의 거점 정보와 위치입니다.</p>
+              
               <div className="flex flex-wrap gap-2">
                 {['전체', 'S등급', 'A등급', '수도권', '충청권', '영남권', '호남권'].map(f => (
-                  <button key={f} onClick={() => setTradeFilter(f as any)} className={`px-3 py-1.5 rounded-full text-[11px] font-bold transition-all cursor-pointer ${tradeFilter === f ? 'bg-[#8B5CF6] text-white shadow-[0_0_10px_rgba(139,92,246,0.4)] border-transparent' : 'bg-[#0B1120] text-slate-400 border border-white/10 hover:border-[#8B5CF6]/50'}`}>{f}</button>
+                  <button key={f} onClick={() => setTradeFilter(f as any)} className={`px-3 py-1.5 rounded-full text-[11px] font-bold transition-all cursor-pointer ${tradeFilter === f ? 'bg-[#8B5CF6] text-white shadow-[0_0_10px_rgba(139,92,246,0.4)] border-transparent' : 'bg-[#0B1120] text-slate-400 border border-white/10 hover:border-[#8B5CF6]/50'}`}>
+                    {f}
+                  </button>
                 ))}
               </div>
             </div>
@@ -1029,8 +1044,12 @@ export default function App() {
                     </div>
                     <h4 className="text-sm font-extrabold text-white mb-1.5">{center.name}</h4>
                     <p className="text-[11px] text-slate-300 bg-[#0B1120] p-2 rounded-lg border border-white/5 leading-relaxed mb-2.5">{center.desc}</p>
-                    <div className="flex items-start gap-1.5 text-[11px] text-slate-400"><MapPin className="w-3.5 h-3.5 mt-0.5 text-[#EC4899] shrink-0" /><span className="leading-tight">{center.addr}</span></div>
+                    <div className="flex items-start gap-1.5 text-[11px] text-slate-400">
+                      <MapPin className="w-3.5 h-3.5 mt-0.5 text-[#EC4899] shrink-0" />
+                      <span className="leading-tight">{center.addr}</span>
+                    </div>
                   </div>
+                  
                   <div className="flex items-center gap-2 pt-3 border-t border-white/5 mt-auto">
                     <button onClick={() => window.open(`https://m.map.naver.com/search2/search.naver?query=${encodeURIComponent(center.addr)}`, '_blank')} className="flex-1 py-2 bg-[#03C75A]/10 hover:bg-[#03C75A]/20 text-[#03C75A] border border-[#03C75A]/30 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors"><Navigation className="w-3.5 h-3.5" /> 네이버 지도</button>
                     <button onClick={() => window.open(`https://map.kakao.com/link/search/${encodeURIComponent(center.addr)}`, '_blank')} className="flex-1 py-2 bg-[#FEE500]/10 hover:bg-[#FEE500]/20 text-[#FEE500] border border-[#FEE500]/30 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors"><Navigation className="w-3.5 h-3.5" /> 카카오 맵</button>
