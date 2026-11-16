@@ -211,7 +211,8 @@ export default function App() {
       lastLoginAt: profilePayload.last_login_at, loginCount: profilePayload.login_count
     });
 
-    const { data: recordsData } = await supabase.from('driving_records').select('*').eq('user_id', userId).order('date', { ascending: true }).limit(5000);
+    // 💡 [치명적 버그 수정] 서버 에러 방지를 위해 .limit 제거 후 자연스러운 오름차순 호출
+    const { data: recordsData } = await supabase.from('driving_records').select('*').eq('user_id', userId).order('date', { ascending: true });
     if (recordsData) {
       setRecords(recordsData.map((r: any) => ({
         id: r.id, date: r.date, startTime: r.start_time || '-', endTime: r.end_time || '-', departure: r.departure, destination: r.destination,
@@ -228,7 +229,7 @@ export default function App() {
 
   const fetchAdminData = async () => {
     const { data: profiles } = await supabase.from('profiles').select('*').order('last_login_at', { ascending: false });
-    const { data: allRecs } = await supabase.from('driving_records').select('*').limit(20000);
+    const { data: allRecs } = await supabase.from('driving_records').select('*');
     if (profiles && allRecs) {
       setAdminMemberList(profiles.map((p: any) => ({ 
         id: p.id, email: p.email, name: p.name, phone: p.phone, role: p.role || 'user', 
@@ -346,8 +347,10 @@ export default function App() {
     const { error } = await supabase.from('driving_records').insert([payload]);
     if (!error) {
       const updated = [{ ...payload, startTime: payload.start_time, endTime: payload.end_time, grossAmount: gross, feeRate, fuelAmount: fuel, extraExpenseAmount: extraExp, tipAmount: tip, isGrossPaid: false, isExpensePaid: false, netAmount: Math.round(net), totalClaimAmount: Math.round(claimTotal) }, ...records];
-      updated.sort((a, b) => a.date.localeCompare(b.date));
-      setRecords(updated); setSelectedDate(newDate);
+      updated.sort((a, b) => a.date.localeCompare(b.date)); // 💡 오름차순 유지
+      setRecords(updated); 
+      setCustomDate(newDate); // 💡 오타/버그 변수 완전 교체 (setSelectedDate -> setCustomDate)
+      setDateFilter('custom'); 
       setNewDeparture(''); setNewDestination(''); setNewGross(''); setNewFuel(''); setNewExtraExpense(''); setNewTip('');
     }
   };
@@ -487,16 +490,11 @@ export default function App() {
     setAdminSelectedUserRecords(userRecs);
   };
 
-  // 💡 [성능 최적화] 리렌더링마다 new Date()를 수천 번 호출하지 않도록 변수 1번만 할당
-  const todayKstStr = getTodayKST();
-  const thisMonthStr = todayKstStr.substring(0, 7);
-  const thisYearStr = todayKstStr.substring(0, 4);
-
   const filteredRecords = records.filter((r) => {
     if (dateFilter === 'all') return true;
-    if (dateFilter === 'today') return r.date === todayKstStr;
-    if (dateFilter === 'month') return r.date.startsWith(thisMonthStr);
-    if (dateFilter === 'year') return r.date.startsWith(thisYearStr);
+    if (dateFilter === 'today') return r.date === getTodayKST();
+    if (dateFilter === 'month') return r.date.startsWith(getTodayKST().substring(0, 7));
+    if (dateFilter === 'year') return r.date.startsWith(getTodayKST().substring(0, 4));
     if (dateFilter === 'custom') return r.date === customDate;
     return true;
   });
@@ -520,7 +518,7 @@ export default function App() {
   const monthlyProfit = monthlyNet - monthlyExpense;
 
   const getElapsedDays = (recordDate: string) => {
-    const today = new Date(todayKstStr); const target = new Date(recordDate);
+    const today = new Date(getTodayKST()); const target = new Date(recordDate);
     return Math.floor((today.getTime() - target.getTime()) / (1000 * 60 * 60 * 24));
   };
 
@@ -602,6 +600,7 @@ export default function App() {
             </form>
           )}
         </div>
+
         {showPrivacyModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
             <div className="w-full max-w-lg glass-card rounded-2xl p-6 shadow-2xl relative z-20">
