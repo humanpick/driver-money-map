@@ -7,7 +7,8 @@ import {
   Copy, Car, Filter, RotateCcw, CalendarDays, ShieldCheck, ChevronRight, Smartphone,
   Fuel, AlertTriangle, MessageSquare, Check, Edit2, Coins, Sparkles, Phone,
   RefreshCw, UserX, ShieldAlert, BarChart3, Megaphone, Users, Download,
-  Award, Crown, BookmarkPlus, Radio, Send, Building2, Info, Map, Target, Navigation, Search
+  Award, Crown, BookmarkPlus, Radio, Send, Building2, Info, Map, Target, Navigation, Search,
+  Upload, FileSpreadsheet
 } from 'lucide-react';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
@@ -88,9 +89,9 @@ const AUCTION_SCHEDULES = [
 ];
 
 export default function App() {
-  const { needRefresh: [needRefresh], updateServiceWorker } = useRegisterSW({ onRegistered(r) {}, onRegisterError(error) {} });
+  const { needRefresh: [needRefresh, setNeedRefresh], updateServiceWorker } = useRegisterSW({ onRegistered(r) {}, onRegisterError(error) {} });
 
-  // 💡 PWA 자동 강제 업데이트 로직 (팝업창 없이 즉시 새버전 로드)
+  // 💡 모바일 환경 최적화: 팝업창 없이 새 버전 발견 시 백그라운드 즉시 100% 자동 업데이트
   useEffect(() => {
     if (needRefresh) {
       updateServiceWorker(true);
@@ -136,6 +137,11 @@ export default function App() {
   const [includeGross, setIncludeGross] = useState(true); const [includeFuel, setIncludeFuel] = useState(true);
   const [includeExtra, setIncludeExtra] = useState(true); const [claimMessageText, setClaimMessageText] = useState('');
   
+  // CSV Import State (타사 가계부 1초 환승)
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importPreview, setImportPreview] = useState<any[]>([]);
+  const [importing, setImporting] = useState(false);
+
   const [records, setRecords] = useState<DrivingRecord[]>([]);
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
   const [accounts, setAccounts] = useState<BankAccount[]>(() => {
@@ -302,6 +308,81 @@ export default function App() {
     setPwdLoading(false);
   };
 
+  // 💡 기존 앱 장부(CSV) 1초 환승 업로드 파싱 로직
+  const handleCsvImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result as string;
+        const lines = text.split('\n').filter(line => line.trim() !== '');
+        if (lines.length < 2) { alert('데이터가 없거나 파일 양식이 올바르지 않습니다.'); return; }
+        
+        const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+        const dateIdx = headers.findIndex(h => h.includes('날짜') || h.includes('일자'));
+        const depIdx = headers.findIndex(h => h.includes('출발'));
+        const destIdx = headers.findIndex(h => h.includes('도착'));
+        const grossIdx = headers.findIndex(h => h.includes('운임') || h.includes('요금') || h.includes('수입'));
+        
+        if (dateIdx === -1 || depIdx === -1 || destIdx === -1 || grossIdx === -1) {
+          alert('필수 항목(날짜, 출발, 도착, 운임)을 찾을 수 없습니다. 엑셀 양식을 확인해주세요.');
+          return;
+        }
+
+        const parsed = lines.slice(1).map(line => {
+          const cols = line.split(',').map(c => c.trim().replace(/"/g, ''));
+          let d = cols[dateIdx] || '';
+          if (d && !d.includes('-')) d = d.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3');
+          
+          const gross = cleanNumber(cols[grossIdx]);
+          const net = Math.round(gross * 0.8); // 수수료율 20% 일괄 적용
+          return {
+            date: d || getTodayKST(),
+            departure: cols[depIdx] || '알수없음',
+            destination: cols[destIdx] || '알수없음',
+            gross_amount: gross,
+            fee_rate: 20,
+            fuel_amount: 0,
+            extra_expense_amount: 0,
+            tip_amount: 0,
+            is_gross_paid: true, // 과거 데이터이므로 전액 정산완료 간주
+            is_expense_paid: true,
+            net_amount: net,
+            total_claim_amount: gross
+          };
+        }).filter(r => r.gross_amount > 0);
+
+        setImportPreview(parsed);
+      } catch (err) {
+        alert('파일을 분석하는 중 오류가 발생했습니다.');
+      }
+    };
+    reader.readAsText(file, "utf-8");
+  };
+
+  const executeImport = async () => {
+    if (!session || importPreview.length === 0) return;
+    setImporting(true);
+    const payloads = importPreview.map(r => ({
+      ...r,
+      id: 'rec_' + Math.random().toString(36).substr(2, 9) + Date.now(),
+      user_id: session.user.id,
+      start_time: '-', end_time: '-'
+    }));
+
+    const { error } = await supabase.from('driving_records').insert(payloads);
+    if (error) {
+      alert('데이터 저장 중 오류가 발생했습니다: ' + error.message);
+    } else {
+      alert(`${payloads.length}건의 과거 운행 일지가 성공적으로 환승되었습니다!`);
+      setImportModalOpen(false);
+      setImportPreview([]);
+      fetchUserData(session.user.id, session.user.email);
+    }
+    setImporting(false);
+  };
+
   const handleSaveNoticeTemplate = async (e: React.FormEvent) => {
     e.preventDefault(); if (!inputNoticeTitle.trim() || !inputNoticeContent.trim()) return;
     setNoticeLoading(true);
@@ -310,20 +391,17 @@ export default function App() {
     if (!error) { alert(editingNoticeId ? '수정되었습니다.' : '저장되었습니다.'); setInputNoticeTitle(''); setInputNoticeContent(''); setEditingNoticeId(null); fetchNotices(); }
     setNoticeLoading(false);
   };
-
   const handleActivateNotice = async (targetNotice: NoticeItem) => {
     setNoticeLoading(true); await supabase.from('announcements').update({ is_active: false }).neq('id', 'dummy');
     const { error } = await supabase.from('announcements').update({ is_active: true, updated_at: new Date().toISOString() }).eq('id', targetNotice.id);
     if (!error) { alert('메인 배너로 활성화되었습니다.'); fetchNotices(); }
     setNoticeLoading(false);
   };
-
   const handleDeactivateAllNotices = async () => {
     setNoticeLoading(true); const { error } = await supabase.from('announcements').update({ is_active: false }).neq('id', 'dummy');
     if (!error) { alert('메인 배너 송출이 중단되었습니다.'); fetchNotices(); }
     setNoticeLoading(false);
   };
-
   const handleDeleteNotice = async (id: string) => {
     if (!window.confirm('삭제하시겠습니까?')) return;
     await supabase.from('announcements').delete().eq('id', id); fetchNotices();
@@ -515,7 +593,7 @@ export default function App() {
     return (
       <div className="min-h-screen bg-[#0B1120] text-slate-100 flex items-center justify-center p-4 relative overflow-hidden">
         {injectStyles()}
-
+        
         <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[380px] h-[380px] bg-[#8B5CF6]/10 rounded-full blur-[100px] pointer-events-none" />
         <div className="w-full max-w-[420px] glass-card rounded-2xl p-7 shadow-2xl relative z-10">
           <div className="flex flex-col items-center mb-6">
@@ -603,7 +681,6 @@ export default function App() {
             <button onClick={() => setActiveTab('expense')} className={`py-2 px-1 text-center rounded-xl text-xs font-bold cursor-pointer transition-all ${activeTab === 'expense' ? 'hp-primary-btn shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'bg-white/5 text-slate-300 hover:text-white'}`}>경비 장부</button>
             <button onClick={() => setActiveTab('analytics')} className={`py-2 px-1 text-center rounded-xl text-xs font-bold cursor-pointer transition-all ${activeTab === 'analytics' ? 'hp-primary-btn shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'bg-white/5 text-slate-300 hover:text-white'}`}>통계 요약</button>
             
-            {/* 2번째 줄 */}
             <button onClick={() => setActiveTab('wallet')} className={`py-2 px-1 text-center rounded-xl text-xs font-bold cursor-pointer transition-all ${activeTab === 'wallet' ? 'hp-primary-btn shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'bg-white/5 text-slate-300 hover:text-white'}`}>계좌 관리</button>
             <button onClick={() => setActiveTab('trade_centers')} className={`py-2 px-1 text-center rounded-xl text-xs font-bold cursor-pointer transition-all ${activeTab === 'trade_centers' ? 'hp-primary-btn shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'bg-white/5 text-slate-300 hover:text-white'}`}>매매단지</button>
             <button onClick={() => setActiveTab('auctions')} className={`py-2 px-1 text-center rounded-xl text-xs font-bold cursor-pointer transition-all ${activeTab === 'auctions' ? 'hp-primary-btn shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'bg-white/5 text-slate-300 hover:text-white'}`}>경매장</button>
@@ -615,7 +692,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* 1. 운행 일지 탭 (분리 미수금 적용된 버전) */}
+        {/* 1. 운행 일지 탭 (분리 미수금 + CSV 환승 버튼 적용) */}
         {activeTab === 'records' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 fade-in-text">
             <div className="glass-card rounded-xl p-6 shadow-lg h-fit">
@@ -648,7 +725,8 @@ export default function App() {
                   <h3 className="text-sm font-bold text-white flex items-center gap-2"><FileText className="w-4 h-4 text-[#8B5CF6]" />운행 일지 및 정산 현황 ({filteredRecords.length}건)</h3>
                   <p className="text-[11px] text-[#38BDF8] font-medium mt-1 ml-6">운임과 대납 경비의 입금 상태를 분리해서 관리하세요.</p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button onClick={() => setImportModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#8B5CF6]/10 hover:bg-[#8B5CF6]/20 text-[#8B5CF6] text-xs font-bold rounded-lg border border-[#8B5CF6]/30 transition-all cursor-pointer"><Upload className="w-3.5 h-3.5" />타사 장부 불러오기</button>
                   <div className="flex items-center gap-2 bg-[#0B1120] px-3 py-1.5 rounded-lg border border-white/10">
                     <input type="checkbox" id="allDates" checked={filterAllDates} onChange={(e) => setFilterAllDates(e.target.checked)} className="w-3.5 h-3.5 rounded text-[#8B5CF6] cursor-pointer" />
                     <label htmlFor="allDates" className="text-xs text-slate-300 font-semibold cursor-pointer">전체 누적 보기</label>
@@ -678,7 +756,6 @@ export default function App() {
                             </div>
                           </div>
                           
-                          {/* 분리 미수금 뱃지 UI */}
                           <div className="flex flex-wrap gap-2 pt-1 ml-11">
                             <button onClick={() => toggleGrossPaid(r.id)} className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${r.isGrossPaid ? 'bg-[#38BDF8]/20 text-[#38BDF8] border border-[#38BDF8]/40' : 'bg-[#EC4899]/20 text-[#EC4899] border border-[#EC4899]/40 animate-pulse'}`}>
                               {r.isGrossPaid ? <CheckCircle2 className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />} 운임 {r.grossAmount.toLocaleString()}원
@@ -715,7 +792,7 @@ export default function App() {
           </div>
         )}
 
-        {/* 2. 청구문자 탭 (분리 미수금 호환) */}
+        {/* 2. 청구문자 탭 */}
         {activeTab === 'claims' && (
           <div className="glass-card rounded-xl p-6 shadow-lg fade-in-text">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
@@ -845,7 +922,7 @@ export default function App() {
           </div>
         )}
 
-        {/* 6. 전국 매매단지 안내 탭 (18개 거점 복구 완료) */}
+        {/* 6. 전국 매매단지 안내 탭 */}
         {activeTab === 'trade_centers' && (
           <div className="space-y-5 fade-in-text">
             <div className="glass-card rounded-xl p-5 shadow-lg border border-[#8B5CF6]/30">
@@ -898,7 +975,7 @@ export default function App() {
           </div>
         )}
 
-        {/* 7. 경매장 일정 탭 (데이터 전체 복구) */}
+        {/* 7. 경매장 일정 탭 */}
         {activeTab === 'auctions' && (
           <div className="space-y-6 fade-in-text">
             <div className="glass-card rounded-xl p-6 shadow-lg border border-[#8B5CF6]/30">
@@ -948,7 +1025,7 @@ export default function App() {
           </div>
         )}
 
-        {/* 8. 관제탑 관리자 탭 (접속 데이터 포함 풀버전) */}
+        {/* 8. 관제탑 관리자 탭 */}
         {activeTab === 'admin' && isAdminUser && (
           <div className="space-y-6 fade-in-text">
             <div className="mb-2">
@@ -1078,6 +1155,50 @@ export default function App() {
               })}
             </div>
             <button onClick={() => setAdminSelectedUser(null)} className="w-full mt-4 py-3 bg-white/10 hover:bg-white/20 text-white font-bold rounded-lg text-xs transition-colors cursor-pointer">닫기</button>
+          </div>
+        </div>
+      )}
+
+      {/* 모달: 타사 엑셀 불러오기 (Import) - 대리가계부 완벽 호환 */}
+      {importModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="w-full max-w-lg glass-card rounded-2xl p-6 shadow-2xl relative">
+            <button onClick={() => setImportModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 cursor-pointer"><X className="w-5 h-5" /></button>
+            <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2"><FileSpreadsheet className="w-5 h-5 text-[#8B5CF6]" />타사 앱 장부 불러오기</h3>
+            <p className="text-xs text-slate-400 mb-4 leading-relaxed">대리가계부 등 타사 앱에서 다운로드한 CSV(엑셀) 파일을 선택해주세요.<br/>날짜, 출발, 도착, 요금 항목을 자동으로 인식하여 1초 만에 환승됩니다.</p>
+            
+            <div className="bg-[#0B1120] border border-white/10 rounded-xl p-6 flex flex-col items-center justify-center mb-4 border-dashed cursor-pointer hover:border-[#8B5CF6]/50 transition-colors">
+              <label htmlFor="csv-upload" className="flex flex-col items-center cursor-pointer w-full">
+                <Upload className="w-8 h-8 text-[#8B5CF6] mb-3" />
+                <span className="text-xs font-bold text-slate-300">이곳을 터치하여 CSV 파일 선택</span>
+                <input id="csv-upload" type="file" accept=".csv" onChange={handleCsvImport} className="hidden" />
+              </label>
+            </div>
+
+            {importPreview.length > 0 && (
+              <div className="mb-4">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-bold text-[#38BDF8]">미리보기 (총 {importPreview.length}건)</span>
+                </div>
+                <div className="bg-[#0B1120] border border-white/10 rounded-lg p-3 max-h-40 overflow-y-auto space-y-2">
+                  {importPreview.slice(0, 5).map((r, i) => (
+                    <div key={i} className="text-[11px] text-slate-300 flex justify-between border-b border-white/5 pb-1">
+                      <span>{r.date} | {r.departure} → {r.destination}</span>
+                      <span className="font-bold text-white">{r.gross_amount.toLocaleString()}원</span>
+                    </div>
+                  ))}
+                  {importPreview.length > 5 && <div className="text-[10px] text-center text-slate-500 pt-1">외 {importPreview.length - 5}건...</div>}
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <button onClick={() => { setImportModalOpen(false); setImportPreview([]); }} className="flex-1 py-3 bg-[#0B1120] border border-white/10 text-white font-semibold rounded-lg text-xs cursor-pointer transition-colors">취소</button>
+              <button onClick={executeImport} disabled={importPreview.length === 0 || importing} className="flex-1 py-3 hp-primary-btn text-white font-bold rounded-lg text-xs cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5">
+                {importing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                {importing ? '저장 중...' : `${importPreview.length}건 전체 저장하기`}
+              </button>
+            </div>
           </div>
         </div>
       )}
