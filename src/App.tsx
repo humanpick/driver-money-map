@@ -6,12 +6,11 @@ import {
   KeyRound, X, CheckCircle2, AlertCircle, PlusCircle, CreditCard, Receipt, Trash2,
   Copy, Car, Filter, RotateCcw, CalendarDays, ShieldCheck, ChevronRight, Smartphone,
   Fuel, AlertTriangle, MessageSquare, Check, Edit2, Coins, Sparkles, Phone,
-  RefreshCw, UserX, ShieldAlert, BarChart3, Megaphone, Users, Download,
+  RefreshCw, UserX, BarChart3, Megaphone, Users, Download,
   Award, Crown, BookmarkPlus, Radio, Send, Building2, Info, Map, Target, Navigation, Search,
-  Upload, FileSpreadsheet, Database
+  Upload, HardDrive // 💡 신규 아이콘 에러 방지를 위해 구버전 호환 아이콘으로 교체
 } from 'lucide-react';
 
-// 💡 환경변수가 없어도 앱이 하얀 화면으로 죽지 않도록 방어 코드(Fallback) 적용
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder-key';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
@@ -61,24 +60,24 @@ interface MemberProfile { id: string; email: string; name: string; phone: string
 interface NoticeItem { id: string; title: string; content: string; isActive: boolean; updatedAt?: string; }
 
 const TRADE_CENTERS = [
-  { id: '1', name: '수원 도이치오토월드', tier: 'S', region: '수도권', addr: '경기 수원시 권선구 권선로 308-5', desc: '전국 최대 실내 복합단지. 지하~지상 층별 상사 밀집 (전국 탁송 출고 최다 지역)' },
-  { id: '2', name: '수원 SK V1 모터스', tier: 'S', region: '수도권', addr: '경기 수원시 권선구 평동로79번길 45', desc: '도이치오토월드 바로 옆 대형 실내 단지. 탁송 콜 집중 발생 구역.' },
-  { id: '3', name: '인천 엠파크 (허브/타워)', tier: 'S', region: '수도권', addr: '인천 서구 봉수대로 158', desc: '인천 권역 최대 메가 허브. 허브동과 타워동 위치 구분 필수.' },
-  { id: '4', name: '용인 오토허브', tier: 'S', region: '수도권', addr: '경기 용인시 기흥구 중부대로 242', desc: '경부고속도로 신갈IC 인근. 접근성 매우 우수한 초대형 복합단지.' },
-  { id: '5', name: '서울 서서울모터리움', tier: 'A', region: '수도권', addr: '서울 강서구 양천로53길 30', desc: '서울 서부권 최대 실내 자동차 백화점. 올림픽대로/가양대교 인접 출고 활발.' },
-  { id: '6', name: '김포 국민차매매단지 (공항점)', tier: 'A', region: '수도권', addr: '경기 김포시 고촌읍 아라육로152번길 45', desc: '김포 아라뱃길 물류축 위치. 수도권 서북부 대형 실내 단지.' },
-  { id: '7', name: '부산 경동오토필드', tier: 'A', region: '영남권', addr: '부산 기장군 장안읍 반룡산단3로 95', desc: '영남 최대 3만6천평급 실내 백화점식 복합단지. 동해고속도로 장안IC 인근 상행 콜 다수.' },
-  { id: '8', name: '대구 엠월드', tier: 'A', region: '영남권', addr: '대구 서구 문화로 37', desc: '대구 및 경북권 최대 규모 실내 매매단지. 서대구역 인근 위치.' },
-  { id: '9', name: '부산 사직오토랜드', tier: 'A', region: '영남권', addr: '부산 연제구 경기장로 15', desc: '부산 권역 전통 대표 매매단지. 도심 내 장거리 종착 및 신규 출발 요충지.' },
-  { id: '10', name: '대전 디오토몰', tier: 'A', region: '충청권', addr: '대전 유성구 복용동로 35', desc: '충청권 핵심 실내 단지. 영호남 이동 시 중간 복귀콜 환적 전초기지.' },
-  { id: '11', name: '대전 오토월드', tier: 'A', region: '충청권', addr: '대전 유성구 유성대로 510', desc: '디오토몰 인근 복용동 매매단지 핵심 거점. 풍부한 지방 이동 콜.' },
-  { id: '12', name: '광주 풍암매매단지', tier: 'A', region: '호남권', addr: '광주 서구 매월1로 50', desc: '호남권 최대 중고차 거래 거점. 대규모 단지 및 상사 밀집.' },
-  { id: '13', name: '광주 엠플러스 (M-PLUS)', tier: 'A', region: '호남권', addr: '광주 서구 매월1로62번길 24', desc: '풍암지구 내 신축 대형 실내 복합 백화점. 호남권 딜러 출고 집중지.' },
-  { id: '14', name: '부천 국민차매매단지', tier: 'B', region: '수도권', addr: '경기 부천시 송내대로 450', desc: '수도권 서부권역 주요 전통 매매단지.' },
-  { id: '15', name: '부천 DY카랜드', tier: 'B', region: '수도권', addr: '경기 부천시 신흥로 399번길 50', desc: '경인고속도로 부천IC 인접. 오정동 대형 매매단지.' },
-  { id: '16', name: '천안 북천안매매단지', tier: 'B', region: '충청권', addr: '충남 천안시 서북구 번영로 608', desc: '천안아산역 인근 위치. 수도권 복귀콜이 자주 발생하는 곳.' },
-  { id: '17', name: '전주 장동매매단지', tier: 'B', region: '호남권', addr: '전북 전주시 덕진구 장동유통로 12', desc: '전북 권역 핵심 단지. 호남IC 인근 접근성 양호.' },
-  { id: '18', name: '창원 디오토몰', tier: 'B', region: '영남권', addr: '경남 창원시 성산구 공단로 18', desc: '경남 지역의 대표적인 신축 실내 복합 매매단지.' }
+  { id: '1', name: '수원 도이치오토월드', tier: 'S', region: '수도권', addr: '경기 수원시 권선구 권선로 308-5', desc: '전국 최대 실내 복합단지.' },
+  { id: '2', name: '수원 SK V1 모터스', tier: 'S', region: '수도권', addr: '경기 수원시 권선구 평동로79번길 45', desc: '도이치오토월드 바로 옆 대형 실내 단지.' },
+  { id: '3', name: '인천 엠파크 (허브/타워)', tier: 'S', region: '수도권', addr: '인천 서구 봉수대로 158', desc: '인천 권역 최대 메가 허브.' },
+  { id: '4', name: '용인 오토허브', tier: 'S', region: '수도권', addr: '경기 용인시 기흥구 중부대로 242', desc: '접근성 우수한 초대형 복합단지.' },
+  { id: '5', name: '서울 서서울모터리움', tier: 'A', region: '수도권', addr: '서울 강서구 양천로53길 30', desc: '서울 서부권 최대 실내 자동차 백화점.' },
+  { id: '6', name: '김포 국민차매매단지 (공항점)', tier: 'A', region: '수도권', addr: '경기 김포시 고촌읍 아라육로152번길 45', desc: '수도권 서북부 대형 실내 단지.' },
+  { id: '7', name: '부산 경동오토필드', tier: 'A', region: '영남권', addr: '부산 기장군 장안읍 반룡산단3로 95', desc: '영남 최대 복합단지. 상행 콜 다수.' },
+  { id: '8', name: '대구 엠월드', tier: 'A', region: '영남권', addr: '대구 서구 문화로 37', desc: '대구/경북권 최대 규모 실내 매매단지.' },
+  { id: '9', name: '부산 사직오토랜드', tier: 'A', region: '영남권', addr: '부산 연제구 경기장로 15', desc: '도심 내 장거리 종착 요충지.' },
+  { id: '10', name: '대전 디오토몰', tier: 'A', region: '충청권', addr: '대전 유성구 복용동로 35', desc: '영호남 이동 시 중간 복귀콜 전초기지.' },
+  { id: '11', name: '대전 오토월드', tier: 'A', region: '충청권', addr: '대전 유성구 유성대로 510', desc: '풍부한 지방 이동 콜 거점.' },
+  { id: '12', name: '광주 풍암매매단지', tier: 'A', region: '호남권', addr: '광주 서구 매월1로 50', desc: '호남권 최대 중고차 거래 거점.' },
+  { id: '13', name: '광주 엠플러스 (M-PLUS)', tier: 'A', region: '호남권', addr: '광주 서구 매월1로62번길 24', desc: '호남권 딜러 출고 집중지.' },
+  { id: '14', name: '부천 국민차매매단지', tier: 'B', region: '수도권', addr: '경기 부천시 송내대로 450', desc: '수도권 서부권역 주요 전통 단지.' },
+  { id: '15', name: '부천 DY카랜드', tier: 'B', region: '수도권', addr: '경기 부천시 신흥로 399번길 50', desc: '경인고속도로 부천IC 인접.' },
+  { id: '16', name: '천안 북천안매매단지', tier: 'B', region: '충청권', addr: '충남 천안시 서북구 번영로 608', desc: '수도권 복귀콜 다수 발생.' },
+  { id: '17', name: '전주 장동매매단지', tier: 'B', region: '호남권', addr: '전북 전주시 덕진구 장동유통로 12', desc: '호남IC 인근 접근성 양호.' },
+  { id: '18', name: '창원 디오토몰', tier: 'B', region: '영남권', addr: '경남 창원시 성산구 공단로 18', desc: '경남 대표 신축 실내 단지.' }
 ];
 
 const AUCTION_SCHEDULES = [
@@ -90,7 +89,11 @@ const AUCTION_SCHEDULES = [
 ];
 
 export default function App() {
-  const { needRefresh: [needRefresh, setNeedRefresh], updateServiceWorker } = useRegisterSW({ onRegistered(r) {}, onRegisterError(error) {} });
+  // 💡 PWA 충돌 방지: 반환값이 없는 경우(구버전 PWA 플러그인)를 대비한 안전 로직 적용
+  const pwa = useRegisterSW({ onRegistered(r) {}, onRegisterError(error) {} });
+  const needRefresh = pwa?.needRefresh?.[0] || false;
+  const setNeedRefresh = pwa?.needRefresh?.[1] || (() => {});
+  const updateServiceWorker = pwa?.updateServiceWorker || (() => {});
 
   useEffect(() => {
     if (needRefresh) updateServiceWorker(true);
@@ -169,72 +172,78 @@ export default function App() {
   useEffect(() => { localStorage.setItem('jundriver_local_accounts_merged', JSON.stringify(accounts)); }, [accounts]);
 
   const fetchNotices = async () => {
-    const { data, error } = await supabase.from('announcements').select('*').order('updated_at', { ascending: false });
-    if (data && !error) {
-      const formatted: NoticeItem[] = data.map((d: any) => ({
-        id: d.id, title: d.title, content: d.content, isActive: Boolean(d.is_active), updatedAt: d.updated_at ? d.updated_at.substring(0, 16).replace('T', ' ') : '',
-      }));
-      setNoticeList(formatted);
-      setActiveNotice(formatted.find((n) => n.isActive) || null);
-    }
+    try {
+      const { data, error } = await supabase.from('announcements').select('*').order('updated_at', { ascending: false });
+      if (data && !error) {
+        const formatted: NoticeItem[] = data.map((d: any) => ({
+          id: d.id, title: d.title, content: d.content, isActive: Boolean(d.is_active), updatedAt: d.updated_at ? d.updated_at.substring(0, 16).replace('T', ' ') : '',
+        }));
+        setNoticeList(formatted);
+        setActiveNotice(formatted.find((n) => n.isActive) || null);
+      }
+    } catch (e) { console.error(e); }
   };
 
   const fetchUserData = async (userId: string, userEmail: string, userMeta?: any, userCreatedAt?: string) => {
-    let role = 'user';
-    const cleanMail = userEmail.toLowerCase();
-    const metaName = userMeta?.name || (cleanMail === ADMIN_DEFAULT_EMAIL ? ADMIN_DEFAULT_NAME : '기사님');
-    const metaPhone = userMeta?.phone || (cleanMail === ADMIN_DEFAULT_EMAIL ? ADMIN_DEFAULT_PHONE : '');
+    try {
+      let role = 'user';
+      const cleanMail = userEmail.toLowerCase();
+      const metaName = userMeta?.name || (cleanMail === ADMIN_DEFAULT_EMAIL ? ADMIN_DEFAULT_NAME : '기사님');
+      const metaPhone = userMeta?.phone || (cleanMail === ADMIN_DEFAULT_EMAIL ? ADMIN_DEFAULT_PHONE : '');
 
-    const { data: profile } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
-    role = cleanMail === ADMIN_DEFAULT_EMAIL ? 'super_admin' : (profile?.role || 'user');
-    setCurrentUserRole(role);
+      const { data: profile } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+      role = cleanMail === ADMIN_DEFAULT_EMAIL ? 'super_admin' : (profile?.role || 'user');
+      setCurrentUserRole(role);
 
-    const currentCount = profile?.login_count || 0;
-    const nowIso = new Date().toISOString();
-    const profilePayload = {
-      id: userId, email: cleanMail, name: profile?.name || metaName, phone: profile?.phone || metaPhone,
-      role: role, created_at: profile?.created_at || userCreatedAt || nowIso,
-      last_login_at: nowIso, login_count: currentCount + 1
-    };
-    await supabase.from('profiles').upsert(profilePayload);
+      const currentCount = profile?.login_count || 0;
+      const nowIso = new Date().toISOString();
+      const profilePayload = {
+        id: userId, email: cleanMail, name: profile?.name || metaName, phone: profile?.phone || metaPhone,
+        role: role, created_at: profile?.created_at || userCreatedAt || nowIso,
+        last_login_at: nowIso, login_count: currentCount + 1
+      };
+      await supabase.from('profiles').upsert(profilePayload);
 
-    setCurrentUserProfile({
-      id: userId, email: cleanMail, name: profilePayload.name, phone: profilePayload.phone, role: profilePayload.role,
-      createdAt: (profilePayload.created_at || '').substring(0, 10),
-      lastLoginAt: profilePayload.last_login_at, loginCount: profilePayload.login_count
-    });
+      setCurrentUserProfile({
+        id: userId, email: cleanMail, name: profilePayload.name, phone: profilePayload.phone, role: profilePayload.role,
+        createdAt: (profilePayload.created_at || '').substring(0, 10),
+        lastLoginAt: profilePayload.last_login_at, loginCount: profilePayload.login_count
+      });
 
-    const { data: recordsData } = await supabase.from('driving_records').select('*').eq('user_id', userId).order('date', { ascending: false }).limit(5000);
-    if (recordsData) {
-      setRecords(recordsData.map((r: any) => ({
-        id: r.id, date: r.date, startTime: r.start_time || '-', endTime: r.end_time || '-', departure: r.departure, destination: r.destination,
-        grossAmount: Number(r.gross_amount), feeRate: Number(r.fee_rate), fuelAmount: Number(r.fuel_amount), extraExpenseAmount: Number(r.extra_expense_amount),
-        tipAmount: Number(r.tip_amount), isGrossPaid: Boolean(r.is_gross_paid), isExpensePaid: Boolean(r.is_expense_paid), netAmount: Number(r.net_amount), totalClaimAmount: Number(r.total_claim_amount),
-      })));
-    }
+      const { data: recordsData } = await supabase.from('driving_records').select('*').eq('user_id', userId).order('date', { ascending: false }).limit(5000);
+      if (recordsData) {
+        setRecords(recordsData.map((r: any) => ({
+          id: r.id, date: r.date, startTime: r.start_time || '-', endTime: r.end_time || '-', departure: r.departure, destination: r.destination,
+          grossAmount: Number(r.gross_amount), feeRate: Number(r.fee_rate), fuelAmount: Number(r.fuel_amount), extraExpenseAmount: Number(r.extra_expense_amount),
+          tipAmount: Number(r.tip_amount), isGrossPaid: Boolean(r.is_gross_paid), isExpensePaid: Boolean(r.is_expense_paid), netAmount: Number(r.net_amount), totalClaimAmount: Number(r.total_claim_amount),
+        })));
+      }
 
-    const { data: expensesData } = await supabase.from('expenses').select('*').eq('user_id', userId).order('date', { ascending: false }).limit(5000);
-    if (expensesData) setExpenses(expensesData.map((e: any) => ({ id: e.id, date: e.date, category: e.category, amount: Number(e.amount), memo: e.memo || '' })));
-    
-    if (role === 'super_admin' || role === 'manager') fetchAdminData();
+      const { data: expensesData } = await supabase.from('expenses').select('*').eq('user_id', userId).order('date', { ascending: false }).limit(5000);
+      if (expensesData) setExpenses(expensesData.map((e: any) => ({ id: e.id, date: e.date, category: e.category, amount: Number(e.amount), memo: e.memo || '' })));
+      
+      if (role === 'super_admin' || role === 'manager') fetchAdminData();
+    } catch (e) { console.error(e); }
   };
 
   const fetchAdminData = async () => {
-    const { data: profiles } = await supabase.from('profiles').select('*').order('last_login_at', { ascending: false });
-    const { data: allRecs } = await supabase.from('driving_records').select('*');
-    if (profiles && allRecs) {
-      setAdminMemberList(profiles.map((p: any) => ({ 
-        id: p.id, email: p.email, name: p.name, phone: p.phone, role: p.role || 'user', 
-        createdAt: p.created_at ? p.created_at.substring(0, 10) : '-', 
-        lastLoginAt: p.last_login_at ? p.last_login_at.substring(0, 16).replace('T', ' ') : '기록없음',
-        loginCount: p.login_count || 0,
-        recordCount: allRecs.filter((r: any) => r.user_id === p.id).length 
-      })));
-      setAdminAllRecords(allRecs.map((r: any) => ({ 
-        id: r.id, userId: r.user_id, date: r.date, startTime: r.start_time || '-', endTime: r.end_time || '-', departure: r.departure, destination: r.destination, 
-        grossAmount: Number(r.gross_amount), fuelAmount: Number(r.fuel_amount), feeRate: Number(r.fee_rate), extraExpenseAmount: Number(r.extra_expense_amount), tipAmount: Number(r.tip_amount), isGrossPaid: Boolean(r.is_gross_paid), isExpensePaid: Boolean(r.is_expense_paid), netAmount: Number(r.net_amount), totalClaimAmount: Number(r.total_claim_amount) 
-      })));
-    }
+    try {
+      const { data: profiles } = await supabase.from('profiles').select('*').order('last_login_at', { ascending: false });
+      const { data: allRecs } = await supabase.from('driving_records').select('*');
+      if (profiles && allRecs) {
+        setAdminMemberList(profiles.map((p: any) => ({ 
+          id: p.id, email: p.email, name: p.name, phone: p.phone, role: p.role || 'user', 
+          createdAt: p.created_at ? p.created_at.substring(0, 10) : '-', 
+          lastLoginAt: p.last_login_at ? p.last_login_at.substring(0, 16).replace('T', ' ') : '기록없음',
+          loginCount: p.login_count || 0,
+          recordCount: allRecs.filter((r: any) => r.user_id === p.id).length 
+        })));
+        setAdminAllRecords(allRecs.map((r: any) => ({ 
+          id: r.id, userId: r.user_id, date: r.date, startTime: r.start_time || '-', endTime: r.end_time || '-', departure: r.departure, destination: r.destination, 
+          grossAmount: Number(r.gross_amount), fuelAmount: Number(r.fuel_amount), feeRate: Number(r.fee_rate), extraExpenseAmount: Number(r.extra_expense_amount), tipAmount: Number(r.tip_amount), isGrossPaid: Boolean(r.is_gross_paid), isExpensePaid: Boolean(r.is_expense_paid), netAmount: Number(r.net_amount), totalClaimAmount: Number(r.total_claim_amount) 
+        })));
+      }
+    } catch (e) { console.error(e); }
   };
 
   useEffect(() => {
@@ -253,8 +262,10 @@ export default function App() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault(); setAuthLoading(true); setAuthError(''); setAuthSuccess('');
-    const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password: password.trim() });
-    if (error) setAuthError('이메일 또는 비밀번호가 일치하지 않습니다.');
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password: password.trim() });
+      if (error) setAuthError('이메일 또는 비밀번호가 일치하지 않습니다.');
+    } catch (err) { setAuthError('서버와 통신할 수 없습니다.'); }
     setAuthLoading(false);
   };
 
@@ -351,7 +362,7 @@ export default function App() {
       );
 
       if (cleanArray.length === 0) {
-        alert('유효한 운행 데이터(출발/도착/운임)를 찾을 수 없습니다. 입출금 찌꺼기 내역만 있거나 양식이 다릅니다.');
+        alert('유효한 운행 데이터(출발/도착/운임)를 찾을 수 없습니다.');
         setImporting(false); e.target.value = ''; return;
       }
 
@@ -375,7 +386,7 @@ export default function App() {
         try {
           const text = event.target?.result as string;
           const lines = text.split('\n').filter(line => line.trim() !== '');
-          if (lines.length < 2) { alert('데이터가 없거나 파일 양식이 올바르지 않습니다.'); e.target.value = ''; return; }
+          if (lines.length < 2) { alert('파일 양식이 올바르지 않습니다.'); e.target.value = ''; return; }
           
           const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, '').toLowerCase());
           const dateIdx = headers.findIndex(h => h.includes('날짜') || h.includes('일자') || h.includes('date'));
@@ -384,7 +395,7 @@ export default function App() {
           const grossIdx = headers.findIndex(h => h.includes('운임') || h.includes('요금') || h.includes('수입') || h.includes('금액') || h.includes('price') || h.includes('cash'));
           
           if (dateIdx === -1 || grossIdx === -1) { 
-            alert('필수 항목(날짜, 요금)을 찾을 수 없습니다. 열 이름을 확인해주세요.'); e.target.value = ''; return; 
+            alert('필수 항목(날짜, 요금)을 찾을 수 없습니다.'); e.target.value = ''; return; 
           }
 
           const parsed = lines.slice(1).map(line => {
@@ -401,7 +412,7 @@ export default function App() {
           });
           
           processParsedData(parsed);
-        } catch (err) { alert('파일을 분석하는 중 오류가 발생했습니다.'); e.target.value = ''; }
+        } catch (err) { alert('오류가 발생했습니다.'); e.target.value = ''; }
       };
       reader.readAsText(file, "utf-8");
     } 
@@ -552,7 +563,7 @@ export default function App() {
         
         processParsedData(parsedFallback);
       } catch (err) {
-        alert('DB 파일을 분석하는 중 오류가 발생했습니다.');
+        alert('분석 오류가 발생했습니다.');
         setImporting(false); e.target.value = '';
       }
     } else {
@@ -794,17 +805,6 @@ export default function App() {
       <div className="min-h-screen bg-[#0B1120] text-slate-100 flex items-center justify-center p-4 relative overflow-hidden">
         {injectStyles()}
         
-        {needRefresh && (
-          <div className="fixed bottom-6 inset-x-0 mx-auto z-[9999] glass-card border border-[#8B5CF6]/50 p-5 rounded-2xl shadow-[0_0_20px_rgba(139,92,246,0.3)] flex flex-col items-center gap-3 w-[90%] max-w-sm fade-in-text">
-            <div className="flex items-center gap-2"><RefreshCw className="w-5 h-5 text-[#8B5CF6] animate-spin" /><span className="text-sm font-bold text-white">새로운 버전이 출시되었습니다!</span></div>
-            <p className="text-[11px] text-[#38BDF8] text-center font-medium">안정적인 최신 기능 사용을 위해 앱을 업데이트 해주세요.</p>
-            <div className="flex gap-2 w-full mt-2">
-              <button onClick={() => setNeedRefresh(false)} className="flex-1 py-2.5 bg-[#0B1120] border border-white/10 text-slate-300 text-xs font-bold rounded-lg hover:bg-white/5 transition-colors cursor-pointer">나중에</button>
-              <button onClick={() => updateServiceWorker(true)} className="flex-1 py-2.5 hp-primary-btn text-white text-xs font-bold rounded-lg shadow-[0_4px_12px_rgba(139,92,246,0.4)] cursor-pointer">지금 업데이트</button>
-            </div>
-          </div>
-        )}
-
         <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[380px] h-[380px] bg-[#8B5CF6]/10 rounded-full blur-[100px] pointer-events-none" />
         <div className="w-full max-w-[420px] glass-card rounded-2xl p-7 shadow-2xl relative z-10">
           <div className="flex flex-col items-center mb-6">
@@ -858,17 +858,6 @@ export default function App() {
     <div className="min-h-screen bg-[#0B1120] text-slate-100 pb-20 relative">
       {injectStyles()}
       
-      {needRefresh && (
-        <div className="fixed bottom-6 inset-x-0 mx-auto z-[10000] glass-card border border-[#8B5CF6]/50 p-5 rounded-2xl shadow-[0_0_20px_rgba(139,92,246,0.3)] flex flex-col items-center gap-3 w-[90%] max-w-sm fade-in-text">
-          <div className="flex items-center gap-2"><RefreshCw className="w-5 h-5 text-[#8B5CF6] animate-spin" /><span className="text-sm font-bold text-white">새로운 버전이 출시되었습니다!</span></div>
-          <p className="text-[11px] text-[#38BDF8] text-center font-medium">안정적인 최신 기능 사용을 위해 앱을 업데이트 해주세요.</p>
-          <div className="flex gap-2 w-full mt-2">
-            <button onClick={() => setNeedRefresh(false)} className="flex-1 py-2.5 bg-[#0B1120] border border-white/10 text-slate-300 text-xs font-bold rounded-lg hover:bg-white/5 transition-colors cursor-pointer">나중에</button>
-            <button onClick={() => updateServiceWorker(true)} className="flex-1 py-2.5 hp-primary-btn text-white text-xs font-bold rounded-lg shadow-[0_4px_12px_rgba(139,92,246,0.4)] cursor-pointer">지금 업데이트</button>
-          </div>
-        </div>
-      )}
-
       <header className="sticky top-0 z-30 glass-card border-b-0 border-white/5 px-4 lg:px-8 py-3">
         <div className="max-w-[1400px] mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -948,7 +937,6 @@ export default function App() {
                   <p className="text-[11px] text-[#38BDF8] font-medium mt-1 ml-6">운임과 대납 경비의 입금 상태를 분리해서 관리하세요.</p>
                 </div>
                 
-                {/* 💡 월간/일간 뷰 토글 및 분리된 삭제 버튼 */}
                 <div className="flex flex-col items-end gap-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <button onClick={() => setImportModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#8B5CF6]/10 hover:bg-[#8B5CF6]/20 text-[#8B5CF6] text-xs font-bold rounded-lg border border-[#8B5CF6]/30 transition-all cursor-pointer"><Database className="w-3.5 h-3.5" />타사 장부 불러오기</button>
@@ -1031,7 +1019,6 @@ export default function App() {
                     );
                   })
                 )}
-                {/* 💡 속도 최적화 렌더링 메시지 */}
                 {(filterAllDates || viewMode === 'monthly') && filteredRecords.length > 100 && (
                   <div className="text-center text-xs font-semibold text-[#8B5CF6] pt-4 pb-2">
                     빠른 속도를 위해 최근 100건만 표시됩니다. (해당 기간 총 {filteredRecords.length}건 등록됨)
@@ -1275,7 +1262,7 @@ export default function App() {
           </div>
         )}
 
-        {/* 8. 관제탑 관리자 탭 (접속 데이터 포함 풀버전) */}
+        {/* 8. 관제탑 관리자 탭 */}
         {activeTab === 'admin' && isAdminUser && (
           <div className="space-y-6 fade-in-text">
             <div className="mb-2">
@@ -1409,7 +1396,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 💡 모달: 타사 엑셀(CSV) 및 DB(SQLite) 불러오기 (Import) - 초강력 찌꺼기 차단 */}
+      {/* 모달: 타사 앱 장부 불러오기 */}
       {importModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="w-full max-w-lg glass-card rounded-2xl p-6 shadow-2xl relative">
@@ -1455,51 +1442,6 @@ export default function App() {
                 <Upload className="w-4 h-4" />
                 {importPreview.length}건 전체 저장하기
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 모달: 운행 일지 수정 (분리 미수금 호환) */}
-      {editingRecord && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="w-full max-w-sm glass-card rounded-2xl p-6 shadow-2xl relative">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-sm font-bold text-white flex items-center gap-1.5"><Edit2 className="w-4 h-4 text-[#8B5CF6]" /> 운행 내역 수정</h3>
-              <button onClick={() => setEditingRecord(null)} className="text-slate-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
-            </div>
-            <form onSubmit={handleUpdateRecord} className="space-y-3.5">
-              <div><label className="block text-[11px] font-semibold text-[#38BDF8] mb-1">운행 일자 변경</label><input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="w-full px-3 py-2 rounded-lg" required /></div>
-              <div className="grid grid-cols-2 gap-2">
-                <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">출발지</label><input type="text" value={editDeparture} onChange={(e) => setEditDeparture(e.target.value)} className="w-full px-3 py-2 rounded-lg" required /></div>
-                <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">도착지</label><input type="text" value={editDestination} onChange={(e) => setEditDestination(e.target.value)} className="w-full px-3 py-2 rounded-lg" required /></div>
-              </div>
-              <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">운임(원)</label><input type="text" value={editGross} onChange={(e) => setEditGross(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" required /></div>
-              <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">대납 주유비</label><input type="text" value={editFuel} onChange={(e) => setEditFuel(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" /></div>
-              <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">통행료 등 추가경비</label><input type="text" value={editExtra} onChange={(e) => setEditExtra(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" /></div>
-              <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">기사 팁</label><input type="text" value={editTip} onChange={(e) => setEditTip(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" /></div>
-              <button type="submit" className="w-full mt-2 py-3 hp-primary-btn font-bold rounded-lg text-xs cursor-pointer">수정 완료</button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* 모달: 청구 문자 직접 편집 생성 (분리 미수금 호환) */}
-      {claimModalOpen && selectedClaimRecord && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="w-full max-w-lg glass-card rounded-2xl p-6 shadow-2xl relative">
-            <button onClick={() => setClaimModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 cursor-pointer"><X className="w-5 h-5" /></button>
-            <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2"><MessageSquare className="w-5 h-5 text-[#8B5CF6]" />정산 청구 문자 편집 및 복사</h3>
-            <p className="text-xs text-slate-400 mb-4">미입금된 내역만 자동으로 체크되어 문구가 생성됩니다. 수정한 후 복사하세요.</p>
-            <div className="flex gap-4 mb-4 pb-4 border-b border-white/10">
-              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 cursor-pointer"><input type="checkbox" checked={includeGross} onChange={() => handleToggleInclude('gross')} className="rounded text-[#8B5CF6]" disabled={selectedClaimRecord.isGrossPaid} /> 기본 운임</label>
-              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 cursor-pointer"><input type="checkbox" checked={includeFuel} onChange={() => handleToggleInclude('fuel')} className="rounded text-[#8B5CF6]" disabled={selectedClaimRecord.fuelAmount === 0 || selectedClaimRecord.isExpensePaid} /> 주유비</label>
-              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 cursor-pointer"><input type="checkbox" checked={includeExtra} onChange={() => handleToggleInclude('extra')} className="rounded text-[#8B5CF6]" disabled={selectedClaimRecord.extraExpenseAmount === 0 || selectedClaimRecord.isExpensePaid} /> 추가경비</label>
-            </div>
-            <textarea rows={10} value={claimMessageText} onChange={(e) => setClaimMessageText(e.target.value)} className="w-full p-4 rounded-xl text-xs font-mono mb-4 leading-relaxed bg-[#FFFFFF] text-[#000000] focus:shadow-[0_0_12px_#8B5CF6] focus:border-[#8B5CF6] transition-all outline-none" />
-            <div className="flex gap-2">
-              <button onClick={() => setClaimModalOpen(false)} className="flex-1 py-3 bg-[#0B1120] border border-white/10 hover:bg-white/10 text-white font-semibold rounded-lg text-xs cursor-pointer transition-colors">닫기</button>
-              <button onClick={() => { navigator.clipboard.writeText(claimMessageText); alert('수정된 정산 청구 문자가 복사되었습니다.'); setClaimModalOpen(false); }} className="flex-1 py-3 hp-primary-btn text-white font-bold rounded-lg text-xs cursor-pointer shadow-md flex items-center justify-center gap-1.5"><Copy className="w-3.5 h-3.5" />복사하기</button>
             </div>
           </div>
         </div>
