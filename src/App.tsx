@@ -111,8 +111,11 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'records' | 'claims' | 'expense' | 'analytics' | 'wallet' | 'trade_centers' | 'auctions' | 'admin'>('records');
   const [adminSubTab, setAdminSubTab] = useState<'campaign' | 'members' | 'analytics'>('members');
   
+  // 💡 앱 접속 시 당일, 당월 날짜로 100% 자동 세팅
+  const [viewMode, setViewMode] = useState<'daily' | 'monthly'>('daily');
   const [selectedDate, setSelectedDate] = useState<string>(() => getTodayKST());
-  const [filterAllDates, setFilterAllDates] = useState<boolean>(false);
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => getTodayKST().substring(0, 7));
+  
   const [tradeFilter, setTradeFilter] = useState<'전체' | 'S등급' | 'A등급' | '수도권' | '충청권' | '영남권' | '호남권'>('전체');
 
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -201,7 +204,7 @@ export default function App() {
       lastLoginAt: profilePayload.last_login_at, loginCount: profilePayload.login_count
     });
 
-    const { data: recordsData } = await supabase.from('driving_records').select('*').eq('user_id', userId).order('date', { ascending: false });
+    const { data: recordsData } = await supabase.from('driving_records').select('*').eq('user_id', userId).order('date', { ascending: false }).limit(5000);
     if (recordsData) {
       setRecords(recordsData.map((r: any) => ({
         id: r.id, date: r.date, startTime: r.start_time || '-', endTime: r.end_time || '-', departure: r.departure, destination: r.destination,
@@ -210,7 +213,7 @@ export default function App() {
       })));
     }
 
-    const { data: expensesData } = await supabase.from('expenses').select('*').eq('user_id', userId).order('date', { ascending: false });
+    const { data: expensesData } = await supabase.from('expenses').select('*').eq('user_id', userId).order('date', { ascending: false }).limit(5000);
     if (expensesData) setExpenses(expensesData.map((e: any) => ({ id: e.id, date: e.date, category: e.category, amount: Number(e.amount), memo: e.memo || '' })));
     
     if (role === 'super_admin' || role === 'manager') fetchAdminData();
@@ -294,7 +297,32 @@ export default function App() {
     setPwdLoading(false);
   };
 
-  // 💡 중복 방지 로직 (동일 날짜, 금액, 출발, 도착 시 업로드 제외)
+  // 💡 달별/일별 데이터 일괄 삭제 기능
+  const handleDeleteViewRecords = async () => {
+    if (!session) return;
+    const isMonthly = viewMode === 'monthly';
+    const target = isMonthly ? selectedMonth : selectedDate;
+    const displayTarget = isMonthly ? `${selectedMonth.replace('-', '년 ')}월` : `${selectedDate.replace(/-/g, '.')} 당일`;
+
+    if (!window.confirm(`⚠️ 경고: [${displayTarget}]에 등록된 모든 운행 일지 데이터가 즉시 삭제됩니다.\n\n정말 일괄 삭제하시겠습니까?`)) return;
+    
+    const { error } = isMonthly
+      ? await supabase.from('driving_records').delete().eq('user_id', session.user.id).like('date', `${target}%`)
+      : await supabase.from('driving_records').delete().eq('user_id', session.user.id).eq('date', target);
+
+    if (!error) {
+      setRecords(records.filter(r => isMonthly ? !r.date.startsWith(target) : r.date !== target));
+      alert(`[${displayTarget}] 데이터가 모두 삭제되었습니다.`);
+    } else {
+      alert('삭제 중 오류가 발생했습니다: ' + error.message);
+    }
+  };
+
+  const isBannedWord = (text: string) => {
+    const junkWords = ['수수료', '요금', '수입', '출금', '입금', '보험', '취소', '포인트', '지원금', '충전'];
+    return junkWords.some(w => text.includes(w));
+  };
+
   const isDuplicateRecord = (newRec: any) => {
     return records.some(r => 
       r.date === newRec.date &&
@@ -304,7 +332,6 @@ export default function App() {
     );
   };
 
-  // 💡 파일 분석 통합 함수 (CSV + DB)
   const handleFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -312,27 +339,33 @@ export default function App() {
     const fileName = file.name.toLowerCase();
 
     const processParsedData = (parsedArray: any[]) => {
-      if (parsedArray.length === 0) {
-        alert('데이터를 변환할 수 없습니다. 빈 파일이거나 알 수 없는 양식입니다.');
+      const cleanArray = parsedArray.filter(r => 
+        r.gross_amount > 0 &&
+        !isBannedWord(r.departure) && 
+        !isBannedWord(r.destination) &&
+        r.departure !== '출발지 미상'
+      );
+
+      if (cleanArray.length === 0) {
+        alert('유효한 운행 데이터(출발/도착/운임)를 찾을 수 없습니다. 입출금 찌꺼기 내역만 있거나 양식이 다릅니다.');
         setImporting(false);
-        e.target.value = ''; // 💡 파일 재선택을 위해 초기화
+        e.target.value = '';
         return;
       }
 
-      // 💡 중복 데이터 걸러내기 (Deduplication)
-      const newRecords = parsedArray.filter(r => !isDuplicateRecord(r));
+      const newRecords = cleanArray.filter(r => !isDuplicateRecord(r));
       
       if (newRecords.length === 0) {
-        alert(`분석된 ${parsedArray.length}건 모두 앱에 이미 등록된 중복 데이터입니다.`);
+        alert(`분석된 ${cleanArray.length}건 모두 앱에 이미 등록된 중복 데이터입니다.`);
         setImportPreview([]);
       } else {
-        if (parsedArray.length !== newRecords.length) {
-          alert(`분석된 ${parsedArray.length}건 중 기존 중복 데이터 ${parsedArray.length - newRecords.length}건을 제외하고 ${newRecords.length}건을 환승합니다.`);
+        if (cleanArray.length !== newRecords.length) {
+          alert(`분석된 ${cleanArray.length}건 중 기존 중복 데이터 ${cleanArray.length - newRecords.length}건을 제외하고 ${newRecords.length}건만 환승합니다.`);
         }
         setImportPreview(newRecords);
       }
       setImporting(false);
-      e.target.value = ''; // 💡 초기화 (버튼 무반응 해결)
+      e.target.value = ''; 
     };
 
     if (fileName.endsWith('.csv')) {
@@ -364,7 +397,7 @@ export default function App() {
               date: d || getTodayKST(), departure: depIdx !== -1 ? cols[depIdx] : '알수없음', destination: destIdx !== -1 ? cols[destIdx] : '알수없음',
               gross_amount: gross, fee_rate: 20, fuel_amount: 0, extra_expense_amount: 0, tip_amount: 0, is_gross_paid: true, is_expense_paid: true, net_amount: net, total_claim_amount: gross
             };
-          }).filter(r => r.gross_amount > 0);
+          });
           
           processParsedData(parsed);
         } catch (err) { alert('파일을 분석하는 중 오류가 발생했습니다.'); e.target.value = ''; }
@@ -399,10 +432,8 @@ export default function App() {
           let query = "SELECT c.CASH_DATETIME, c.CASH_MONEY, c.CASH_SUMMARY";
           if (hasTCall) query += ", t.CALL_START, t.CALL_END";
           else query += ", '' AS CALL_START, '' AS CALL_END";
-          
           if (hasTItem) query += ", i.ITEM_NAME";
           else query += ", '' AS ITEM_NAME";
-          
           query += " FROM T_CASH c ";
           if (hasTCall) query += " LEFT JOIN T_CALL t ON c.CALL_ID = t._id ";
           if (hasTItem) query += " LEFT JOIN T_ITEMMST i ON c.ITEM_ID = i._id ";
@@ -419,9 +450,7 @@ export default function App() {
               let callEnd = String(row[4] || '');
               let itemName = String(row[5] || '');
               
-              if (summary.includes('수수료') || itemName.includes('수수료') || itemName.includes('지출') || summary.includes('출금') || itemName.includes('출금')) {
-                 continue;
-              }
+              if (isBannedWord(summary) || isBannedWord(itemName)) continue;
               
               if (d.includes(' ')) d = d.split(' ')[0]; 
               else if (d.length >= 10 && !isNaN(Number(d))) {
@@ -448,14 +477,12 @@ export default function App() {
                 }
               }
               
-              if (!dep || dep === '요금' || dep === '수입') dep = '출발지 미상';
-              if (!dest) dest = '도착지 미상';
+              if (!dep || isBannedWord(dep)) dep = '출발지 미상';
+              if (!dest || isBannedWord(dest)) dest = '도착지 미상';
+              if (dep === '출발지 미상' && dest === '도착지 미상') continue;
               
               parsed.push({
-                date: d || getTodayKST(),
-                departure: dep,
-                destination: dest,
-                gross_amount: money,
+                date: d || getTodayKST(), departure: dep, destination: dest, gross_amount: money,
                 fee_rate: 20, fuel_amount: 0, extra_expense_amount: 0, tip_amount: 0,
                 is_gross_paid: true, is_expense_paid: true, 
                 net_amount: Math.round(money * 0.8), total_claim_amount: money
@@ -469,7 +496,6 @@ export default function App() {
           }
         }
         
-        // Fallback for unknown DB structures
         const tablesRes = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'");
         if (tablesRes.length === 0) { alert('DB에 테이블이 없습니다.'); setImporting(false); e.target.value = ''; return; }
         
@@ -494,6 +520,9 @@ export default function App() {
         let finalDateIdx = dateIdx !== -1 ? dateIdx : 1; 
         
         const parsedFallback = bestData.map((row: any) => {
+          const rowStr = String(row).toLowerCase();
+          if (isBannedWord(rowStr)) return null;
+
           let d = row[finalDateIdx] ? String(row[finalDateIdx]) : '';
           
           if (d.length >= 10 && !isNaN(Number(d))) {
@@ -513,19 +542,17 @@ export default function App() {
           const net = Math.round(gross * 0.8);
           
           return {
-            date: d || getTodayKST(),
-            departure: depIdx !== -1 && row[depIdx] ? String(row[depIdx]) : '출발지 미상',
+            date: d || getTodayKST(), departure: depIdx !== -1 && row[depIdx] ? String(row[depIdx]) : '출발지 미상',
             destination: destIdx !== -1 && row[destIdx] ? String(row[destIdx]) : '도착지 미상',
             gross_amount: gross, fee_rate: 20, fuel_amount: 0, extra_expense_amount: 0, tip_amount: 0,
             is_gross_paid: true, is_expense_paid: true, net_amount: net, total_claim_amount: gross
           };
-        }).filter(r => r.gross_amount > 0);
+        }).filter(r => r !== null);
         
         processParsedData(parsedFallback);
       } catch (err) {
-        alert('DB 파일을 분석하는 중 오류가 발생했습니다. 손상된 파일일 수 있습니다.');
-        setImporting(false);
-        e.target.value = '';
+        alert('DB 파일을 분석하는 중 오류가 발생했습니다.');
+        setImporting(false); e.target.value = '';
       }
     } else {
       alert('.csv 또는 .db 확장자 파일만 업로드 가능합니다.');
@@ -702,7 +729,11 @@ export default function App() {
     setAdminSelectedUserRecords(userRecs);
   };
 
-  const filteredRecords = filterAllDates ? records : records.filter((r) => r.date === selectedDate);
+  // 💡 렉을 줄이는 달별(월간)/일간 보기 필터링 로직
+  const filteredRecords = viewMode === 'daily' 
+    ? records.filter((r) => r.date === selectedDate)
+    : records.filter((r) => r.date.startsWith(selectedMonth));
+
   const unpaidRecords = records.filter((r) => !r.isGrossPaid || (!r.isExpensePaid && (r.fuelAmount > 0 || r.extraExpenseAmount > 0)));
   const totalUnpaidAmount = unpaidRecords.reduce((acc, r) => {
     let amt = 0;
@@ -881,7 +912,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* 1. 운행 일지 탭 (CSV & DB 자동 환승 업로드 기능 탑재) */}
+        {/* 1. 운행 일지 탭 */}
         {activeTab === 'records' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 fade-in-text">
             <div className="glass-card rounded-xl p-6 shadow-lg h-fit">
@@ -914,13 +945,30 @@ export default function App() {
                   <h3 className="text-sm font-bold text-white flex items-center gap-2"><FileText className="w-4 h-4 text-[#8B5CF6]" />운행 일지 및 정산 현황 ({filteredRecords.length}건)</h3>
                   <p className="text-[11px] text-[#38BDF8] font-medium mt-1 ml-6">운임과 대납 경비의 입금 상태를 분리해서 관리하세요.</p>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <button onClick={() => setImportModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#8B5CF6]/10 hover:bg-[#8B5CF6]/20 text-[#8B5CF6] text-xs font-bold rounded-lg border border-[#8B5CF6]/30 transition-all cursor-pointer"><Database className="w-3.5 h-3.5" />타사 앱 장부 불러오기</button>
-                  <div className="flex items-center gap-2 bg-[#0B1120] px-3 py-1.5 rounded-lg border border-white/10">
-                    <input type="checkbox" id="allDates" checked={filterAllDates} onChange={(e) => setFilterAllDates(e.target.checked)} className="w-3.5 h-3.5 rounded text-[#8B5CF6] cursor-pointer" />
-                    <label htmlFor="allDates" className="text-xs text-slate-300 font-semibold cursor-pointer">전체 보기</label>
+                
+                {/* 💡 월간/일간 뷰 토글 및 렉 방지 삭제 버튼 */}
+                <div className="flex flex-col items-end gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button onClick={() => setImportModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#8B5CF6]/10 hover:bg-[#8B5CF6]/20 text-[#8B5CF6] text-xs font-bold rounded-lg border border-[#8B5CF6]/30 transition-all cursor-pointer"><Database className="w-3.5 h-3.5" />타사 장부 불러오기</button>
+                    <div className="flex items-center gap-2 bg-[#0B1120] px-2 py-1 rounded-lg border border-white/10">
+                      <select 
+                        value={viewMode} 
+                        onChange={(e) => setViewMode(e.target.value as 'daily' | 'monthly')}
+                        className="bg-transparent text-[#38BDF8] text-xs font-bold outline-none cursor-pointer"
+                      >
+                        <option value="daily">일간 보기</option>
+                        <option value="monthly">월별 보기</option>
+                      </select>
+                    </div>
+                    {viewMode === 'daily' ? (
+                      <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="bg-white text-black font-bold text-xs px-2 py-1.5 rounded-lg border-0 focus:ring-2 focus:ring-[#8B5CF6]" />
+                    ) : (
+                      <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="bg-white text-black font-bold text-xs px-2 py-1.5 rounded-lg border-0 focus:ring-2 focus:ring-[#8B5CF6]" />
+                    )}
                   </div>
-                  {!filterAllDates && <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="bg-white text-black font-bold text-xs px-2 py-1.5 rounded-lg border-0 focus:ring-2 focus:ring-[#8B5CF6]" />}
+                  <button onClick={handleDeleteViewRecords} className="text-[11px] text-[#EC4899] hover:text-rose-400 font-bold underline cursor-pointer mr-1">
+                    {viewMode === 'monthly' ? `🗑️ ${selectedMonth.replace('-', '년 ')}월 일괄 삭제` : `🗑️ ${selectedDate.replace(/-/g, '.')} 일괄 삭제`}
+                  </button>
                 </div>
               </div>
 
@@ -1214,7 +1262,7 @@ export default function App() {
           </div>
         )}
 
-        {/* 8. 관제탑 관리자 탭 */}
+        {/* 8. 관제탑 관리자 탭 (접속 데이터 포함 풀버전) */}
         {activeTab === 'admin' && isAdminUser && (
           <div className="space-y-6 fade-in-text">
             <div className="mb-2">
@@ -1348,7 +1396,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 💡 모달: 타사 엑셀(CSV) 및 DB(SQLite) 불러오기 (Import) - 초강력 패턴 인식 */}
+      {/* 💡 모달: 타사 엑셀(CSV) 및 DB(SQLite) 불러오기 (Import) - 초강력 찌꺼기 차단 */}
       {importModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="w-full max-w-lg glass-card rounded-2xl p-6 shadow-2xl relative">
@@ -1394,51 +1442,6 @@ export default function App() {
                 <Upload className="w-4 h-4" />
                 {importPreview.length}건 전체 저장하기
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 모달: 운행 일지 수정 (분리 미수금 호환) */}
-      {editingRecord && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="w-full max-w-sm glass-card rounded-2xl p-6 shadow-2xl relative">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-sm font-bold text-white flex items-center gap-1.5"><Edit2 className="w-4 h-4 text-[#8B5CF6]" /> 운행 내역 수정</h3>
-              <button onClick={() => setEditingRecord(null)} className="text-slate-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
-            </div>
-            <form onSubmit={handleUpdateRecord} className="space-y-3.5">
-              <div><label className="block text-[11px] font-semibold text-[#38BDF8] mb-1">운행 일자 변경</label><input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="w-full px-3 py-2 rounded-lg" required /></div>
-              <div className="grid grid-cols-2 gap-2">
-                <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">출발지</label><input type="text" value={editDeparture} onChange={(e) => setEditDeparture(e.target.value)} className="w-full px-3 py-2 rounded-lg" required /></div>
-                <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">도착지</label><input type="text" value={editDestination} onChange={(e) => setEditDestination(e.target.value)} className="w-full px-3 py-2 rounded-lg" required /></div>
-              </div>
-              <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">운임(원)</label><input type="text" value={editGross} onChange={(e) => setEditGross(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" required /></div>
-              <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">대납 주유비</label><input type="text" value={editFuel} onChange={(e) => setEditFuel(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" /></div>
-              <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">통행료 등 추가경비</label><input type="text" value={editExtra} onChange={(e) => setEditExtra(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" /></div>
-              <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">기사 팁</label><input type="text" value={editTip} onChange={(e) => setEditTip(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" /></div>
-              <button type="submit" className="w-full mt-2 py-3 hp-primary-btn font-bold rounded-lg text-xs cursor-pointer">수정 완료</button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* 모달: 청구 문자 직접 편집 생성 (분리 미수금 호환) */}
-      {claimModalOpen && selectedClaimRecord && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="w-full max-w-lg glass-card rounded-2xl p-6 shadow-2xl relative">
-            <button onClick={() => setClaimModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 cursor-pointer"><X className="w-5 h-5" /></button>
-            <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2"><MessageSquare className="w-5 h-5 text-[#8B5CF6]" />정산 청구 문자 편집 및 복사</h3>
-            <p className="text-xs text-slate-400 mb-4">미입금된 내역만 자동으로 체크되어 문구가 생성됩니다. 수정한 후 복사하세요.</p>
-            <div className="flex gap-4 mb-4 pb-4 border-b border-white/10">
-              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 cursor-pointer"><input type="checkbox" checked={includeGross} onChange={() => handleToggleInclude('gross')} className="rounded text-[#8B5CF6]" disabled={selectedClaimRecord.isGrossPaid} /> 기본 운임</label>
-              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 cursor-pointer"><input type="checkbox" checked={includeFuel} onChange={() => handleToggleInclude('fuel')} className="rounded text-[#8B5CF6]" disabled={selectedClaimRecord.fuelAmount === 0 || selectedClaimRecord.isExpensePaid} /> 주유비</label>
-              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 cursor-pointer"><input type="checkbox" checked={includeExtra} onChange={() => handleToggleInclude('extra')} className="rounded text-[#8B5CF6]" disabled={selectedClaimRecord.extraExpenseAmount === 0 || selectedClaimRecord.isExpensePaid} /> 추가경비</label>
-            </div>
-            <textarea rows={10} value={claimMessageText} onChange={(e) => setClaimMessageText(e.target.value)} className="w-full p-4 rounded-xl text-xs font-mono mb-4 leading-relaxed bg-[#FFFFFF] text-[#000000] focus:shadow-[0_0_12px_#8B5CF6] focus:border-[#8B5CF6] transition-all outline-none" />
-            <div className="flex gap-2">
-              <button onClick={() => setClaimModalOpen(false)} className="flex-1 py-3 bg-[#0B1120] border border-white/10 hover:bg-white/10 text-white font-semibold rounded-lg text-xs cursor-pointer transition-colors">닫기</button>
-              <button onClick={() => { navigator.clipboard.writeText(claimMessageText); alert('수정된 정산 청구 문자가 복사되었습니다.'); setClaimModalOpen(false); }} className="flex-1 py-3 hp-primary-btn text-white font-bold rounded-lg text-xs cursor-pointer shadow-md flex items-center justify-center gap-1.5"><Copy className="w-3.5 h-3.5" />복사하기</button>
             </div>
           </div>
         </div>
