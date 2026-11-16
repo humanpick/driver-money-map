@@ -88,10 +88,12 @@ const AUCTION_SCHEDULES = [
 ];
 
 export default function App() {
-  const { needRefresh: [needRefresh, setNeedRefresh], updateServiceWorker } = useRegisterSW({ onRegistered(r) {}, onRegisterError(error) {} });
+  const { needRefresh: [needRefresh], updateServiceWorker } = useRegisterSW({ onRegistered(r) {}, onRegisterError(error) {} });
 
   useEffect(() => {
-    if (needRefresh) updateServiceWorker(true);
+    if (needRefresh) {
+      updateServiceWorker(true);
+    }
   }, [needRefresh, updateServiceWorker]);
 
   const [session, setSession] = useState<any>(null);
@@ -110,13 +112,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'records' | 'claims' | 'expense' | 'analytics' | 'wallet' | 'trade_centers' | 'auctions' | 'admin'>('records');
   const [adminSubTab, setAdminSubTab] = useState<'campaign' | 'members' | 'analytics'>('members');
   
-  // 💡 신규 기능: 운행 일지 필터 모드 ('월간(당월)'을 기본값으로 설정)
-  const [recordFilterMode, setRecordFilterMode] = useState<'day' | 'month' | 'all'>('month');
-  const [selectedDate, setSelectedDate] = useState<string>(() => getTodayKST());
-  const [selectedMonth, setSelectedMonth] = useState<string>(() => getTodayKST().substring(0, 7));
-  
-  // 💡 신규 기능: 선택 다중 삭제를 위한 ID 관리 배열
-  const [selectedRecordIds, setSelectedRecordIds] = useState<string[]>([]);
+  const [dateFilter, setDateFilter] = useState<'today' | 'month' | 'all' | 'custom'>('month');
+  const [customDate, setCustomDate] = useState<string>(() => getTodayKST());
   
   const [tradeFilter, setTradeFilter] = useState<'전체' | 'S등급' | 'A등급' | '수도권' | '충청권' | '영남권' | '호남권'>('전체');
 
@@ -140,6 +137,8 @@ export default function App() {
   const [includeExtra, setIncludeExtra] = useState(true); const [claimMessageText, setClaimMessageText] = useState('');
   
   const [records, setRecords] = useState<DrivingRecord[]>([]);
+  const [selectedRecordIds, setSelectedRecordIds] = useState<string[]>([]);
+
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
   const [accounts, setAccounts] = useState<BankAccount[]>(() => {
     try { const saved = localStorage.getItem('jundriver_local_accounts_merged'); if (saved) return JSON.parse(saved); } catch (e) {}
@@ -166,10 +165,9 @@ export default function App() {
 
   useEffect(() => { localStorage.setItem('jundriver_local_accounts_merged', JSON.stringify(accounts)); }, [accounts]);
 
-  // 필터가 바뀔 때마다 선택 영역 초기화 (안전장치)
   useEffect(() => {
     setSelectedRecordIds([]);
-  }, [recordFilterMode, selectedDate, selectedMonth]);
+  }, [dateFilter, customDate]);
 
   const fetchNotices = async () => {
     const { data, error } = await supabase.from('announcements').select('*').order('updated_at', { ascending: false });
@@ -353,10 +351,7 @@ export default function App() {
     if (!error) {
       const updated = [{ ...payload, startTime: payload.start_time, endTime: payload.end_time, grossAmount: gross, feeRate, fuelAmount: fuel, extraExpenseAmount: extraExp, tipAmount: tip, isGrossPaid: false, isExpensePaid: false, netAmount: Math.round(net), totalClaimAmount: Math.round(claimTotal) }, ...records];
       updated.sort((a, b) => b.date.localeCompare(a.date));
-      setRecords(updated); 
-      // 등록된 날짜가 포함된 월이나 일로 필터를 맞춰 줍니다.
-      setSelectedDate(newDate);
-      setSelectedMonth(newDate.substring(0, 7));
+      setRecords(updated); setSelectedDate(newDate);
       setNewDeparture(''); setNewDestination(''); setNewGross(''); setNewFuel(''); setNewExtraExpense(''); setNewTip('');
     }
   };
@@ -400,39 +395,34 @@ export default function App() {
     } else { alert('수정 실패: ' + error.message); }
   };
 
-  // 개별 삭제 함수
   const handleDeleteRecord = async (id: string) => {
+    if (!window.confirm('이 운행 일지를 삭제하시겠습니까?')) return;
     const { error } = await supabase.from('driving_records').delete().eq('id', id);
-    if (!error) setRecords(records.filter((r) => r.id !== id));
-  };
-
-  // 💡 다중 선택 (일괄 삭제) 함수들
-  const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.checked) {
-      setSelectedRecordIds(filteredRecords.map(r => r.id));
-    } else {
-      setSelectedRecordIds([]);
-    }
-  };
-
-  const handleSelectRecord = (id: string, checked: boolean) => {
-    if (checked) {
-      setSelectedRecordIds([...selectedRecordIds, id]);
-    } else {
-      setSelectedRecordIds(selectedRecordIds.filter(recordId => recordId !== id));
-    }
-  };
-
-  const handleBulkDelete = async () => {
-    if (selectedRecordIds.length === 0) return;
-    if (!window.confirm(`선택한 ${selectedRecordIds.length}건의 일지를 정말 삭제하시겠습니까?\n(복구할 수 없습니다)`)) return;
-    
-    const { error } = await supabase.from('driving_records').delete().in('id', selectedRecordIds);
     if (!error) {
-      setRecords(records.filter(r => !selectedRecordIds.includes(r.id)));
-      setSelectedRecordIds([]);
-    } else {
-      alert('일괄 삭제 중 오류가 발생했습니다: ' + error.message);
+      setRecords(records.filter((r) => r.id !== id));
+      setSelectedRecordIds(prev => prev.filter(rid => rid !== id));
+    }
+  };
+
+  // 💡 [에러 수정 완료] 1000개 이상의 ID 삭제 시 URL 제한(Bad Request) 방지 처리
+  const handleBulkDeleteRecords = async () => {
+    if (selectedRecordIds.length === 0) return;
+    if (!window.confirm(`선택한 ${selectedRecordIds.length}건의 운행 일지를 정말 삭제하시겠습니까?`)) return;
+    
+    try {
+      // 50개 단위로 배열을 쪼개서 삭제 요청 전송 (Chunking)
+      const chunkSize = 50;
+      for (let i = 0; i < selectedRecordIds.length; i += chunkSize) {
+        const chunk = selectedRecordIds.slice(i, i + chunkSize);
+        const { error } = await supabase.from('driving_records').delete().in('id', chunk);
+        if (error) throw error;
+      }
+
+      setRecords(records.filter((r) => !selectedRecordIds.includes(r.id)));
+      setSelectedRecordIds([]); // 선택 초기화
+      alert('일괄 삭제가 성공적으로 완료되었습니다.');
+    } catch (error: any) {
+      alert('삭제 실패: ' + error.message);
     }
   };
 
@@ -499,11 +489,11 @@ export default function App() {
     setAdminSelectedUserRecords(userRecs);
   };
 
-  // 💡 필터 모드에 따라 목록 렌더링
   const filteredRecords = records.filter((r) => {
-    if (recordFilterMode === 'all') return true;
-    if (recordFilterMode === 'month') return r.date.startsWith(selectedMonth);
-    if (recordFilterMode === 'day') return r.date === selectedDate;
+    if (dateFilter === 'all') return true;
+    if (dateFilter === 'today') return r.date === getTodayKST();
+    if (dateFilter === 'month') return r.date.startsWith(getTodayKST().substring(0, 7)); // 당월 기준
+    if (dateFilter === 'custom') return r.date === customDate;
     return true;
   });
 
@@ -517,7 +507,7 @@ export default function App() {
   
   const isAdminUser = currentUserRole === 'super_admin' || currentUserRole === 'manager';
 
-  const currentMonthPrefix = selectedDate.substring(0, 7);
+  const currentMonthPrefix = customDate.substring(0, 7); 
   const monthlyRecords = records.filter((r) => r.date.startsWith(currentMonthPrefix));
   const monthlyExpenses = expenses.filter((e) => e.date.startsWith(currentMonthPrefix));
   const monthlyGross = monthlyRecords.reduce((acc, cur) => acc + cur.grossAmount, 0);
@@ -565,7 +555,6 @@ export default function App() {
       <div className="min-h-screen bg-[#0B1120] text-slate-100 flex items-center justify-center p-4 relative overflow-hidden">
         {injectStyles()}
         
-        {/* 모바일 화면 왜곡을 방지하는 절대 중앙 정렬 (inset-x-0 mx-auto) 업데이트 팝업 */}
         {needRefresh && (
           <div className="fixed bottom-6 inset-x-0 mx-auto z-[9999] glass-card border border-[#8B5CF6]/50 p-5 rounded-2xl shadow-[0_0_20px_rgba(139,92,246,0.3)] flex flex-col items-center gap-3 w-[90%] max-w-sm fade-in-text">
             <div className="flex items-center gap-2"><RefreshCw className="w-5 h-5 text-[#8B5CF6] animate-spin" /><span className="text-sm font-bold text-white">새로운 버전이 출시되었습니다!</span></div>
@@ -630,7 +619,6 @@ export default function App() {
     <div className="min-h-screen bg-[#0B1120] text-slate-100 pb-20 relative">
       {injectStyles()}
       
-      {/* 로그인 후에도 화면 중앙 정렬 100% 보장하는 업데이트 알림 팝업 */}
       {needRefresh && (
         <div className="fixed bottom-6 inset-x-0 mx-auto z-[10000] glass-card border border-[#8B5CF6]/50 p-5 rounded-2xl shadow-[0_0_20px_rgba(139,92,246,0.3)] flex flex-col items-center gap-3 w-[90%] max-w-sm fade-in-text">
           <div className="flex items-center gap-2"><RefreshCw className="w-5 h-5 text-[#8B5CF6] animate-spin" /><span className="text-sm font-bold text-white">새로운 버전이 출시되었습니다!</span></div>
@@ -667,7 +655,6 @@ export default function App() {
           <section className="bg-[#EC4899]/10 border border-[#EC4899]/40 rounded-2xl p-4 flex items-center justify-between shadow-[0_0_15px_rgba(236,72,153,0.1)] fade-in-text"><div className="flex items-center gap-3"><AlertTriangle className="w-5 h-5 text-[#EC4899]" /><div><span className="text-xs font-bold text-[#EC4899]">미입금 내역 ({unpaidRecords.length}건) 회수 필요</span><div className="text-xl font-extrabold text-white">총 {totalUnpaidAmount.toLocaleString()}원</div></div></div><button onClick={() => setActiveTab('claims')} className="px-4 py-2 hp-primary-btn rounded-xl text-xs font-bold cursor-pointer">청구 관리</button></section>
         )}
 
-        {/* 모바일 2단 배치 탭 네비게이션 */}
         <div className="bg-[#0B1120] p-1.5 rounded-2xl border border-white/10 shadow-lg">
           <div className="grid grid-cols-4 md:flex md:flex-wrap gap-1.5">
             <button onClick={() => setActiveTab('records')} className={`py-2 px-1 text-center rounded-xl text-xs font-bold cursor-pointer transition-all ${activeTab === 'records' ? 'hp-primary-btn shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'bg-white/5 text-slate-300 hover:text-white'}`}>운행 일지</button>
@@ -677,7 +664,6 @@ export default function App() {
             <button onClick={() => setActiveTab('expense')} className={`py-2 px-1 text-center rounded-xl text-xs font-bold cursor-pointer transition-all ${activeTab === 'expense' ? 'hp-primary-btn shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'bg-white/5 text-slate-300 hover:text-white'}`}>경비 장부</button>
             <button onClick={() => setActiveTab('analytics')} className={`py-2 px-1 text-center rounded-xl text-xs font-bold cursor-pointer transition-all ${activeTab === 'analytics' ? 'hp-primary-btn shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'bg-white/5 text-slate-300 hover:text-white'}`}>통계 요약</button>
             
-            {/* 2번째 줄 */}
             <button onClick={() => setActiveTab('wallet')} className={`py-2 px-1 text-center rounded-xl text-xs font-bold cursor-pointer transition-all ${activeTab === 'wallet' ? 'hp-primary-btn shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'bg-white/5 text-slate-300 hover:text-white'}`}>계좌 관리</button>
             <button onClick={() => setActiveTab('trade_centers')} className={`py-2 px-1 text-center rounded-xl text-xs font-bold cursor-pointer transition-all ${activeTab === 'trade_centers' ? 'hp-primary-btn shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'bg-white/5 text-slate-300 hover:text-white'}`}>매매단지</button>
             <button onClick={() => setActiveTab('auctions')} className={`py-2 px-1 text-center rounded-xl text-xs font-bold cursor-pointer transition-all ${activeTab === 'auctions' ? 'hp-primary-btn shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'bg-white/5 text-slate-300 hover:text-white'}`}>경매장</button>
@@ -689,7 +675,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* 1. 운행 일지 탭 (당월/당일 필터 + 다중 삭제) */}
         {activeTab === 'records' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 fade-in-text">
             <div className="glass-card rounded-xl p-6 shadow-lg h-fit">
@@ -717,42 +702,36 @@ export default function App() {
             </div>
             
             <div className="lg:col-span-2 glass-card rounded-xl p-6 shadow-lg">
-              <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-4 gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-4 gap-3 border-b border-white/10 pb-4">
                 <div>
                   <h3 className="text-sm font-bold text-white flex items-center gap-2"><FileText className="w-4 h-4 text-[#8B5CF6]" />운행 일지 및 정산 현황 ({filteredRecords.length}건)</h3>
                   <p className="text-[11px] text-[#38BDF8] font-medium mt-1 ml-6">운임과 대납 경비의 입금 상태를 분리해서 관리하세요.</p>
                 </div>
-                {/* 💡 신규: 필터 UI (일간/월간/전체) */}
-                <div className="flex flex-col items-end gap-2 mt-2 sm:mt-0">
-                  <div className="flex items-center bg-[#0B1120] p-1 rounded-lg border border-white/10">
-                    <button onClick={() => setRecordFilterMode('day')} className={`px-3 py-1.5 text-[11px] font-bold rounded-md transition-all cursor-pointer ${recordFilterMode === 'day' ? 'bg-[#8B5CF6] text-white shadow' : 'text-slate-400 hover:text-white'}`}>일간</button>
-                    <button onClick={() => setRecordFilterMode('month')} className={`px-3 py-1.5 text-[11px] font-bold rounded-md transition-all cursor-pointer ${recordFilterMode === 'month' ? 'bg-[#8B5CF6] text-white shadow' : 'text-slate-400 hover:text-white'}`}>월간(당월)</button>
-                    <button onClick={() => setRecordFilterMode('all')} className={`px-3 py-1.5 text-[11px] font-bold rounded-md transition-all cursor-pointer ${recordFilterMode === 'all' ? 'bg-[#8B5CF6] text-white shadow' : 'text-slate-400 hover:text-white'}`}>전체</button>
+                
+                <div className="flex flex-col gap-2 shrink-0">
+                  <div className="flex items-center gap-1 bg-[#0B1120] p-1 rounded-lg border border-white/10 text-[11px] font-bold">
+                    <button onClick={() => setDateFilter('today')} className={`px-2.5 py-1.5 rounded transition-colors cursor-pointer ${dateFilter === 'today' ? 'bg-[#8B5CF6] text-white' : 'text-slate-400 hover:text-white'}`}>당일</button>
+                    <button onClick={() => setDateFilter('month')} className={`px-2.5 py-1.5 rounded transition-colors cursor-pointer ${dateFilter === 'month' ? 'bg-[#8B5CF6] text-white' : 'text-slate-400 hover:text-white'}`}>당월</button>
+                    <button onClick={() => setDateFilter('all')} className={`px-2.5 py-1.5 rounded transition-colors cursor-pointer ${dateFilter === 'all' ? 'bg-[#8B5CF6] text-white' : 'text-slate-400 hover:text-white'}`}>전체</button>
                   </div>
-                  {recordFilterMode === 'day' && <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="bg-white text-black font-bold text-xs px-2.5 py-1.5 rounded-lg border-0 focus:ring-2 focus:ring-[#8B5CF6] w-[130px]" />}
-                  {recordFilterMode === 'month' && <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="bg-white text-black font-bold text-xs px-2.5 py-1.5 rounded-lg border-0 focus:ring-2 focus:ring-[#8B5CF6] w-[130px]" />}
+                  <input type="date" value={customDate} onChange={(e) => { setCustomDate(e.target.value); setDateFilter('custom'); }} className={`bg-white text-black font-bold text-[11px] px-2 py-1.5 rounded-lg border-0 focus:ring-2 focus:ring-[#8B5CF6] cursor-pointer w-full ${dateFilter === 'custom' ? 'ring-2 ring-[#8B5CF6]' : ''}`} />
                 </div>
               </div>
 
-              {/* 💡 신규: 전체 선택 및 일괄 삭제 메뉴 바 */}
-              {filteredRecords.length > 0 && (
-                <div className="flex justify-between items-center bg-[#0B1120] p-3 rounded-xl mb-3 border border-white/10">
-                  <label className="flex items-center gap-2 text-xs font-bold text-slate-300 cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      checked={selectedRecordIds.length === filteredRecords.length}
-                      onChange={handleSelectAll}
-                      className="rounded text-[#8B5CF6] w-4 h-4 cursor-pointer focus:ring-[#8B5CF6] focus:ring-offset-[#0B1120]"
-                    />
-                    전체 선택
-                  </label>
-                  {selectedRecordIds.length > 0 && (
-                    <button onClick={handleBulkDelete} className="px-3 py-1.5 bg-[#EC4899]/20 text-[#EC4899] border border-[#EC4899]/40 hover:bg-[#EC4899]/30 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer">
-                      <Trash2 className="w-3.5 h-3.5" /> 선택 항목 삭제 ({selectedRecordIds.length})
-                    </button>
-                  )}
-                </div>
-              )}
+              <div className="flex items-center justify-between bg-white/5 p-3 rounded-xl mb-3 border border-white/10">
+                <label className="flex items-center gap-2 text-xs font-semibold text-slate-300 cursor-pointer">
+                  <input type="checkbox" 
+                         checked={filteredRecords.length > 0 && selectedRecordIds.length === filteredRecords.length} 
+                         onChange={(e) => setSelectedRecordIds(e.target.checked ? filteredRecords.map(r => r.id) : [])} 
+                         className="w-4 h-4 rounded text-[#8B5CF6] cursor-pointer bg-[#0B1120] border-white/20" />
+                  전체 선택 ({selectedRecordIds.length}/{filteredRecords.length})
+                </label>
+                {selectedRecordIds.length > 0 && (
+                  <button onClick={handleBulkDeleteRecords} className="px-3 py-1.5 bg-[#EC4899]/20 hover:bg-[#EC4899]/40 text-[#EC4899] text-[11px] font-bold rounded-lg flex items-center gap-1 transition-colors cursor-pointer">
+                    <Trash2 className="w-3.5 h-3.5" /> 선택 삭제
+                  </button>
+                )}
+              </div>
 
               <div className="space-y-3 max-h-[650px] overflow-y-auto pr-1">
                 {filteredRecords.length === 0 ? (
@@ -763,20 +742,16 @@ export default function App() {
                     const hasExpense = r.fuelAmount > 0 || r.extraExpenseAmount > 0;
                     const expenseTotal = r.fuelAmount + r.extraExpenseAmount;
                     const isFullyPaid = r.isGrossPaid && (!hasExpense || r.isExpensePaid);
+                    const isChecked = selectedRecordIds.includes(r.id);
 
                     return (
-                      <div key={r.id} className={`glass-card p-4 rounded-xl transition-all ${!isFullyPaid ? 'border-[#EC4899]/30 shadow-[0_0_10px_rgba(236,72,153,0.1)]' : 'border-white/10'}`}>
+                      <div key={r.id} className={`glass-card p-4 rounded-xl transition-all relative ${!isFullyPaid ? 'border-[#EC4899]/30 shadow-[0_0_10px_rgba(236,72,153,0.1)]' : 'border-white/10'} ${isChecked ? 'ring-2 ring-[#8B5CF6]/50 bg-[#8B5CF6]/5' : ''}`}>
                         <div className="flex flex-col gap-3 pb-3 border-b border-white/10">
                           <div className="flex items-start sm:items-center gap-3">
-                            {/* 💡 신규: 개별 선택 체크박스 */}
-                            <div className="pt-0.5 sm:pt-0">
-                              <input 
-                                type="checkbox"
-                                checked={selectedRecordIds.includes(r.id)}
-                                onChange={(e) => handleSelectRecord(r.id, e.target.checked)}
-                                className="rounded text-[#8B5CF6] w-4 h-4 cursor-pointer focus:ring-[#8B5CF6] focus:ring-offset-[#0B1120]"
-                              />
-                            </div>
+                            <input type="checkbox" checked={isChecked} onChange={(e) => {
+                              if (e.target.checked) setSelectedRecordIds([...selectedRecordIds, r.id]);
+                              else setSelectedRecordIds(selectedRecordIds.filter(id => id !== r.id));
+                            }} className="w-4 h-4 rounded text-[#8B5CF6] cursor-pointer shrink-0 mt-1 sm:mt-0 bg-[#0B1120] border-white/20" />
                             <div className="p-2 rounded-lg bg-[#8B5CF6]/10 text-[#8B5CF6] shrink-0"><MapPin className="w-4 h-4" /></div>
                             <div>
                               <div className="text-sm font-bold text-white flex items-center gap-1.5"><span>{r.departure}</span><ChevronRight className="w-4 h-4 text-[#8B5CF6]" /><span>{r.destination}</span></div>
@@ -784,7 +759,7 @@ export default function App() {
                             </div>
                           </div>
                           
-                          <div className="flex flex-wrap gap-2 pt-1 ml-[3.25rem]">
+                          <div className="flex flex-wrap gap-2 pt-1 ml-11 sm:ml-16">
                             <button onClick={() => toggleGrossPaid(r.id)} className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${r.isGrossPaid ? 'bg-[#38BDF8]/20 text-[#38BDF8] border border-[#38BDF8]/40' : 'bg-[#EC4899]/20 text-[#EC4899] border border-[#EC4899]/40 animate-pulse'}`}>
                               {r.isGrossPaid ? <CheckCircle2 className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />} 운임 {r.grossAmount.toLocaleString()}원
                             </button>
@@ -795,11 +770,10 @@ export default function App() {
                             )}
                           </div>
                         </div>
-                        <div className="pt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                        <div className="pt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs ml-0 sm:ml-7">
                           <div className="flex flex-wrap items-center gap-3 text-slate-400">
                             <span>탁송료: <strong className="text-white">{r.grossAmount.toLocaleString()}원</strong></span>
-                            {r.fuelAmount > 0 && <span className="text-[#8B5CF6] font-semibold flex items-center gap-1"><Fuel className="w-3 h-3" /> 주유비: {r.fuelAmount.toLocaleString()}원</span>}
-                            {r.extraExpenseAmount > 0 && <span className="text-[#38BDF8] font-semibold">경비: {r.extraExpenseAmount.toLocaleString()}원</span>}
+                            {r.fuelAmount > 0 && <span className="text-[#8B5CF6] font-semibold flex items-center gap-1"><Fuel className="w-3 h-3" /> 대납: {expenseTotal.toLocaleString()}원</span>}
                             <span className="text-[#38BDF8] font-semibold">순수입: +{r.netAmount.toLocaleString()}원</span>
                           </div>
                           <div className="flex items-center gap-2">
@@ -808,7 +782,6 @@ export default function App() {
                               <span className="text-sm font-extrabold text-white">{r.totalClaimAmount.toLocaleString()}원</span>
                             </div>
                             <button onClick={() => handleOpenEditModal(r)} title="날짜 및 내역 수정" className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 transition-all cursor-pointer"><Edit2 className="w-3.5 h-3.5" /></button>
-                            <button onClick={() => handleDeleteRecord(r.id)} title="개별 삭제" className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 hover:text-[#EC4899] transition-all cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
                           </div>
                         </div>
                       </div>
@@ -820,7 +793,6 @@ export default function App() {
           </div>
         )}
 
-        {/* 2. 청구문자 탭 (분리 미수금 호환) */}
         {activeTab === 'claims' && (
           <div className="glass-card rounded-xl p-6 shadow-lg fade-in-text">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
@@ -855,7 +827,6 @@ export default function App() {
           </div>
         )}
 
-        {/* 3. 경비 장부 탭 */}
         {activeTab === 'expense' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 fade-in-text">
             <div className="glass-card rounded-xl p-6 shadow-lg h-fit">
@@ -892,7 +863,6 @@ export default function App() {
           </div>
         )}
 
-        {/* 4. 통계 요약 탭 */}
         {activeTab === 'analytics' && (
           <div className="space-y-6 fade-in-text">
             <section className="bg-gradient-to-r from-[#0B1120] via-indigo-950/40 to-[#0B1120] border border-[#8B5CF6]/30 rounded-2xl p-6 shadow-xl">
@@ -921,7 +891,6 @@ export default function App() {
           </div>
         )}
 
-        {/* 5. 계좌 관리 탭 */}
         {activeTab === 'wallet' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 fade-in-text">
             <div className="glass-card rounded-xl p-6 shadow-lg h-fit">
@@ -950,7 +919,6 @@ export default function App() {
           </div>
         )}
 
-        {/* 6. 전국 매매단지 안내 탭 */}
         {activeTab === 'trade_centers' && (
           <div className="space-y-5 fade-in-text">
             <div className="glass-card rounded-xl p-5 shadow-lg border border-[#8B5CF6]/30">
@@ -1003,7 +971,6 @@ export default function App() {
           </div>
         )}
 
-        {/* 7. 경매장 일정 탭 */}
         {activeTab === 'auctions' && (
           <div className="space-y-6 fade-in-text">
             <div className="glass-card rounded-xl p-6 shadow-lg border border-[#8B5CF6]/30">
@@ -1053,7 +1020,7 @@ export default function App() {
           </div>
         )}
 
-        {/* 8. 관제탑 관리자 탭 */}
+        {/* 8. 관제탑 관리자 탭 (풀버전) */}
         {activeTab === 'admin' && isAdminUser && (
           <div className="space-y-6 fade-in-text">
             <div className="mb-2">
@@ -1187,7 +1154,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 모달: 운행 일지 수정 */}
+      {/* 모달: 운행 일지 수정 (분리 미수금 호환) */}
       {editingRecord && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="w-full max-w-sm glass-card rounded-2xl p-6 shadow-2xl relative">
@@ -1211,7 +1178,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 모달: 청구 문자 직접 편집 생성 */}
+      {/* 모달: 청구 문자 직접 편집 생성 (분리 미수금 호환) */}
       {claimModalOpen && selectedClaimRecord && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="w-full max-w-lg glass-card rounded-2xl p-6 shadow-2xl relative">
