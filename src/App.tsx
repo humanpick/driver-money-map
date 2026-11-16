@@ -11,8 +11,9 @@ import {
   Upload, FileSpreadsheet, Database
 } from 'lucide-react';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+// 💡 환경변수가 없어도 앱이 하얀 화면으로 죽지 않도록 방어 코드(Fallback) 적용
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder-key';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const ADMIN_DEFAULT_EMAIL = 'beat4989@naver.com';
@@ -296,7 +297,6 @@ export default function App() {
     setPwdLoading(false);
   };
 
-  // 💡 월별 / 연도별 일괄 삭제 기능
   const handleDeleteRecordsByPeriod = async (period: 'month' | 'year') => {
     if (!session) return;
     
@@ -1409,7 +1409,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 💡 모달: 타사 엑셀(CSV) 및 DB(SQLite) 불러오기 (Import) */}
+      {/* 💡 모달: 타사 엑셀(CSV) 및 DB(SQLite) 불러오기 (Import) - 초강력 찌꺼기 차단 */}
       {importModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="w-full max-w-lg glass-card rounded-2xl p-6 shadow-2xl relative">
@@ -1455,6 +1455,51 @@ export default function App() {
                 <Upload className="w-4 h-4" />
                 {importPreview.length}건 전체 저장하기
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 모달: 운행 일지 수정 (분리 미수금 호환) */}
+      {editingRecord && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="w-full max-w-sm glass-card rounded-2xl p-6 shadow-2xl relative">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-sm font-bold text-white flex items-center gap-1.5"><Edit2 className="w-4 h-4 text-[#8B5CF6]" /> 운행 내역 수정</h3>
+              <button onClick={() => setEditingRecord(null)} className="text-slate-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
+            </div>
+            <form onSubmit={handleUpdateRecord} className="space-y-3.5">
+              <div><label className="block text-[11px] font-semibold text-[#38BDF8] mb-1">운행 일자 변경</label><input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="w-full px-3 py-2 rounded-lg" required /></div>
+              <div className="grid grid-cols-2 gap-2">
+                <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">출발지</label><input type="text" value={editDeparture} onChange={(e) => setEditDeparture(e.target.value)} className="w-full px-3 py-2 rounded-lg" required /></div>
+                <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">도착지</label><input type="text" value={editDestination} onChange={(e) => setEditDestination(e.target.value)} className="w-full px-3 py-2 rounded-lg" required /></div>
+              </div>
+              <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">운임(원)</label><input type="text" value={editGross} onChange={(e) => setEditGross(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" required /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">대납 주유비</label><input type="text" value={editFuel} onChange={(e) => setEditFuel(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">통행료 등 추가경비</label><input type="text" value={editExtra} onChange={(e) => setEditExtra(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">기사 팁</label><input type="text" value={editTip} onChange={(e) => setEditTip(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" /></div>
+              <button type="submit" className="w-full mt-2 py-3 hp-primary-btn font-bold rounded-lg text-xs cursor-pointer">수정 완료</button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 모달: 청구 문자 직접 편집 생성 (분리 미수금 호환) */}
+      {claimModalOpen && selectedClaimRecord && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="w-full max-w-lg glass-card rounded-2xl p-6 shadow-2xl relative">
+            <button onClick={() => setClaimModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 cursor-pointer"><X className="w-5 h-5" /></button>
+            <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2"><MessageSquare className="w-5 h-5 text-[#8B5CF6]" />정산 청구 문자 편집 및 복사</h3>
+            <p className="text-xs text-slate-400 mb-4">미입금된 내역만 자동으로 체크되어 문구가 생성됩니다. 수정한 후 복사하세요.</p>
+            <div className="flex gap-4 mb-4 pb-4 border-b border-white/10">
+              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 cursor-pointer"><input type="checkbox" checked={includeGross} onChange={() => handleToggleInclude('gross')} className="rounded text-[#8B5CF6]" disabled={selectedClaimRecord.isGrossPaid} /> 기본 운임</label>
+              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 cursor-pointer"><input type="checkbox" checked={includeFuel} onChange={() => handleToggleInclude('fuel')} className="rounded text-[#8B5CF6]" disabled={selectedClaimRecord.fuelAmount === 0 || selectedClaimRecord.isExpensePaid} /> 주유비</label>
+              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 cursor-pointer"><input type="checkbox" checked={includeExtra} onChange={() => handleToggleInclude('extra')} className="rounded text-[#8B5CF6]" disabled={selectedClaimRecord.extraExpenseAmount === 0 || selectedClaimRecord.isExpensePaid} /> 추가경비</label>
+            </div>
+            <textarea rows={10} value={claimMessageText} onChange={(e) => setClaimMessageText(e.target.value)} className="w-full p-4 rounded-xl text-xs font-mono mb-4 leading-relaxed bg-[#FFFFFF] text-[#000000] focus:shadow-[0_0_12px_#8B5CF6] focus:border-[#8B5CF6] transition-all outline-none" />
+            <div className="flex gap-2">
+              <button onClick={() => setClaimModalOpen(false)} className="flex-1 py-3 bg-[#0B1120] border border-white/10 hover:bg-white/10 text-white font-semibold rounded-lg text-xs cursor-pointer transition-colors">닫기</button>
+              <button onClick={() => { navigator.clipboard.writeText(claimMessageText); alert('수정된 정산 청구 문자가 복사되었습니다.'); setClaimModalOpen(false); }} className="flex-1 py-3 hp-primary-btn text-white font-bold rounded-lg text-xs cursor-pointer shadow-md flex items-center justify-center gap-1.5"><Copy className="w-3.5 h-3.5" />복사하기</button>
             </div>
           </div>
         </div>
