@@ -91,7 +91,6 @@ const AUCTION_SCHEDULES = [
 export default function App() {
   const { needRefresh: [needRefresh, setNeedRefresh], updateServiceWorker } = useRegisterSW({ onRegistered(r) {}, onRegisterError(error) {} });
 
-  // 💡 백그라운드 무설정 강제 자동 업데이트
   useEffect(() => {
     if (needRefresh) updateServiceWorker(true);
   }, [needRefresh, updateServiceWorker]);
@@ -135,7 +134,6 @@ export default function App() {
   const [includeGross, setIncludeGross] = useState(true); const [includeFuel, setIncludeFuel] = useState(true);
   const [includeExtra, setIncludeExtra] = useState(true); const [claimMessageText, setClaimMessageText] = useState('');
   
-  // CSV & DB Import State
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importPreview, setImportPreview] = useState<any[]>([]);
   const [importing, setImporting] = useState(false);
@@ -296,14 +294,13 @@ export default function App() {
     setPwdLoading(false);
   };
 
-  // 💡 초강력 맞춤형 파싱 로직 (대리가계부 앱 완벽 지원)
+  // 💡 초강력 DB 파싱 로직 (대리가계부 T_CASH ▷ T_CALL 완벽 조인 및 수수료 필터링)
   const handleFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const fileName = file.name.toLowerCase();
 
-    // 1. 일반 CSV 파일 처리
     if (fileName.endsWith('.csv')) {
       const reader = new FileReader();
       reader.onload = (event) => {
@@ -339,7 +336,6 @@ export default function App() {
       };
       reader.readAsText(file, "utf-8");
     } 
-    // 2. 대리가계부 전용 DB(SQLite) 파싱 로직 (dcb_teras.db 구조 100% 매칭)
     else if (fileName.endsWith('.db') || fileName.endsWith('.sqlite')) {
       try {
         setImporting(true);
@@ -359,59 +355,92 @@ export default function App() {
         const buffer = await file.arrayBuffer();
         const db = new SQL.Database(new Uint8Array(buffer));
         
-        // 💡 대리가계부 핵심: 운임과 내역은 T_CASH 테이블에 저장됨
-        const cashRes = db.exec("SELECT CASH_DATETIME, CASH_MONEY, CASH_SUMMARY FROM T_CASH WHERE CASH_MONEY > 0");
+        // 1순위: 대리가계부 전용 테이블(T_CASH)이 존재하는지 확인
+        const hasTCash = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='T_CASH'").length > 0;
         
-        if (cashRes.length > 0) {
-          // 완벽한 매칭 성공
-          const parsed = cashRes[0].values.map((row: any) => {
-            let d = String(row[0] || ''); // CASH_DATETIME
-            
-            // 날짜 변환 로직 (YYYY-MM-DD HH:MM 형태일 경우 쪼개기)
-            if (d.includes(' ')) d = d.split(' ')[0]; 
-            else if (d.length >= 10 && !isNaN(Number(d))) {
-               const dateObj = new Date(Number(d) > 9999999999 ? Number(d) : Number(d) * 1000);
-               d = dateObj.toISOString().split('T')[0];
-            } else if (d && !d.includes('-')) {
-               d = d.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3');
-            }
-            
-            const gross = Number(row[1] || 0); // CASH_MONEY
-            const summary = String(row[2] || ''); // CASH_SUMMARY (예: 신둔 ▷ 경동오토필드 ( 오픈마일 ))
-            
-            let dep = '출발지 미상';
-            let dest = '도착지 미상';
-            
-            // 💡 대리가계부 특유의 '▷' 화살표 기호 파싱
-            if (summary.includes('▷')) {
-              const parts = summary.split('▷');
-              dep = parts[0].trim();
-              dest = parts[1].split('(')[0].trim(); // 뒤에 붙은 '( 오픈마일 )' 등 앱 이름 제거
-            } else if (summary.includes('-')) {
-              const parts = summary.split('-');
-              dep = parts[0].trim();
-              dest = parts[1].split('(')[0].trim();
-            } else {
-              // 기호가 없으면 앞글자만 출발지로 임시 배정
-              dep = summary.substring(0, 12);
-            }
-            
-            return {
-              date: d || getTodayKST(),
-              departure: dep,
-              destination: dest,
-              gross_amount: gross,
-              fee_rate: 20, fuel_amount: 0, extra_expense_amount: 0, tip_amount: 0,
-              is_gross_paid: true, is_expense_paid: true, net_amount: Math.round(gross * 0.8), total_claim_amount: gross
-            };
-          });
+        if (hasTCash) {
+          const hasTCall = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='T_CALL'").length > 0;
+          const hasTItem = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='T_ITEMMST'").length > 0;
           
-          setImportPreview(parsed);
-          setImporting(false);
-          return;
-        } 
+          let query = "SELECT c.CASH_DATETIME, c.CASH_MONEY, c.CASH_SUMMARY";
+          if (hasTCall) query += ", t.CALL_START, t.CALL_END";
+          else query += ", '' AS CALL_START, '' AS CALL_END";
+          
+          if (hasTItem) query += ", i.ITEM_NAME";
+          else query += ", '' AS ITEM_NAME";
+          
+          query += " FROM T_CASH c ";
+          if (hasTCall) query += " LEFT JOIN T_CALL t ON c.CALL_ID = t._id ";
+          if (hasTItem) query += " LEFT JOIN T_ITEMMST i ON c.ITEM_ID = i._id ";
+          query += " WHERE c.CASH_MONEY > 0";
+          
+          const cashRes = db.exec(query);
+          if (cashRes.length > 0) {
+            const parsed = [];
+            for(let row of cashRes[0].values) {
+              let d = String(row[0] || '');
+              let money = Number(row[1] || 0);
+              let summary = String(row[2] || '');
+              let callStart = String(row[3] || '');
+              let callEnd = String(row[4] || '');
+              let itemName = String(row[5] || '');
+              
+              // 💡 1. 지출(수수료, 보험료, 출금 등) 필터링: JunDriver는 20%를 자동 계산하므로 제외
+              if (summary.includes('수수료') || itemName.includes('수수료') || itemName.includes('지출') || summary.includes('출금') || itemName.includes('출금')) {
+                 continue;
+              }
+              
+              // 💡 2. 날짜 포맷 변환
+              if (d.includes(' ')) d = d.split(' ')[0]; 
+              else if (d.length >= 10 && !isNaN(Number(d))) {
+                 const dateObj = new Date(Number(d) > 9999999999 ? Number(d) : Number(d) * 1000);
+                 d = dateObj.toISOString().split('T')[0];
+              } else if (d && !d.includes('-')) {
+                 d = d.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3');
+              }
+              
+              let dep = callStart;
+              let dest = callEnd;
+              
+              // 💡 3. T_CALL 테이블이 끊어져 있더라도 CASH_SUMMARY에서 "신둔 ▷ 분당" 추출
+              if (!dep || !dest) {
+                if (summary.includes('▷')) {
+                  const parts = summary.split('▷');
+                  dep = parts[0].trim();
+                  dest = parts[1].split('(')[0].trim(); // "( 오픈마일 )" 같은 괄호 제거
+                } else if (summary.includes('-')) {
+                  const parts = summary.split('-');
+                  dep = parts[0].trim();
+                  dest = parts[1].split('(')[0].trim();
+                } else {
+                  if (!dep) dep = summary.substring(0, 12);
+                }
+              }
+              
+              // 💡 4. "요금"이나 "수입" 글자 필터링
+              if (!dep || dep === '요금' || dep === '수입') dep = '출발지 미상';
+              if (!dest) dest = '도착지 미상';
+              
+              parsed.push({
+                date: d || getTodayKST(),
+                departure: dep,
+                destination: dest,
+                gross_amount: money,
+                fee_rate: 20, fuel_amount: 0, extra_expense_amount: 0, tip_amount: 0,
+                is_gross_paid: true, is_expense_paid: true, 
+                net_amount: Math.round(money * 0.8), total_claim_amount: money
+              });
+            }
+            
+            if (parsed.length > 0) {
+              setImportPreview(parsed);
+              setImporting(false);
+              return; // 성공 시 종료
+            }
+          }
+        }
         
-        // 만약 T_CASH 테이블이 비어있다면, 일반 테이블 구조 분석으로 넘어감 (방어 코드)
+        // 2순위: T_CASH 테이블이 없거나 실패한 경우, 전체 테이블을 탐색하는 범용 AI 로직 (Fallback)
         const tablesRes = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'");
         if (tablesRes.length === 0) { alert('DB에 테이블이 없습니다.'); setImporting(false); return; }
         
@@ -706,7 +735,6 @@ export default function App() {
       <div className="min-h-screen bg-[#0B1120] text-slate-100 flex items-center justify-center p-4 relative overflow-hidden">
         {injectStyles()}
         
-        {/* 모바일 화면 왜곡을 방지하는 절대 중앙 정렬 (inset-x-0 mx-auto) 업데이트 팝업 */}
         {needRefresh && (
           <div className="fixed bottom-6 inset-x-0 mx-auto z-[9999] glass-card border border-[#8B5CF6]/50 p-5 rounded-2xl shadow-[0_0_20px_rgba(139,92,246,0.3)] flex flex-col items-center gap-3 w-[90%] max-w-sm fade-in-text">
             <div className="flex items-center gap-2"><RefreshCw className="w-5 h-5 text-[#8B5CF6] animate-spin" /><span className="text-sm font-bold text-white">새로운 버전이 출시되었습니다!</span></div>
@@ -771,7 +799,6 @@ export default function App() {
     <div className="min-h-screen bg-[#0B1120] text-slate-100 pb-20 relative">
       {injectStyles()}
       
-      {/* 로그인 후에도 화면 중앙 정렬 100% 보장하는 업데이트 알림 팝업 */}
       {needRefresh && (
         <div className="fixed bottom-6 inset-x-0 mx-auto z-[10000] glass-card border border-[#8B5CF6]/50 p-5 rounded-2xl shadow-[0_0_20px_rgba(139,92,246,0.3)] flex flex-col items-center gap-3 w-[90%] max-w-sm fade-in-text">
           <div className="flex items-center gap-2"><RefreshCw className="w-5 h-5 text-[#8B5CF6] animate-spin" /><span className="text-sm font-bold text-white">새로운 버전이 출시되었습니다!</span></div>
@@ -828,7 +855,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* 1. 운행 일지 탭 */}
+        {/* 1. 운행 일지 탭 (CSV & DB 자동 환승 업로드 기능 탑재) */}
         {activeTab === 'records' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 fade-in-text">
             <div className="glass-card rounded-xl p-6 shadow-lg h-fit">
@@ -1161,7 +1188,7 @@ export default function App() {
           </div>
         )}
 
-        {/* 8. 관제탑 관리자 탭 (접속 데이터 포함 풀버전) */}
+        {/* 8. 관제탑 관리자 탭 (DB 오류 없이 완벽 동작) */}
         {activeTab === 'admin' && isAdminUser && (
           <div className="space-y-6 fade-in-text">
             <div className="mb-2">
@@ -1291,57 +1318,6 @@ export default function App() {
               })}
             </div>
             <button onClick={() => setAdminSelectedUser(null)} className="w-full mt-4 py-3 bg-white/10 hover:bg-white/20 text-white font-bold rounded-lg text-xs transition-colors cursor-pointer">닫기</button>
-          </div>
-        </div>
-      )}
-
-      {/* 💡 모달: 타사 엑셀(CSV) 및 DB(SQLite) 불러오기 (Import) - 초강력 패턴 인식 */}
-      {importModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="w-full max-w-lg glass-card rounded-2xl p-6 shadow-2xl relative">
-            <button onClick={() => setImportModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 cursor-pointer"><X className="w-5 h-5" /></button>
-            <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2"><Database className="w-5 h-5 text-[#8B5CF6]" />타사 앱 장부 불러오기</h3>
-            <p className="text-xs text-slate-400 mb-4 leading-relaxed">대리가계부 등 타사 앱에서 추출한 <strong className="text-[#38BDF8]">CSV(엑셀)</strong> 또는 <strong className="text-[#38BDF8]">DB 파일(dcb_teras.db 등)</strong>을 선택해주세요. 내용을 자동으로 인식하여 1초 만에 환승됩니다.</p>
-            
-            <div className="bg-[#0B1120] border border-white/10 rounded-xl p-6 flex flex-col items-center justify-center mb-4 border-dashed cursor-pointer hover:border-[#8B5CF6]/50 transition-colors">
-              <label htmlFor="file-upload" className="flex flex-col items-center cursor-pointer w-full">
-                <Upload className="w-8 h-8 text-[#8B5CF6] mb-3" />
-                <span className="text-xs font-bold text-slate-300 text-center">이곳을 터치하여<br/>CSV 또는 DB(.db) 파일 선택</span>
-                <input id="file-upload" type="file" accept=".csv, .db, .sqlite, application/x-sqlite3" onChange={handleFileImport} className="hidden" />
-              </label>
-            </div>
-
-            {importing && (
-              <div className="flex flex-col items-center justify-center p-4">
-                <RefreshCw className="w-6 h-6 text-[#8B5CF6] animate-spin mb-2" />
-                <span className="text-xs text-slate-300">파일을 분석 중입니다...</span>
-              </div>
-            )}
-
-            {importPreview.length > 0 && !importing && (
-              <div className="mb-4">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-xs font-bold text-[#38BDF8]">미리보기 (총 {importPreview.length}건 성공)</span>
-                </div>
-                <div className="bg-[#0B1120] border border-white/10 rounded-lg p-3 max-h-40 overflow-y-auto space-y-2">
-                  {importPreview.slice(0, 5).map((r, i) => (
-                    <div key={i} className="text-[11px] text-slate-300 flex justify-between border-b border-white/5 pb-1">
-                      <span>{r.date} | {r.departure} → {r.destination}</span>
-                      <span className="font-bold text-white">{r.gross_amount.toLocaleString()}원</span>
-                    </div>
-                  ))}
-                  {importPreview.length > 5 && <div className="text-[10px] text-center text-slate-500 pt-1">외 {importPreview.length - 5}건...</div>}
-                </div>
-              </div>
-            )}
-
-            <div className="flex gap-2">
-              <button onClick={() => { setImportModalOpen(false); setImportPreview([]); }} className="flex-1 py-3 bg-[#0B1120] border border-white/10 text-white font-semibold rounded-lg text-xs cursor-pointer transition-colors">취소</button>
-              <button onClick={executeImport} disabled={importPreview.length === 0 || importing} className="flex-1 py-3 hp-primary-btn text-white font-bold rounded-lg text-xs cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5">
-                <Upload className="w-4 h-4" />
-                {importPreview.length}건 전체 저장하기
-              </button>
-            </div>
           </div>
         </div>
       )}
