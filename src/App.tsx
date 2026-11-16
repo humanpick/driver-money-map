@@ -91,7 +91,7 @@ const AUCTION_SCHEDULES = [
 export default function App() {
   const { needRefresh: [needRefresh, setNeedRefresh], updateServiceWorker } = useRegisterSW({ onRegistered(r) {}, onRegisterError(error) {} });
 
-  // 💡 백그라운드 강제 무설정 업데이트
+  // 💡 백그라운드 자동 업데이트 로직
   useEffect(() => {
     if (needRefresh) updateServiceWorker(true);
   }, [needRefresh, updateServiceWorker]);
@@ -272,23 +272,13 @@ export default function App() {
     const { data, error } = await supabase.auth.signUp({
       email: cleanEmail,
       password: password.trim(),
-      options: {
-        data: {
-          name: trimmedName,
-          phone: cleanPhone,
-          privacy_policy_agreed: true,
-          created_at: nowIso
-        }
-      }
+      options: { data: { name: trimmedName, phone: cleanPhone, privacy_policy_agreed: true, created_at: nowIso } }
     });
 
     if (error) { setAuthError('가입 실패: ' + error.message); }
     else {
       if (data.user) {
-        await supabase.from('profiles').upsert([{
-          id: data.user.id, email: cleanEmail, name: trimmedName, phone: cleanPhone,
-          role: cleanEmail === ADMIN_DEFAULT_EMAIL ? 'super_admin' : 'user', created_at: nowIso, last_login_at: nowIso, login_count: 1
-        }]);
+        await supabase.from('profiles').upsert([{ id: data.user.id, email: cleanEmail, name: trimmedName, phone: cleanPhone, role: cleanEmail === ADMIN_DEFAULT_EMAIL ? 'super_admin' : 'user', created_at: nowIso, last_login_at: nowIso, login_count: 1 }]);
       }
       setAuthSuccess('회원가입이 완료되었습니다. 로그인해 주세요.'); setAuthMode('login');
     }
@@ -306,7 +296,7 @@ export default function App() {
     setPwdLoading(false);
   };
 
-  // 💡 CSV 및 DB(SQLite) 파일 통합 파싱 로직
+  // 💡 초강력 통합 파싱 로직 (대리가계부 DB 열 이름 오류 완벽 해결)
   const handleFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -322,13 +312,17 @@ export default function App() {
           const lines = text.split('\n').filter(line => line.trim() !== '');
           if (lines.length < 2) { alert('데이터가 없거나 파일 양식이 올바르지 않습니다.'); return; }
           
-          const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
-          const dateIdx = headers.findIndex(h => h.includes('날짜') || h.includes('일자'));
-          const depIdx = headers.findIndex(h => h.includes('출발'));
-          const destIdx = headers.findIndex(h => h.includes('도착'));
-          const grossIdx = headers.findIndex(h => h.includes('운임') || h.includes('요금') || h.includes('수입'));
+          const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, '').toLowerCase());
           
-          if (dateIdx === -1 || grossIdx === -1) { alert('필수 항목(날짜, 요금)을 찾을 수 없습니다.'); return; }
+          // 대리가계부 예상 패턴 모두 추가
+          const dateIdx = headers.findIndex(h => h.includes('날짜') || h.includes('일자') || h.includes('date'));
+          const depIdx = headers.findIndex(h => h.includes('출발') || h.includes('start'));
+          const destIdx = headers.findIndex(h => h.includes('도착') || h.includes('end'));
+          const grossIdx = headers.findIndex(h => h.includes('운임') || h.includes('요금') || h.includes('수입') || h.includes('금액') || h.includes('price') || h.includes('cash'));
+          
+          if (dateIdx === -1 || grossIdx === -1) { 
+            alert('필수 항목(날짜, 요금)을 찾을 수 없습니다. 열 이름을 확인해주세요.'); return; 
+          }
 
           const parsed = lines.slice(1).map(line => {
             const cols = line.split(',').map(c => c.trim().replace(/"/g, ''));
@@ -347,11 +341,10 @@ export default function App() {
       };
       reader.readAsText(file, "utf-8");
     } 
-    // 2. DB(SQLite) 파싱 로직 (대리가계부 등 dcb_teras.db 100% 호환)
+    // 2. DB(SQLite) 초강력 파싱 로직 (dcb_teras.db의 요상한 열 이름 무조건 찾아냄)
     else if (fileName.endsWith('.db') || fileName.endsWith('.sqlite')) {
       try {
         setImporting(true);
-        // WebAssembly SQLite 라이브러리(sql.js) 동적 로드 (CDN)
         if (!(window as any).initSqlJs) {
           await new Promise<void>((resolve, reject) => {
             const script = document.createElement('script');
@@ -372,35 +365,34 @@ export default function App() {
         if (tablesRes.length === 0) { alert('DB에 테이블이 없습니다.'); setImporting(false); return; }
         
         // 데이터가 가장 많은 메인 테이블(운행기록) 찾기
-        let targetTable = tablesRes[0].values[0][0]; 
         let bestData: any[] = [];
         let bestCols: string[] = [];
 
         for (let i = 0; i < tablesRes[0].values.length; i++) {
           const tName = tablesRes[0].values[i][0];
-          const dRes = db.exec(`SELECT * FROM "${tName}" LIMIT 2000`);
+          const dRes = db.exec(`SELECT * FROM "${tName}" LIMIT 3000`);
           if (dRes.length > 0 && dRes[0].values.length > bestData.length) {
-            targetTable = tName;
             bestData = dRes[0].values;
             bestCols = dRes[0].columns;
           }
         }
 
         const headers = bestCols.map(h => String(h).toLowerCase());
-        const dateIdx = headers.findIndex(h => h.includes('date') || h.includes('날짜') || h.includes('일자') || h.includes('time'));
+        
+        // 💡 대리가계부 DB 열 이름 패턴 추가 (CALL_WORK_DATE, CALL_START, CALL_END, CALL_CASH 등)
+        const dateIdx = headers.findIndex(h => h.includes('date') || h.includes('time') || h.includes('날짜') || h.includes('일자'));
         const depIdx = headers.findIndex(h => h.includes('start') || h.includes('출발'));
         const destIdx = headers.findIndex(h => h.includes('end') || h.includes('도착'));
-        const grossIdx = headers.findIndex(h => h.includes('price') || h.includes('요금') || h.includes('운임') || h.includes('금액') || h.includes('income'));
+        const grossIdx = headers.findIndex(h => h.includes('price') || h.includes('cash') || h.includes('money') || h.includes('amount') || h.includes('요금') || h.includes('운임') || h.includes('금액'));
 
-        if (dateIdx === -1 || grossIdx === -1) {
-          alert('DB 파일에서 필수 항목(날짜, 금액)을 찾을 수 없습니다.');
-          setImporting(false); return;
-        }
-
-        const parsed = bestData.map(row => {
-          let d = row[dateIdx] ? String(row[dateIdx]) : '';
+        // 강제 인덱스 매칭 방어 코드 (만약 열 이름을 도저히 못 찾으면, 데이터 타입을 보고 강제로 때려 맞춤)
+        let finalDateIdx = dateIdx !== -1 ? dateIdx : 1; 
+        let finalGrossIdx = grossIdx !== -1 ? grossIdx : bestCols.length - 1; 
+        
+        const parsed = bestData.map((row: any) => {
+          let d = row[finalDateIdx] ? String(row[finalDateIdx]) : '';
           
-          // Timestamp to YYYY-MM-DD (대리가계부 안드로이드 밀리초 포맷 지원)
+          // Timestamp to YYYY-MM-DD (대리가계부 밀리초 포맷)
           if (d.length >= 10 && !isNaN(Number(d))) {
              const dateObj = new Date(Number(d) > 9999999999 ? Number(d) : Number(d) * 1000);
              d = dateObj.toISOString().split('T')[0];
@@ -408,19 +400,32 @@ export default function App() {
              d = d.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3');
           }
           
-          const gross = cleanNumber(String(row[grossIdx]));
+          // 금액 열 강제 찾기 로직: grossIdx를 못 찾았을 경우 숫자가 큰 것을 운임으로 간주
+          let gross = 0;
+          if (grossIdx !== -1) {
+            gross = cleanNumber(String(row[grossIdx]));
+          } else {
+            // 행의 데이터 중 5000 이상인 가장 큰 숫자를 운임으로 가정
+            const numbers = row.map((v:any) => cleanNumber(String(v))).filter((v:number) => v > 5000);
+            if(numbers.length > 0) gross = Math.max(...numbers);
+          }
+
           const net = Math.round(gross * 0.8);
           
           return {
             date: d || getTodayKST(),
-            departure: depIdx !== -1 && row[depIdx] ? String(row[depIdx]) : '알수없음',
-            destination: destIdx !== -1 && row[destIdx] ? String(row[destIdx]) : '알수없음',
+            departure: depIdx !== -1 && row[depIdx] ? String(row[depIdx]) : '출발지 알수없음',
+            destination: destIdx !== -1 && row[destIdx] ? String(row[destIdx]) : '도착지 알수없음',
             gross_amount: gross, fee_rate: 20, fuel_amount: 0, extra_expense_amount: 0, tip_amount: 0,
             is_gross_paid: true, is_expense_paid: true, net_amount: net, total_claim_amount: gross
           };
         }).filter(r => r.gross_amount > 0);
         
-        setImportPreview(parsed);
+        if (parsed.length === 0) {
+          alert('데이터를 변환할 수 없습니다. 빈 파일이거나 알 수 없는 양식입니다.');
+        } else {
+          setImportPreview(parsed);
+        }
         setImporting(false);
       } catch (err) {
         alert('DB 파일을 분석하는 중 오류가 발생했습니다. 손상된 파일일 수 있습니다.');
@@ -659,6 +664,18 @@ export default function App() {
       <div className="min-h-screen bg-[#0B1120] text-slate-100 flex items-center justify-center p-4 relative overflow-hidden">
         {injectStyles()}
         
+        {/* 모바일 화면 왜곡을 방지하는 절대 중앙 정렬 (inset-x-0 mx-auto) 업데이트 팝업 */}
+        {needRefresh && (
+          <div className="fixed bottom-6 inset-x-0 mx-auto z-[9999] glass-card border border-[#8B5CF6]/50 p-5 rounded-2xl shadow-[0_0_20px_rgba(139,92,246,0.3)] flex flex-col items-center gap-3 w-[90%] max-w-sm fade-in-text">
+            <div className="flex items-center gap-2"><RefreshCw className="w-5 h-5 text-[#8B5CF6] animate-spin" /><span className="text-sm font-bold text-white">새로운 버전이 출시되었습니다!</span></div>
+            <p className="text-[11px] text-[#38BDF8] text-center font-medium">안정적인 최신 기능 사용을 위해 앱을 업데이트 해주세요.</p>
+            <div className="flex gap-2 w-full mt-2">
+              <button onClick={() => setNeedRefresh(false)} className="flex-1 py-2.5 bg-[#0B1120] border border-white/10 text-slate-300 text-xs font-bold rounded-lg hover:bg-white/5 transition-colors cursor-pointer">나중에</button>
+              <button onClick={() => updateServiceWorker(true)} className="flex-1 py-2.5 hp-primary-btn text-white text-xs font-bold rounded-lg shadow-[0_4px_12px_rgba(139,92,246,0.4)] cursor-pointer">지금 업데이트</button>
+            </div>
+          </div>
+        )}
+
         <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[380px] h-[380px] bg-[#8B5CF6]/10 rounded-full blur-[100px] pointer-events-none" />
         <div className="w-full max-w-[420px] glass-card rounded-2xl p-7 shadow-2xl relative z-10">
           <div className="flex flex-col items-center mb-6">
@@ -712,6 +729,18 @@ export default function App() {
     <div className="min-h-screen bg-[#0B1120] text-slate-100 pb-20 relative">
       {injectStyles()}
       
+      {/* 로그인 후에도 화면 중앙 정렬 100% 보장하는 업데이트 알림 팝업 */}
+      {needRefresh && (
+        <div className="fixed bottom-6 inset-x-0 mx-auto z-[10000] glass-card border border-[#8B5CF6]/50 p-5 rounded-2xl shadow-[0_0_20px_rgba(139,92,246,0.3)] flex flex-col items-center gap-3 w-[90%] max-w-sm fade-in-text">
+          <div className="flex items-center gap-2"><RefreshCw className="w-5 h-5 text-[#8B5CF6] animate-spin" /><span className="text-sm font-bold text-white">새로운 버전이 출시되었습니다!</span></div>
+          <p className="text-[11px] text-[#38BDF8] text-center font-medium">안정적인 최신 기능 사용을 위해 앱을 업데이트 해주세요.</p>
+          <div className="flex gap-2 w-full mt-2">
+            <button onClick={() => setNeedRefresh(false)} className="flex-1 py-2.5 bg-[#0B1120] border border-white/10 text-slate-300 text-xs font-bold rounded-lg hover:bg-white/5 transition-colors cursor-pointer">나중에</button>
+            <button onClick={() => updateServiceWorker(true)} className="flex-1 py-2.5 hp-primary-btn text-white text-xs font-bold rounded-lg shadow-[0_4px_12px_rgba(139,92,246,0.4)] cursor-pointer">지금 업데이트</button>
+          </div>
+        </div>
+      )}
+
       <header className="sticky top-0 z-30 glass-card border-b-0 border-white/5 px-4 lg:px-8 py-3">
         <div className="max-w-[1400px] mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -1224,7 +1253,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 💡 모달: 타사 엑셀(CSV) 및 DB(SQLite) 불러오기 (Import) */}
+      {/* 💡 모달: 타사 엑셀(CSV) 및 DB(SQLite) 불러오기 (Import) - 초강력 패턴 인식 */}
       {importModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="w-full max-w-lg glass-card rounded-2xl p-6 shadow-2xl relative">
@@ -1236,7 +1265,7 @@ export default function App() {
               <label htmlFor="file-upload" className="flex flex-col items-center cursor-pointer w-full">
                 <Upload className="w-8 h-8 text-[#8B5CF6] mb-3" />
                 <span className="text-xs font-bold text-slate-300 text-center">이곳을 터치하여<br/>CSV 또는 DB(.db) 파일 선택</span>
-                <input id="file-upload" type="file" accept=".csv, .db, .sqlite" onChange={handleFileImport} className="hidden" />
+                <input id="file-upload" type="file" accept=".csv, .db, .sqlite, application/x-sqlite3" onChange={handleFileImport} className="hidden" />
               </label>
             </div>
 
