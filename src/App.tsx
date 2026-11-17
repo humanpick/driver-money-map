@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { useRegisterSW } from 'virtual:pwa-register/react';
-import * as XLSX from 'xlsx';
+// 💡 [수정] 앱이 뻗는 원인이었던 상단의 import * as XLSX from 'xlsx'; 코드를 삭제했습니다. (필요할 때만 부르도록 변경)
+
 import {
   Wallet, Calendar, Clock, MapPin, TrendingUp, DollarSign, FileText, User, LogOut,
   KeyRound, X, CheckCircle2, AlertCircle, PlusCircle, CreditCard, Receipt, Trash2,
@@ -36,7 +37,9 @@ const formatNumberWithComma = (val: string | number) => {
 const cleanNumber = (val: string | number): number => {
   if (typeof val === 'number') return val;
   if (!val) return 0;
-  return Number(String(val).replace(/,/g, '')) || 0;
+  // 💡 [안전장치 추가] 혹시 모를 글자 섞임(NaN) 에러를 방지하기 위해 숫자만 완벽히 걸러냅니다.
+  const numStr = String(val).replace(/[^0-9]/g, '');
+  return Number(numStr) || 0;
 };
 
 const formatPhoneNumber = (val: string) => {
@@ -47,6 +50,7 @@ const formatPhoneNumber = (val: string) => {
   return num;
 };
 
+// 💡 타사 엑셀 파싱 (이제 이 함수는 파일 읽을 때만 사용됩니다)
 const parseImportedRow = (row: any) => {
   const keys = Object.keys(row);
   const dateKey = keys.find(k => k.includes('일') || k.includes('날짜') || k.includes('date'));
@@ -109,7 +113,7 @@ const TRADE_CENTERS = [
 
 const AUCTION_SCHEDULES = [
   { day: '월요일', hex: '#38BDF8', locations: [{ name: '안성 롯데렌탈', tier: 'S', addr: '경기 안성시 내가천리 12', tag: '롯데' }, { name: '진천 광혜원 오토보이', tier: 'B', addr: '충북 진천군 금천길 37', tag: '오토보이' }] },
-  { day: '화요일', hex: '#EC4899', locations: [{ name: '시화 현대글로비스', tier: 'S', addr: '경기 시흥시 정왕천로 271', tag: '글로비스' }, { name: '오포 현대글로비스', tier: 'S', addr: '경기 광주시 능평리 174-25', tag: '글로비스' }, { name: '세종 K Car', tier: 'A', addr: '세종 부강면 문곡리 산 249', tag: '케이카' }] },
+  { day: '화요일', hex: '#EC4899', locations: [{ name: '시화 현대글로비스', tier: 'S', addr: '경기 시흥시 정왕천로 271', tag: '글로비스' }, { name: '오포 현대글로비스', tier: 'S', addr: '경기 광주시 능평리 174-25', tag: '글로비스' }, { name: '세종 K Car', tier: 'A', addr: '세종 부강면 문곡리 산 249', tag: '케이카' }, { name: '천안 SK경매장', tier: 'B', addr: '충남 천안시 구성동', tag: 'SK' }] },
   { day: '수요일', hex: '#10B981', locations: [{ name: '안성 오토허브', tier: 'S', addr: '경기 안성시 문터길 60', tag: '오토허브' }] },
   { day: '목요일', hex: '#F59E0B', locations: [{ name: '양산 현대글로비스', tier: 'S', addr: '경남 양산시 산막동 572-1', tag: '글로비스' }, { name: '오산 K Car', tier: 'A', addr: '경기 오산시 은계동 7-30', tag: '케이카' }] },
   { day: '금요일', hex: '#8B5CF6', locations: [{ name: '시화 현대글로비스', tier: 'S', addr: '경기 시흥시 정왕동 2122-4', tag: '글로비스' }] }
@@ -186,9 +190,10 @@ export default function App() {
   const [adminSearchTerm, setAdminSearchTerm] = useState('');
   const [showScoutOnly, setShowScoutOnly] = useState(false);
 
-  // 💡 [수정1] 날짜, 출발지, 도착지, 요금 초기값을 하드코딩
   const [newDate, setNewDate] = useState<string>(() => getTodayKST());
   const [newStartTime, setNewStartTime] = useState(''); const [newEndTime, setNewEndTime] = useState('');
+  
+  // 💡 [수정됨] 앱 시작 시 기본값으로 '수원', '부산', '150,000' 적용
   const [newDeparture, setNewDeparture] = useState('수원'); 
   const [newDestination, setNewDestination] = useState('부산');
   const [newGross, setNewGross] = useState('150,000'); 
@@ -200,7 +205,6 @@ export default function App() {
   const [expCategory, setExpCategory] = useState('대중교통'); const [expAmount, setExpAmount] = useState(''); const [expMemo, setExpMemo] = useState('');
   const [bankName, setBankName] = useState(''); const [accountNumber, setAccountNumber] = useState(''); const [holder, setHolder] = useState('');
 
-  // 💡 [수정2] 목표 수익 초기값에 콤마 포함 (5,000,000)
   const [targetIncome, setTargetIncome] = useState<string>(() => {
     try { const s = localStorage.getItem('jundriver_target'); return s ? JSON.parse(s).income : '5,000,000'; } catch { return '5,000,000'; }
   });
@@ -426,34 +430,41 @@ export default function App() {
     setCustomDate(newDate);
     setDateFilter('day');
     
-    // 등록 완료 후 다시 초기 상태로 리셋
+    // 💡 [수정] 다시 기본값(수원, 부산, 150000)으로 깔끔하게 리셋
     setNewDeparture('수원'); setNewDestination('부산'); setNewGross('150,000'); setNewFuel(''); setNewExtraExpense(''); setNewTip(''); setNewPaymentMethod('현금');
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // 💡 [핵심 수정] 엑셀 파싱 라이브러리로 인해 화면이 하얗게 죽는 현상을 방지하기 위해 파일 업로드 시점에만 라이브러리를 로드(Dynamic Import)합니다.
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const data = new Uint8Array(event.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-        const rawJson = XLSX.utils.sheet_to_json(firstSheet);
-        
-        const parsedRecords = rawJson.map(parseImportedRow).filter(r => r.grossAmount > 0);
-        if (parsedRecords.length === 0) {
-          alert('데이터를 변환할 수 없습니다. 엑셀 파일 양식을 확인해주세요.');
-          return;
+    try {
+      const XLSX = await import('xlsx');
+      
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const data = new Uint8Array(event.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          const rawJson = XLSX.utils.sheet_to_json(firstSheet);
+          
+          const parsedRecords = rawJson.map(parseImportedRow).filter((r: any) => r.grossAmount > 0);
+          if (parsedRecords.length === 0) {
+            alert('데이터를 변환할 수 없습니다. 엑셀 파일 양식을 확인해주세요.');
+            return;
+          }
+          setImportData(parsedRecords);
+          setImportStep(2);
+        } catch (error) {
+          alert('파일을 파싱하는 중 오류가 발생했습니다. 정상적인 엑셀/CSV 파일인지 확인해주세요.');
         }
-        setImportData(parsedRecords);
-        setImportStep(2);
-      } catch (error) {
-        alert('파일을 읽는 중 오류가 발생했습니다. 정상적인 엑셀/CSV 파일인지 확인해주세요.');
-      }
-    };
-    reader.readAsArrayBuffer(file);
+      };
+      reader.readAsArrayBuffer(file);
+    } catch (err) {
+      alert('엑셀 변환 모듈을 불러올 수 없습니다. 인터넷 상태를 확인하거나 잠시 후 다시 시도해주세요.');
+    }
   };
 
   const handleBatchImport = async () => {
@@ -903,29 +914,26 @@ export default function App() {
               <form onSubmit={handleAddRecord} className="space-y-3.5">
                 <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">운행 일자</label><input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} required className="w-full px-3 py-2 rounded-lg" /></div>
                 
-                {/* 💡 1. [초기값] 수원 / 부산 적용 완료 구역 */}
                 <div className="grid grid-cols-2 gap-2">
                   <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">출발지</label><input type="text" value={newDeparture} onChange={(e) => setNewDeparture(e.target.value)} required className="w-full px-3 py-2 rounded-lg" /></div>
                   <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">도착지</label><input type="text" value={newDestination} onChange={(e) => setNewDestination(e.target.value)} required className="w-full px-3 py-2 rounded-lg" /></div>
                 </div>
                 
-                {/* 💡 2. [초기값/포맷] 150,000 콤마 적용 구역 */}
                 <div className="grid grid-cols-2 gap-2">
                   <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">탁송료(원)</label><input type="text" value={newGross} onChange={(e) => setNewGross(formatNumberWithComma(e.target.value))} required className="w-full px-3 py-2 rounded-lg text-right" /></div>
                   <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">수수료(%)</label><input type="number" value={newFeeRate} onChange={(e) => setNewFeeRate(e.target.value)} className="w-full px-3 py-2 rounded-lg text-right" /></div>
                 </div>
                 <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">기사 팁/추가운임 (선택)</label><input type="text" placeholder="5,000" value={newTip} onChange={(e) => setNewTip(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" /></div>
                 
-                <div className="p-3.5 rounded-xl bg-white/5 border border-white/20">
-                  <label className="text-xs font-bold text-[#8B5CF6] flex items-center justify-between gap-1.5 mb-2">
+                <div className="p-3.5 rounded-xl bg-white/5 border border-[#8B5CF6]/30 space-y-2.5">
+                  <label className="text-xs font-bold text-[#8B5CF6] flex items-center justify-between gap-1.5">
                     <div className="flex items-center gap-1.5"><Fuel className="w-4 h-4 text-[#8B5CF6]" />대납 주유/충전비 (100% 회수)</div>
                   </label>
-                  <input type="text" placeholder="선결제한 주유 금액" value={newFuel} onChange={(e) => setNewFuel(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right mb-2" />
+                  <input type="text" placeholder="선결제한 주유 금액" value={newFuel} onChange={(e) => setNewFuel(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" />
                   
-                  {/* 💡 3. [레이아웃 강제 교정] 현금/카드 토글 버튼이 절대 가려지지 않게 수정된 영역 */}
-                  <div className="flex flex-row w-full items-center justify-between gap-2">
-                    <button type="button" onClick={() => setNewPaymentMethod('현금')} className={`w-1/2 py-2 rounded-lg border text-xs font-bold cursor-pointer transition-colors ${newPaymentMethod === '현금' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-[0_0_10px_rgba(139,92,246,0.3)]' : 'bg-[#0B1120] text-slate-400 border-white/20 hover:border-white/40'}`}>현금 결제</button>
-                    <button type="button" onClick={() => setNewPaymentMethod('카드')} className={`w-1/2 py-2 rounded-lg border text-xs font-bold cursor-pointer transition-colors ${newPaymentMethod === '카드' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-[0_0_10px_rgba(139,92,246,0.3)]' : 'bg-[#0B1120] text-slate-400 border-white/20 hover:border-white/40'}`}>카드 결제</button>
+                  <div className="flex w-full items-center gap-2 pt-1 mt-1">
+                    <button type="button" onClick={() => setNewPaymentMethod('현금')} className={`flex-1 py-1.5 rounded-md border text-[11px] font-bold cursor-pointer transition-colors ${newPaymentMethod === '현금' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-sm' : 'bg-transparent text-slate-400 border-white/20 hover:border-white/40'}`}>현금 결제</button>
+                    <button type="button" onClick={() => setNewPaymentMethod('카드')} className={`flex-1 py-1.5 rounded-md border text-[11px] font-bold cursor-pointer transition-colors ${newPaymentMethod === '카드' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-sm' : 'bg-transparent text-slate-400 border-white/20 hover:border-white/40'}`}>카드 결제</button>
                   </div>
                 </div>
 
@@ -1691,10 +1699,10 @@ export default function App() {
               </div>
               <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">운임(원)</label><input type="text" value={editGross} onChange={(e) => setEditGross(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" required /></div>
               
-              <div className="p-3.5 rounded-xl bg-white/5 border border-white/10 space-y-2">
+              <div className="p-3.5 rounded-xl bg-[#0B1120] border border-white/20 space-y-2">
                 <label className="block text-[11px] font-semibold text-slate-300">대납 주유비</label>
                 <input type="text" value={editFuel} onChange={(e) => setEditFuel(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" />
-                <div className="flex items-center gap-2 pt-1 mt-1">
+                <div className="flex flex-row items-center gap-2 pt-1 mt-1">
                   <button type="button" onClick={() => setEditPaymentMethod('현금')} className={`flex-1 py-1.5 rounded-md border text-[11px] font-bold cursor-pointer transition-colors ${editPaymentMethod === '현금' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-sm' : 'bg-transparent text-slate-400 border-white/20 hover:border-white/40'}`}>현금 결제</button>
                   <button type="button" onClick={() => setEditPaymentMethod('카드')} className={`flex-1 py-1.5 rounded-md border text-[11px] font-bold cursor-pointer transition-colors ${editPaymentMethod === '카드' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-sm' : 'bg-transparent text-slate-400 border-white/20 hover:border-white/40'}`}>카드 결제</button>
                 </div>
