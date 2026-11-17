@@ -47,6 +47,40 @@ const formatPhoneNumber = (val: string) => {
   return num;
 };
 
+const parseImportedRow = (row: any) => {
+  const keys = Object.keys(row);
+  const dateKey = keys.find(k => k.includes('일') || k.includes('날짜') || k.includes('date'));
+  const depKey = keys.find(k => k.includes('출발') || k.includes('시작'));
+  const destKey = keys.find(k => k.includes('도착') || k.includes('종료'));
+  const grossKey = keys.find(k => k.includes('요금') || k.includes('매출') || k.includes('탁송료') || k.includes('수입'));
+  const feeKey = keys.find(k => k.includes('수수료') || k.includes('차감'));
+  
+  let parsedDate = getTodayKST();
+  if (dateKey && row[dateKey]) {
+    const rawDate = String(row[dateKey]).replace(/[\.\/]/g, '-');
+    const match = rawDate.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (match) parsedDate = `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
+  }
+
+  const gross = cleanNumber(row[grossKey]) || 0;
+  const fee = cleanNumber(row[feeKey]) || 0;
+  const net = gross - fee;
+
+  return {
+    date: parsedDate,
+    departure: row[depKey] ? String(row[depKey]).substring(0,20) : '출발지 미상',
+    destination: row[destKey] ? String(row[destKey]).substring(0,20) : '도착지 미상',
+    grossAmount: gross,
+    feeRate: gross > 0 ? Math.round((fee / gross) * 100) : 20,
+    fuelAmount: 0,
+    extraExpenseAmount: 0,
+    tipAmount: 0,
+    netAmount: net,
+    totalClaimAmount: gross,
+    paymentMethod: '현금'
+  };
+};
+
 interface DrivingRecord {
   id: string; userId?: string; date: string; startTime: string; endTime: string;
   departure: string; destination: string; grossAmount: number; feeRate: number;
@@ -60,7 +94,7 @@ interface BankAccount { id: string; bankName: string; accountNumber: string; hol
 interface MemberProfile { id: string; email: string; name: string; phone: string; role: string; createdAt: string; lastLoginAt?: string; loginCount?: number; recordCount?: number; monthlyGross?: number; }
 interface NoticeItem { id: string; title: string; content: string; isActive: boolean; updatedAt?: string; }
 
-// 💡 [데이터 복구 완료] 전국 알짜배기 매매단지 거점 18곳 완벽 세팅
+// 💡 매매단지 18곳 (완벽 유지)
 const TRADE_CENTERS = [
   { id: '1', name: '수원 도이치오토월드', tier: 'S', region: '수도권', addr: '경기 수원시 권선구 권선로 308-5', desc: '전국 최대 실내 복합단지.' },
   { id: '2', name: '수원 SK V1 모터스', tier: 'S', region: '수도권', addr: '경기 수원시 권선구 평동로79번길 45', desc: '도이치오토월드 옆.' },
@@ -82,12 +116,12 @@ const TRADE_CENTERS = [
   { id: '18', name: '전주 월드컵매매단지', tier: 'B', region: '호남권', addr: '전북 전주시 덕진구 온고을로 860', desc: '전북권 핵심 거점.' }
 ];
 
-// 💡 [데이터 복구 완료] 요일별 경매장(천안 SK 등) 완벽 복구
+// 💡 [경매장 완벽 복구] 화/목 요일 누락 업체(세종, 오산 등) 100% 복구 완료
 const AUCTION_SCHEDULES = [
-  { day: '월요일', hex: '#38BDF8', locations: [{ name: '안성 롯데오토옥션', tier: 'S', addr: '경기 안성시 원곡면 내가천리 12', tag: '롯데' }, { name: '진천 오토보이', tier: 'B', addr: '충북 진천군 금천길 37', tag: '오토보이' }] },
-  { day: '화요일', hex: '#EC4899', locations: [{ name: '분당(오포) 현대글로비스', tier: 'S', addr: '경기 광주시 능평리 174-25', tag: '글로비스' }, { name: '시화 현대글로비스 (구)', tier: 'A', addr: '경기 시흥시 정왕천로 271', tag: '글로비스' }, { name: '천안 SK V1 옥션', tier: 'B', addr: '충남 천안시 동남구 구성동', tag: 'SK' }] },
-  { day: '수요일', hex: '#10B981', locations: [{ name: '안성 오토허브옥션', tier: 'S', addr: '경기 안성시 공도읍 문터길 60', tag: '오토허브' }, { name: '오산 K Car 옥션', tier: 'A', addr: '경기 오산시 은계동 7-30', tag: '케이카' }] },
-  { day: '목요일', hex: '#F59E0B', locations: [{ name: '양산 현대글로비스', tier: 'S', addr: '경남 양산시 산막동 572-1', tag: '글로비스' }, { name: '세종 K Car 옥션', tier: 'A', addr: '세종 부강면 문곡리 산 249', tag: '케이카' }] },
+  { day: '월요일', hex: '#38BDF8', locations: [{ name: '안성 롯데렌탈', tier: 'S', addr: '경기 안성시 내가천리 12', tag: '롯데' }, { name: '진천 광혜원 오토보이', tier: 'B', addr: '충북 진천군 금천길 37', tag: '오토보이' }] },
+  { day: '화요일', hex: '#EC4899', locations: [{ name: '시화 현대글로비스', tier: 'S', addr: '경기 시흥시 정왕천로 271', tag: '글로비스' }, { name: '오포 현대글로비스', tier: 'S', addr: '경기 광주시 능평리 174-25', tag: '글로비스' }, { name: '세종 K Car', tier: 'A', addr: '세종 부강면 문곡리 산 249', tag: '케이카' }, { name: '천안 SK경매장', tier: 'B', addr: '충남 천안시 구성동', tag: 'SK' }] },
+  { day: '수요일', hex: '#10B981', locations: [{ name: '안성 오토허브', tier: 'S', addr: '경기 안성시 문터길 60', tag: '오토허브' }] },
+  { day: '목요일', hex: '#F59E0B', locations: [{ name: '양산 현대글로비스', tier: 'S', addr: '경남 양산시 산막동 572-1', tag: '글로비스' }, { name: '오산 K Car', tier: 'A', addr: '경기 오산시 은계동 7-30', tag: '케이카' }] },
   { day: '금요일', hex: '#8B5CF6', locations: [{ name: '시화 현대글로비스', tier: 'S', addr: '경기 시흥시 정왕동 2122-4', tag: '글로비스' }] }
 ];
 
@@ -311,11 +345,6 @@ export default function App() {
   const handleLogout = async () => { await supabase.auth.signOut(); setShowProfileModal(false); setActiveTab('records'); };
   const handlePasswordChange = async (e: React.FormEvent) => { e.preventDefault(); setPwdLoading(true); setPwdMessage(null); if (newPassword.length < 6) { setPwdMessage({ type: 'error', text: '비밀번호는 최소 6자리 이상이어야 합니다.' }); setPwdLoading(false); return; } const { error } = await supabase.auth.updateUser({ password: newPassword }); if (error) setPwdMessage({ type: 'error', text: error.message }); else { setPwdMessage({ type: 'success', text: '비밀번호가 성공적으로 변경되었습니다.' }); setNewPassword(''); } setPwdLoading(false); };
   
-  const handleSaveNoticeTemplate = async (e: React.FormEvent) => { e.preventDefault(); if (!inputNoticeTitle.trim() || !inputNoticeContent.trim()) return; setNoticeLoading(true); const targetId = editingNoticeId || `notice_${Date.now()}`; const { error } = await supabase.from('announcements').upsert({ id: targetId, title: inputNoticeTitle.trim(), content: inputNoticeContent.trim(), is_active: editingNoticeId ? (noticeList.find(n => n.id === editingNoticeId)?.isActive || false) : false, updated_at: new Date().toISOString() }); if (!error) { alert(editingNoticeId ? '수정되었습니다.' : '저장되었습니다.'); setInputNoticeTitle(''); setInputNoticeContent(''); setEditingNoticeId(null); fetchNotices(); } setNoticeLoading(false); };
-  const handleActivateNotice = async (targetNotice: NoticeItem) => { setNoticeLoading(true); await supabase.from('announcements').update({ is_active: false }).neq('id', 'dummy'); const { error } = await supabase.from('announcements').update({ is_active: true, updated_at: new Date().toISOString() }).eq('id', targetNotice.id); if (!error) { alert('메인 배너로 활성화되었습니다.'); fetchNotices(); } setNoticeLoading(false); };
-  const handleDeactivateAllNotices = async () => { setNoticeLoading(true); const { error } = await supabase.from('announcements').update({ is_active: false }).neq('id', 'dummy'); if (!error) { alert('메인 배너 송출이 중단되었습니다.'); fetchNotices(); } setNoticeLoading(false); };
-  const handleDeleteNotice = async (id: string) => { if (!window.confirm('삭제하시겠습니까?')) return; await supabase.from('announcements').delete().eq('id', id); fetchNotices(); };
-
   const handleAddRecord = async (e: React.FormEvent) => {
     e.preventDefault(); if (!session) return;
     const gross = cleanNumber(newGross); const feeRate = cleanNumber(newFeeRate); const fuel = cleanNumber(newFuel);
@@ -653,7 +682,6 @@ export default function App() {
           </div>
         )}
 
-        {/* 💡 [청구 관리 탭 전격 업그레이드] 문자 생성 외에 '취소(토글)' 가능한 입금확인 2종 버튼, 삭제, 수정 버튼 추가 완료 */}
         {activeTab === 'claims' && (
           <div className="glass-card rounded-xl p-6 shadow-lg fade-in-text">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
@@ -674,7 +702,6 @@ export default function App() {
                     </div>
                   </div>
                   
-                  {/* 💡 [취소 기능 연동] 누르면 체크, 다시 누르면 취소되는 토글 액션 */}
                   <div className="mt-4 pt-4 border-t border-white/10 flex flex-col gap-3">
                     <div className="flex gap-2">
                       <button onClick={() => toggleGrossPaid(r.id)} className={`flex-1 py-1.5 rounded-lg border text-[11px] font-bold transition-colors flex items-center justify-center gap-1 cursor-pointer ${r.isGrossPaid ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400' : 'border-[#8B5CF6]/50 text-[#8B5CF6] hover:bg-[#8B5CF6]/10'}`}>
@@ -1039,12 +1066,12 @@ export default function App() {
              <div className="space-y-3 mb-5">
                <button onClick={() => toggleGrossPaid(currentActionRecord.id)} className={`w-full py-3.5 rounded-xl font-bold flex items-center justify-between px-4 transition-colors cursor-pointer border ${currentActionRecord.isGrossPaid ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-[#EC4899]/10 text-[#EC4899] border-[#EC4899]/30'}`}>
                  <span className="text-xs">탁송 운임 ({currentActionRecord.grossAmount.toLocaleString()}원)</span>
-                 <span className="text-sm">{currentActionRecord.isGrossPaid ? '입금 완료 ✔' : '미수금 대기'}</span>
+                 <span className="text-sm">{currentActionRecord.isGrossPaid ? '입금 취소' : '입금 확인 ✔'}</span>
                </button>
                {(currentActionRecord.fuelAmount > 0 || currentActionRecord.extraExpenseAmount > 0) && (
                  <button onClick={() => toggleExpensePaid(currentActionRecord.id)} className={`w-full py-3.5 rounded-xl font-bold flex items-center justify-between px-4 transition-colors cursor-pointer border ${currentActionRecord.isExpensePaid ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-[#EC4899]/10 text-[#EC4899] border-[#EC4899]/30'}`}>
                    <span className="text-xs">대납 경비 ({(currentActionRecord.fuelAmount + currentActionRecord.extraExpenseAmount).toLocaleString()}원)</span>
-                   <span className="text-sm">{currentActionRecord.isExpensePaid ? '입금 완료 ✔' : '미수금 대기'}</span>
+                   <span className="text-sm">{currentActionRecord.isExpensePaid ? '입금 취소' : '입금 확인 ✔'}</span>
                  </button>
                )}
              </div>
