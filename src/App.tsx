@@ -387,7 +387,6 @@ export default function App() {
     } catch (error: any) { alert('이관 실패: ' + error.message); } finally { setIsImporting(false); setImportData([]); setImportStep(1); }
   };
 
-  // 💡 [입금 확인 함수 연동]
   const toggleGrossPaid = async (id: string) => {
     const target = records.find((r) => r.id === id); if (!target) return;
     const { error } = await supabase.from('driving_records').update({ is_gross_paid: !target.isGrossPaid }).eq('id', id);
@@ -670,6 +669,7 @@ export default function App() {
                               const isChecked = selectedRecordIds.includes(r.id);
                               const hasExpense = r.fuelAmount > 0 || r.extraExpenseAmount > 0;
                               return (
+                                // 💡 [복구] 탁송비/주유비 개별 체크 버튼 완벽 복구
                                 <div key={r.id} onClick={(e) => e.stopPropagation()} className={`relative group p-1.5 rounded-md border flex flex-col gap-1 transition-all ${isChecked ? 'bg-[#8B5CF6]/20 border-[#8B5CF6]/50' : 'bg-black/40 border-white/10 hover:border-white/30'}`}>
                                   <div className="flex items-start gap-1">
                                     <input type="checkbox" checked={isChecked} onChange={(e) => { e.stopPropagation(); if (e.target.checked) setSelectedRecordIds([...selectedRecordIds, r.id]); else setSelectedRecordIds(selectedRecordIds.filter(id => id !== r.id)); }} onClick={(e) => e.stopPropagation()} className="w-2.5 h-2.5 text-[#8B5CF6] rounded bg-[#0B1120] border-white/20 mt-0.5 cursor-pointer shrink-0" />
@@ -680,7 +680,6 @@ export default function App() {
                                         </div>
                                       </div>
                                       
-                                      {/* 💡 [수정 구역] 달력 내 입금 체크 버튼(초소형) 복구 */}
                                       <div className="flex flex-wrap items-center gap-1 mt-1">
                                         <button onClick={(e) => { e.stopPropagation(); toggleGrossPaid(r.id); }} className={`px-1 py-0.5 rounded-[4px] text-[8px] font-bold cursor-pointer border transition-colors ${r.isGrossPaid ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-[#EC4899]/20 text-[#EC4899] border-[#EC4899]/40'}`}>
                                           운임{r.isGrossPaid ? '✔' : '미수'}
@@ -691,7 +690,6 @@ export default function App() {
                                           </button>
                                         )}
                                       </div>
-
                                     </div>
                                   </div>
                                 </div>
