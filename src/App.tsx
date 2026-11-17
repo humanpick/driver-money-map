@@ -47,6 +47,40 @@ const formatPhoneNumber = (val: string) => {
   return num;
 };
 
+const parseImportedRow = (row: any) => {
+  const keys = Object.keys(row);
+  const dateKey = keys.find(k => k.includes('일') || k.includes('날짜') || k.includes('date'));
+  const depKey = keys.find(k => k.includes('출발') || k.includes('시작'));
+  const destKey = keys.find(k => k.includes('도착') || k.includes('종료'));
+  const grossKey = keys.find(k => k.includes('요금') || k.includes('매출') || k.includes('탁송료') || k.includes('수입'));
+  const feeKey = keys.find(k => k.includes('수수료') || k.includes('차감'));
+  
+  let parsedDate = getTodayKST();
+  if (dateKey && row[dateKey]) {
+    const rawDate = String(row[dateKey]).replace(/[\.\/]/g, '-');
+    const match = rawDate.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (match) parsedDate = `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
+  }
+
+  const gross = cleanNumber(row[grossKey]) || 0;
+  const fee = cleanNumber(row[feeKey]) || 0;
+  const net = gross - fee;
+
+  return {
+    date: parsedDate,
+    departure: row[depKey] ? String(row[depKey]).substring(0,20) : '출발지 미상',
+    destination: row[destKey] ? String(row[destKey]).substring(0,20) : '도착지 미상',
+    grossAmount: gross,
+    feeRate: gross > 0 ? Math.round((fee / gross) * 100) : 20,
+    fuelAmount: 0,
+    extraExpenseAmount: 0,
+    tipAmount: 0,
+    netAmount: net,
+    totalClaimAmount: gross,
+    paymentMethod: '현금'
+  };
+};
+
 interface DrivingRecord {
   id: string; userId?: string; date: string; startTime: string; endTime: string;
   departure: string; destination: string; grossAmount: number; feeRate: number;
@@ -117,7 +151,6 @@ export default function App() {
   const [adminSelectedUserRecords, setAdminSelectedUserRecords] = useState<DrivingRecord[]>([]);
 
   const [editingRecord, setEditingRecord] = useState<DrivingRecord | null>(null);
-  // 💡 [신규] 캘린더에서 기록 터치 시 열리는 '빠른 정산 팝업' 상태
   const [actionRecordId, setActionRecordId] = useState<string | null>(null);
   
   const [editDate, setEditDate] = useState('');
@@ -153,7 +186,6 @@ export default function App() {
 
   const [adminMemberList, setAdminMemberList] = useState<MemberProfile[]>([]);
   const [adminAllRecords, setAdminAllRecords] = useState<DrivingRecord[]>([]);
-  
   const [adminSearchTerm, setAdminSearchTerm] = useState('');
   const [showScoutOnly, setShowScoutOnly] = useState(false);
 
@@ -162,7 +194,6 @@ export default function App() {
   const [newDeparture, setNewDeparture] = useState('수원'); 
   const [newDestination, setNewDestination] = useState('부산');
   const [newGross, setNewGross] = useState('150,000'); 
-  
   const [newFeeRate, setNewFeeRate] = useState('20');
   const [newFuel, setNewFuel] = useState(''); const [newExtraExpense, setNewExtraExpense] = useState(''); const [newTip, setNewTip] = useState('');
   const [newPaymentMethod, setNewPaymentMethod] = useState<'현금' | '카드'>('현금'); 
@@ -346,14 +377,13 @@ export default function App() {
     if (!error) { const updatedList = records.map((r) => r.id === editingRecord.id ? { ...r, date: editDate, departure: editDeparture, destination: editDestination, grossAmount: gross, fuelAmount: fuel, extraExpenseAmount: extraExp, tipAmount: tip, netAmount: Math.round(net), totalClaimAmount: Math.round(claimTotal), paymentMethod: editPaymentMethod } : r); updatedList.sort((a, b) => a.date.localeCompare(b.date)); setRecords(updatedList); setEditingRecord(null); } else { alert('수정 실패'); }
   };
 
-  // 단일 삭제 (빠른 팝업에서 사용)
   const handleDeleteSingleRecord = async (id: string) => {
     if (!window.confirm('이 운행 기록을 삭제하시겠습니까? (삭제 직후 상단에서 복구 가능)')) return;
     const target = records.find(r => r.id === id);
     const { error } = await supabase.from('driving_records').delete().eq('id', id);
     if (!error) {
       setRecords(records.filter((r) => r.id !== id));
-      if(target) setLastDeletedRecords([target]); // 단일 삭제도 Undo 지원
+      if(target) setLastDeletedRecords([target]); 
       setSelectedRecordIds(prev => prev.filter(rid => rid !== id));
     }
   };
@@ -459,8 +489,6 @@ export default function App() {
   const calendarDaysArray: (string | null)[] = Array(firstDayIndex).fill(null);
   for (let i = 1; i <= daysInMonth; i++) { calendarDaysArray.push(`${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`); }
   const currentMonthDisplayRecords = records.filter(r => r.date.startsWith(`${calYear}-${String(calMonth + 1).padStart(2, '0')}`));
-  
-  // 💡 [신규] 빠른 팝업에 그릴 최신 레코드 데이터 가져오기
   const currentActionRecord = actionRecordId ? records.find(r => r.id === actionRecordId) || null : null;
 
   const injectStyles = () => (
@@ -573,7 +601,7 @@ export default function App() {
                   </div>
                 </div>
                 <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">통행료 등 기타 대납경비 (선택)</label><input type="text" placeholder="0" value={newExtraExpense} onChange={(e) => setNewExtraExpense(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" /></div>
-                <button type="submit" className="w-full py-3 hp-primary-btn font-bold rounded-lg text-xs cursor-pointer mt-2">운행 일지 등록 (미입금 상태로 저장)</button>
+                <button type="submit" className="w-full py-3 hp-primary-btn font-bold rounded-lg text-xs cursor-pointer mt-2">운행 일지 등록</button>
               </form>
             </div>
             
@@ -622,14 +650,12 @@ export default function App() {
                               const isFullyPaid = r.isGrossPaid && (!hasExpense || r.isExpensePaid);
 
                               return (
-                                // 💡 [UX 개선] 달력 안의 기록을 터치하면 '빠른 정산 팝업'이 열립니다.
                                 <div key={r.id} onClick={(e) => { e.stopPropagation(); setActionRecordId(r.id); }} className={`relative group p-1.5 rounded-md border flex flex-col gap-1 transition-all cursor-pointer ${isChecked ? 'bg-[#8B5CF6]/20 border-[#8B5CF6]/50' : 'bg-black/40 border-white/10 hover:border-[#8B5CF6]/50'}`}>
                                   <div className="flex items-start gap-1">
                                     <input type="checkbox" checked={isChecked} onChange={(e) => { e.stopPropagation(); if (e.target.checked) setSelectedRecordIds([...selectedRecordIds, r.id]); else setSelectedRecordIds(selectedRecordIds.filter(id => id !== r.id)); }} onClick={(e) => e.stopPropagation()} className="w-2.5 h-2.5 text-[#8B5CF6] rounded bg-[#0B1120] border-white/20 mt-0.5 cursor-pointer shrink-0" />
                                     <div className="min-w-0 flex-1 leading-tight">
                                       <div className="flex items-center justify-between">
                                         <div className="text-[10px] font-extrabold text-white truncate">{r.departure.substring(0,2)}➔{r.destination.substring(0,4)}</div>
-                                        {/* 💡 [직관성] 정산 완료 여부를 뱃지로 심플하게 표시 */}
                                         {isFullyPaid ? <span className="text-[9px] text-emerald-400 font-bold ml-1 shrink-0">완료</span> : <span className="text-[9px] text-[#EC4899] font-bold ml-1 shrink-0">미수</span>}
                                       </div>
                                       <div className="text-[9px] text-[#38BDF8] font-bold mt-0.5">{(r.netAmount / 10000).toFixed(1)}만</div>
@@ -649,6 +675,7 @@ export default function App() {
           </div>
         )}
 
+        {/* 💡 [청구 관리 탭 전격 업그레이드] 문자 생성 외에 입금확인 2종 버튼, 삭제, 수정 버튼 추가 및 기능 연동 완료 */}
         {activeTab === 'claims' && (
           <div className="glass-card rounded-xl p-6 shadow-lg fade-in-text">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
@@ -667,7 +694,30 @@ export default function App() {
                       {!r.isExpensePaid && r.extraExpenseAmount > 0 && <div className="flex justify-between"><span>대납 추가경비</span><span className="text-white">{r.extraExpenseAmount.toLocaleString()}원</span></div>}
                     </div>
                   </div>
-                  <div className="mt-4 pt-4 border-t border-white/10 flex justify-between items-center"><button onClick={() => openClaimMessageModal(r)} className="px-3 py-1.5 hp-primary-btn text-xs font-bold rounded cursor-pointer transition-colors flex items-center gap-1 ml-auto"><MessageSquare className="w-3.5 h-3.5" />문자 생성</button></div>
+                  
+                  {/* 💡 액션 및 토글 구역 추가 */}
+                  <div className="mt-4 pt-4 border-t border-white/10 flex flex-col gap-3">
+                    <div className="flex gap-2">
+                      {!r.isGrossPaid && (
+                        <button onClick={() => toggleGrossPaid(r.id)} className="flex-1 py-1.5 rounded-lg border border-[#8B5CF6]/50 text-[#8B5CF6] text-[11px] font-bold hover:bg-[#8B5CF6]/10 transition-colors flex items-center justify-center gap-1 cursor-pointer">
+                          <CheckCircle2 className="w-3 h-3" /> 운임 입금확인
+                        </button>
+                      )}
+                      {!r.isExpensePaid && (r.fuelAmount > 0 || r.extraExpenseAmount > 0) && (
+                        <button onClick={() => toggleExpensePaid(r.id)} className="flex-1 py-1.5 rounded-lg border border-emerald-500/50 text-emerald-400 text-[11px] font-bold hover:bg-emerald-500/10 transition-colors flex items-center justify-center gap-1 cursor-pointer">
+                          <CheckCircle2 className="w-3 h-3" /> 대납 입금확인
+                        </button>
+                      )}
+                    </div>
+                    
+                    <div className="flex justify-between items-center">
+                      <div className="flex gap-1.5">
+                        <button onClick={() => handleOpenEditModal(r)} className="p-2 bg-white/5 hover:bg-white/10 text-slate-300 rounded-lg transition-colors cursor-pointer" title="수정"><Edit2 className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => handleDeleteSingleRecord(r.id)} className="p-2 bg-white/5 hover:bg-[#EC4899]/20 text-slate-300 hover:text-[#EC4899] rounded-lg transition-colors cursor-pointer" title="삭제"><Trash2 className="w-3.5 h-3.5" /></button>
+                      </div>
+                      <button onClick={() => openClaimMessageModal(r)} className="px-3 py-1.5 hp-primary-btn text-xs font-bold rounded-lg cursor-pointer transition-colors flex items-center gap-1.5"><MessageSquare className="w-3.5 h-3.5" />문자 생성</button>
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
@@ -993,7 +1043,7 @@ export default function App() {
         )}
       </main>
 
-      {/* 💡 [신규] 빠른 정산 팝업 모달 */}
+      {/* 💡 빠른 정산 팝업 모달 */}
       {actionRecordId && currentActionRecord && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setActionRecordId(null)}>
           <div className="w-full max-w-sm glass-card rounded-2xl p-6 shadow-2xl relative" onClick={e => e.stopPropagation()}>
@@ -1052,8 +1102,28 @@ export default function App() {
         </div>
       )}
 
+      {claimModalOpen && selectedClaimRecord && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="w-full max-w-lg glass-card rounded-2xl p-6 shadow-2xl relative">
+            <button onClick={() => setClaimModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 cursor-pointer"><X className="w-5 h-5" /></button>
+            <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2"><MessageSquare className="w-5 h-5 text-[#8B5CF6]" />정산 청구 문자 편집 및 복사</h3>
+            <p className="text-xs text-slate-400 mb-4">미입금된 내역만 자동으로 체크되어 문구가 생성됩니다. 수정한 후 복사하세요.</p>
+            <div className="flex gap-4 mb-4 pb-4 border-b border-white/10">
+              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 cursor-pointer"><input type="checkbox" checked={includeGross} onChange={() => handleToggleInclude('gross')} className="rounded text-[#8B5CF6]" disabled={selectedClaimRecord.isGrossPaid} /> 기본 운임</label>
+              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 cursor-pointer"><input type="checkbox" checked={includeFuel} onChange={() => handleToggleInclude('fuel')} className="rounded text-[#8B5CF6]" disabled={selectedClaimRecord.fuelAmount === 0 || selectedClaimRecord.isExpensePaid} /> 주유비</label>
+              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 cursor-pointer"><input type="checkbox" checked={includeExtra} onChange={() => handleToggleInclude('extra')} className="rounded text-[#8B5CF6]" disabled={selectedClaimRecord.extraExpenseAmount === 0 || selectedClaimRecord.isExpensePaid} /> 추가경비</label>
+            </div>
+            <textarea rows={10} value={claimMessageText} onChange={(e) => setClaimMessageText(e.target.value)} className="w-full p-4 rounded-xl text-xs font-mono mb-4 leading-relaxed bg-[#FFFFFF] text-[#000000] focus:shadow-[0_0_12px_#8B5CF6] focus:border-[#8B5CF6] transition-all outline-none" />
+            <div className="flex gap-2">
+              <button onClick={() => setClaimModalOpen(false)} className="flex-1 py-3 bg-[#0B1120] border border-white/10 hover:bg-white/10 text-white font-semibold rounded-lg text-xs cursor-pointer transition-colors">닫기</button>
+              <button onClick={() => { navigator.clipboard.writeText(claimMessageText); alert('수정된 정산 청구 문자가 복사되었습니다.'); setClaimModalOpen(false); }} className="flex-1 py-3 hp-primary-btn text-white font-bold rounded-lg text-xs cursor-pointer shadow-md flex items-center justify-center gap-1.5"><Copy className="w-3.5 h-3.5" />복사하기</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {adminSelectedUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="w-full max-w-2xl glass-card rounded-2xl p-6 shadow-2xl relative max-h-[90vh] flex flex-col">
             <button onClick={() => setAdminSelectedUser(null)} className="absolute top-4 right-4 text-slate-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
             <h3 className="text-base font-bold text-[#38BDF8] mb-4 flex items-center gap-2"><Search className="w-5 h-5" /> {adminSelectedUser.name || '미상'} 기사님 상세 리포트</h3>
@@ -1083,7 +1153,7 @@ export default function App() {
       )}
 
       {showProfileModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
           <div className="w-full max-w-sm glass-card rounded-2xl p-6 shadow-2xl relative z-20">
             <button onClick={() => setShowProfileModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 cursor-pointer"><X className="w-5 h-5" /></button>
             <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2"><User className="w-4 h-4 text-[#8B5CF6]" />기사 프로필 및 계정 관리</h3>
