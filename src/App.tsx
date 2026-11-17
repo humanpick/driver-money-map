@@ -116,7 +116,7 @@ const AUCTION_SCHEDULES = [
 ];
 
 export default function App() {
-  const { needRefresh: [needRefresh], updateServiceWorker } = useRegisterSW({ onRegistered(r) {}, onRegisterError(error) {} });
+  const { needRefresh: [needRefresh, setNeedRefresh], updateServiceWorker } = useRegisterSW({ onRegistered(r) {}, onRegisterError(error) {} });
   useEffect(() => { if (needRefresh) updateServiceWorker(true); }, [needRefresh, updateServiceWorker]);
 
   const [session, setSession] = useState<any>(null);
@@ -132,8 +132,10 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'records' | 'claims' | 'expense' | 'analytics' | 'wallet' | 'trade_centers' | 'auctions' | 'admin'>('records');
   const [adminSubTab, setAdminSubTab] = useState<'campaign' | 'members' | 'analytics'>('members');
   
-  const [dateFilter, setDateFilter] = useState<'today' | 'month' | 'year' | 'custom'>('month');
+  // 💡 [개선 1] 접속 시 '일간(day)' 필터를 기본값으로 설정
+  const [dateFilter, setDateFilter] = useState<'day' | 'month' | 'year'>('day');
   const [customDate, setCustomDate] = useState<string>(() => getTodayKST());
+  
   const [analyticsMode, setAnalyticsMode] = useState<'month' | 'year'>('month');
   const [analyticsYear, setAnalyticsYear] = useState<string>(new Date().getFullYear().toString());
   const [tradeFilter, setTradeFilter] = useState<'전체' | 'S등급' | 'A등급' | '수도권' | '충청권' | '영남권' | '호남권'>('전체');
@@ -161,6 +163,9 @@ export default function App() {
   const [records, setRecords] = useState<DrivingRecord[]>([]);
   const [selectedRecordIds, setSelectedRecordIds] = useState<string[]>([]);
   
+  // 💡 [개선 3] 방금 삭제한 데이터를 임시 보관하여 즉시 복구(Undo)할 수 있게 하는 상태값
+  const [lastDeletedRecords, setLastDeletedRecords] = useState<DrivingRecord[]>([]);
+  
   const [visibleRecordCount, setVisibleRecordCount] = useState<number>(30);
   const [visibleClaimCount, setVisibleClaimCount] = useState<number>(30);
 
@@ -173,10 +178,7 @@ export default function App() {
   const [accounts, setAccounts] = useState<BankAccount[]>(() => {
     try { 
       const saved = localStorage.getItem('jundriver_accounts_v2'); 
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
-      }
+      if (saved) { const parsed = JSON.parse(saved); if (Array.isArray(parsed)) return parsed; }
     } catch (e) {}
     return [{ id: '1', bankName: '신한은행', accountNumber: '110-123-456789', holder: '김탁송' }];
   });
@@ -206,44 +208,20 @@ export default function App() {
   const [bankName, setBankName] = useState(''); const [accountNumber, setAccountNumber] = useState(''); const [holder, setHolder] = useState('');
 
   const [targetIncome, setTargetIncome] = useState<string>(() => {
-    try { 
-      const s = localStorage.getItem('jundriver_target_v2'); 
-      if (s) {
-        const parsed = JSON.parse(s);
-        return parsed.income ? String(parsed.income) : '5,000,000';
-      }
-    } catch (e) {}
+    try { const s = localStorage.getItem('jundriver_target_v2'); if (s) { const parsed = JSON.parse(s); return parsed.income ? String(parsed.income) : '5,000,000'; } } catch (e) {}
     return '5,000,000';
   });
   const [targetDays, setTargetDays] = useState<string>(() => {
-    try { 
-      const s = localStorage.getItem('jundriver_target_v2'); 
-      if (s) {
-        const parsed = JSON.parse(s);
-        return parsed.days ? String(parsed.days) : '25';
-      }
-    } catch (e) {}
+    try { const s = localStorage.getItem('jundriver_target_v2'); if (s) { const parsed = JSON.parse(s); return parsed.days ? String(parsed.days) : '25'; } } catch (e) {}
     return '25';
   });
 
   const [fixedDailyExp, setFixedDailyExp] = useState<string>(() => {
-    try { 
-      const s = localStorage.getItem('jundriver_fixed_exp_v2'); 
-      if (s) {
-        const parsed = JSON.parse(s);
-        return parsed.amount !== undefined ? String(parsed.amount) : '3,200';
-      }
-    } catch (e) {}
+    try { const s = localStorage.getItem('jundriver_fixed_exp_v2'); if (s) { const parsed = JSON.parse(s); return parsed.amount !== undefined ? String(parsed.amount) : '3,200'; } } catch (e) {}
     return '3,200';
   });
   const [fixedDailyMemo, setFixedDailyMemo] = useState<string>(() => {
-    try { 
-      const s = localStorage.getItem('jundriver_fixed_exp_v2'); 
-      if (s) {
-        const parsed = JSON.parse(s);
-        return parsed.memo ? String(parsed.memo) : '일비 및 보험료';
-      }
-    } catch (e) {}
+    try { const s = localStorage.getItem('jundriver_fixed_exp_v2'); if (s) { const parsed = JSON.parse(s); return parsed.memo ? String(parsed.memo) : '일비 및 보험료'; } } catch (e) {}
     return '일비 및 보험료';
   });
 
@@ -254,6 +232,7 @@ export default function App() {
   useEffect(() => {
     setSelectedRecordIds([]);
     setVisibleRecordCount(30);
+    setLastDeletedRecords([]); // 필터 변경 시 복구 버퍼 초기화
   }, [dateFilter, customDate, activeTab]);
 
   const fetchNotices = async () => {
@@ -581,19 +560,13 @@ export default function App() {
     } else { alert('수정 실패: ' + error?.message); }
   };
 
-  const handleDeleteRecord = async (id: string) => {
-    if (!window.confirm('이 운행 일지를 삭제하시겠습니까?')) return;
-    const { error } = await supabase.from('driving_records').delete().eq('id', id);
-    if (!error) {
-      setRecords(records.filter((r) => r.id !== id));
-      setSelectedRecordIds(prev => prev.filter(rid => rid !== id));
-    }
-  };
-
+  // 💡 [개선 3-1] 삭제된 데이터를 복구 버퍼에 임시 저장하는 로직
   const handleBulkDeleteRecords = async () => {
     if (selectedRecordIds.length === 0) return;
     if (!window.confirm(`선택한 ${selectedRecordIds.length}건의 운행 일지를 정말 삭제하시겠습니까?`)) return;
     
+    const recordsToDelete = records.filter(r => selectedRecordIds.includes(r.id));
+
     try {
       const chunkSize = 50;
       for (let i = 0; i < selectedRecordIds.length; i += chunkSize) {
@@ -602,10 +575,51 @@ export default function App() {
         if (error) throw error;
       }
       setRecords(records.filter((r) => !selectedRecordIds.includes(r.id)));
+      setLastDeletedRecords(recordsToDelete); // 방금 삭제한 데이터를 복구 버퍼에 저장
       setSelectedRecordIds([]);
-      alert('일괄 삭제가 성공적으로 완료되었습니다.');
+      // 삭제 성공 alert는 복구 버튼을 가릴 수 있으므로 생략하여 UX 개선
     } catch (error: any) {
       alert('삭제 실패: ' + error.message);
+    }
+  };
+
+  // 💡 [개선 3-2] 방금 삭제한 항목 즉시 복구(Undo) 로직
+  const handleUndoDelete = async () => {
+    if (lastDeletedRecords.length === 0 || !session) return;
+    
+    const payloads = lastDeletedRecords.map(r => ({
+      id: r.id, user_id: session.user.id, date: r.date, start_time: r.startTime, end_time: r.endTime, 
+      departure: r.departure, destination: r.destination, gross_amount: r.grossAmount, fee_rate: r.feeRate, 
+      fuel_amount: r.fuelAmount, extra_expense_amount: r.extraExpenseAmount, tip_amount: r.tipAmount, 
+      is_gross_paid: r.isGrossPaid, is_expense_paid: r.isExpensePaid, net_amount: r.netAmount, 
+      total_claim_amount: r.totalClaimAmount, payment_method: r.paymentMethod || '현금'
+    }));
+
+    // 결제 수단 호환성을 위한 fallback 처리 포함
+    const insertWithFallback = async (chunk: any[]) => {
+      let result = await supabase.from('driving_records').insert(chunk);
+      if (result.error && result.error.message.includes('payment_method')) {
+        const fallbackChunk = chunk.map(p => { const { payment_method, ...rest } = p; return rest; });
+        result = await supabase.from('driving_records').insert(fallbackChunk);
+      }
+      return result;
+    };
+
+    try {
+      const chunkSize = 50;
+      for (let i = 0; i < payloads.length; i += chunkSize) {
+        const chunk = payloads.slice(i, i + chunkSize);
+        const { error } = await insertWithFallback(chunk);
+        if (error) throw error;
+      }
+      
+      const updated = [...records, ...lastDeletedRecords];
+      updated.sort((a, b) => a.date.localeCompare(b.date));
+      setRecords(updated);
+      setLastDeletedRecords([]); // 복구 완료 후 버퍼 비우기
+      alert(`${lastDeletedRecords.length}건이 성공적으로 복구되었습니다.`);
+    } catch (error: any) {
+      alert('복구 실패: ' + error.message);
     }
   };
 
@@ -897,8 +911,6 @@ export default function App() {
           </div>
           <div className="flex items-center gap-2">
             {isAdminUser && <button onClick={() => { fetchAdminData(); setActiveTab('admin'); }} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all ${activeTab === 'admin' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#38BDF8]/10 border border-[#38BDF8]/30 text-[#38BDF8] hover:bg-[#38BDF8]/20'}`}><Crown className="w-3.5 h-3.5" /><span className="hidden sm:inline">관제탑</span></button>}
-            
-            {/* 💡 [핵심 버그 수정 구역] 상단 헤더 이름 출력 시 절대 에러가 나지 않도록 방탄 처리 */}
             <button onClick={() => setShowProfileModal(true)} className="flex items-center gap-2 px-3 py-1.5 rounded-lg glass-card text-xs text-slate-200 cursor-pointer">
               <User className="w-3.5 h-3.5 text-[#8B5CF6]" />
               <div className="text-left">
@@ -907,7 +919,6 @@ export default function App() {
                 </span>
               </div>
             </button>
-
             <button onClick={handleLogout} className="p-1.5 rounded-lg glass-card text-slate-400 hover:text-[#EC4899] cursor-pointer"><LogOut className="w-4 h-4" /></button>
           </div>
         </div>
@@ -961,11 +972,11 @@ export default function App() {
                 </div>
                 <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">기사 팁/추가운임 (선택)</label><input type="text" placeholder="5,000" value={newTip} onChange={(e) => setNewTip(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" /></div>
                 
-                <div className="p-3.5 rounded-xl bg-white/5 border border-white/20">
-                  <label className="text-xs font-bold text-[#8B5CF6] flex items-center justify-between gap-1.5 mb-2">
+                <div className="p-3.5 rounded-xl bg-white/5 border border-[#8B5CF6]/30 space-y-2.5">
+                  <label className="text-xs font-bold text-[#8B5CF6] flex items-center justify-between gap-1.5">
                     <div className="flex items-center gap-1.5"><Fuel className="w-4 h-4 text-[#8B5CF6]" />대납 주유/충전비 (100% 회수)</div>
                   </label>
-                  <input type="text" placeholder="선결제한 주유 금액" value={newFuel} onChange={(e) => setNewFuel(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right mb-2" />
+                  <input type="text" placeholder="선결제한 주유 금액" value={newFuel} onChange={(e) => setNewFuel(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" />
                   
                   <div className="flex flex-row items-center justify-between gap-2 pt-1 w-full">
                     <button type="button" onClick={() => setNewPaymentMethod('현금')} className={`flex-1 py-2 rounded-lg border text-xs font-bold cursor-pointer transition-colors ${newPaymentMethod === '현금' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-[0_0_10px_rgba(139,92,246,0.3)]' : 'bg-transparent text-slate-400 border-white/30 hover:border-white/50'}`}>현금 결제</button>
@@ -985,33 +996,52 @@ export default function App() {
                   <p className="text-[11px] text-[#38BDF8] font-medium mt-1 ml-6">운임과 대납 경비의 입금 상태를 분리해서 관리하세요.</p>
                 </div>
                 
+                {/* 💡 [개선 2] 일/월/연 탭 클릭 시 캘린더 Picker 타입 연동 변경 */}
                 <div className="flex flex-col gap-2 shrink-0">
                   <div className="flex items-center gap-1 bg-[#0B1120] p-1 rounded-lg border border-white/10 text-[11px] font-bold">
                     <button onClick={() => setDateFilter('day')} className={`px-2.5 py-1.5 rounded transition-colors cursor-pointer ${dateFilter === 'day' ? 'bg-[#8B5CF6] text-white' : 'text-slate-400 hover:text-white'}`}>일간</button>
                     <button onClick={() => setDateFilter('month')} className={`px-2.5 py-1.5 rounded transition-colors cursor-pointer ${dateFilter === 'month' ? 'bg-[#8B5CF6] text-white' : 'text-slate-400 hover:text-white'}`}>월간</button>
                     <button onClick={() => setDateFilter('year')} className={`px-2.5 py-1.5 rounded transition-colors cursor-pointer ${dateFilter === 'year' ? 'bg-[#8B5CF6] text-white' : 'text-slate-400 hover:text-white'}`}>연간</button>
                   </div>
-                  <input type="date" value={customDate} onChange={(e) => { setCustomDate(e.target.value); setDateFilter('custom'); }} className={`bg-white text-black font-bold text-[11px] px-2 py-1.5 rounded-lg border-0 focus:ring-2 focus:ring-[#8B5CF6] cursor-pointer w-full ${dateFilter === 'custom' ? 'ring-2 ring-[#8B5CF6]' : ''}`} />
+                  
+                  {dateFilter === 'day' && (
+                    <input type="date" value={customDate} onChange={(e) => setCustomDate(e.target.value)} className="bg-white text-black font-bold text-[11px] px-2 py-1.5 rounded-lg border-0 focus:ring-2 focus:ring-[#8B5CF6] cursor-pointer w-full" />
+                  )}
+                  {dateFilter === 'month' && (
+                    <input type="month" value={customDate.substring(0, 7)} onChange={(e) => setCustomDate(`${e.target.value}-01`)} className="bg-white text-black font-bold text-[11px] px-2 py-1.5 rounded-lg border-0 focus:ring-2 focus:ring-[#8B5CF6] cursor-pointer w-full" />
+                  )}
+                  {dateFilter === 'year' && (
+                    <select value={customDate.substring(0, 4)} onChange={(e) => setCustomDate(`${e.target.value}-01-01`)} className="bg-white text-black font-bold text-[11px] px-2 py-1.5 rounded-lg border-0 focus:ring-2 focus:ring-[#8B5CF6] cursor-pointer w-full text-center">
+                      {[2024, 2025, 2026, 2027, 2028].map(y => <option key={y} value={y}>{y}년</option>)}
+                    </select>
+                  )}
                 </div>
               </div>
 
-              <div className="flex items-center justify-between bg-white/5 p-3 rounded-xl mb-3 border border-white/10">
-                <label className="flex items-center gap-2 text-xs font-semibold text-slate-300 cursor-pointer">
+              {/* 💡 [개선 3-2] 방금 삭제한 항목 즉시 복구(Undo) 버튼 UI 노출 구역 */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-white/5 p-3 rounded-xl mb-3 border border-white/10 gap-3">
+                <label className="flex items-center gap-2 text-xs font-semibold text-slate-300 cursor-pointer w-full sm:w-auto">
                   <input type="checkbox" 
                          checked={filteredRecords.length > 0 && selectedRecordIds.length === filteredRecords.length} 
                          onChange={(e) => setSelectedRecordIds(e.target.checked ? filteredRecords.map(r => r.id) : [])} 
                          className="w-4 h-4 rounded text-[#8B5CF6] cursor-pointer bg-[#0B1120] border-white/20" />
                   전체 선택 ({selectedRecordIds.length}/{filteredRecords.length})
                 </label>
-                <div className="flex items-center gap-2">
+                
+                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+                  {lastDeletedRecords.length > 0 && (
+                    <button onClick={handleUndoDelete} className="px-3 py-1.5 bg-indigo-500/20 hover:bg-indigo-500/40 text-indigo-400 text-[11px] font-bold rounded-lg flex items-center gap-1 transition-colors cursor-pointer animate-pulse border border-indigo-500/30">
+                      <RotateCcw className="w-3.5 h-3.5" /> 방금 삭제한 {lastDeletedRecords.length}건 복구
+                    </button>
+                  )}
+                  {selectedRecordIds.length > 0 && (
+                    <button onClick={handleBulkDeleteRecords} className="px-3 py-1.5 bg-[#EC4899]/20 hover:bg-[#EC4899]/40 text-[#EC4899] text-[11px] font-bold rounded-lg flex items-center gap-1 transition-colors cursor-pointer">
+                      <Trash2 className="w-3.5 h-3.5" /> 일괄 삭제
+                    </button>
+                  )}
                   <button onClick={() => { setImportStep(1); setImportData([]); setImportModalOpen(true); }} className="px-3 py-1.5 bg-[#10B981]/10 text-[#10B981] border border-[#10B981]/30 hover:bg-[#10B981]/20 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 cursor-pointer">
                     <Download className="w-3.5 h-3.5" /> 타사 장부 불러오기
                   </button>
-                  {selectedRecordIds.length > 0 && (
-                    <button onClick={handleBulkDeleteRecords} className="px-3 py-1.5 bg-[#EC4899]/20 hover:bg-[#EC4899]/40 text-[#EC4899] text-[11px] font-bold rounded-lg flex items-center gap-1 transition-colors cursor-pointer">
-                      <Trash2 className="w-3.5 h-3.5" /> 선택 삭제
-                    </button>
-                  )}
                 </div>
               </div>
 
