@@ -94,7 +94,6 @@ interface BankAccount { id: string; bankName: string; accountNumber: string; hol
 interface MemberProfile { id: string; email: string; name: string; phone: string; role: string; createdAt: string; lastLoginAt?: string; loginCount?: number; recordCount?: number; monthlyGross?: number; }
 interface NoticeItem { id: string; title: string; content: string; isActive: boolean; updatedAt?: string; }
 
-// 💡 [데이터 복구 완료] 실수로 잘라먹었던 전국 10대 거점 완벽 복구
 const TRADE_CENTERS = [
   { id: '1', name: '수원 도이치오토월드', tier: 'S', region: '수도권', addr: '경기 수원시 권선구 권선로 308-5', desc: '전국 최대 실내 복합단지.' },
   { id: '2', name: '수원 SK V1 모터스', tier: 'S', region: '수도권', addr: '경기 수원시 권선구 평동로79번길 45', desc: '도이치오토월드 옆.' },
@@ -108,7 +107,6 @@ const TRADE_CENTERS = [
   { id: '10', name: '대전 디오토몰', tier: 'A', region: '충청권', addr: '대전 유성구 복용동로 35', desc: '충청권 핵심.' }
 ];
 
-// 💡 [데이터 복구 완료] 화요일 경매장 누락분(천안 SK) 완벽 복구
 const AUCTION_SCHEDULES = [
   { day: '월요일', hex: '#38BDF8', locations: [{ name: '안성 롯데렌탈', tier: 'S', addr: '경기 안성시 내가천리 12', tag: '롯데' }, { name: '진천 광혜원 오토보이', tier: 'B', addr: '충북 진천군 금천길 37', tag: '오토보이' }] },
   { day: '화요일', hex: '#EC4899', locations: [{ name: '시화 현대글로비스', tier: 'S', addr: '경기 시흥시 정왕천로 271', tag: '글로비스' }, { name: '오포 현대글로비스', tier: 'S', addr: '경기 광주시 능평리 174-25', tag: '글로비스' }, { name: '세종 K Car', tier: 'A', addr: '세종 부강면 문곡리 산 249', tag: '케이카' }, { name: '천안 SK경매장', tier: 'B', addr: '충남 천안시 구성동', tag: 'SK' }] },
@@ -506,7 +504,7 @@ export default function App() {
     <style dangerouslySetInnerHTML={{__html: `
       @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
       * { font-family: 'Pretendard', sans-serif !important; }
-      body { background-color: #0B1120; color: white; }
+      body { background-color: #0B1120; color: white; min-height: 100vh; overflow-y: auto; }
       input, select, textarea { background-color: #FFFFFF !important; color: #000000 !important; font-weight: 600 !important; border: 1px solid transparent !important; transition: all 0.3s ease !important; }
       input:focus, select:focus, textarea:focus { box-shadow: 0 0 12px #8B5CF6 !important; border-color: #8B5CF6 !important; outline: none !important; }
       .hp-primary-btn { background: linear-gradient(135deg, #8B5CF6 0%, #4F46E5 100%) !important; color: #FFFFFF !important; transition: transform 0.3s ease, box-shadow 0.3s ease !important; border: none !important; text-shadow: 0 1px 2px rgba(0,0,0,0.2) !important; }
@@ -568,7 +566,7 @@ export default function App() {
         </div>
       </header>
 
-      <main className="max-w-[1400px] mx-auto px-4 lg:px-8 pt-5 space-y-5 h-full">
+      <main className="max-w-[1400px] mx-auto px-4 lg:px-8 pt-5 pb-10 space-y-5 h-full">
         {totalUnpaidAmount > 0 && activeTab !== 'admin' && (
           <section className="bg-[#EC4899]/10 border border-[#EC4899]/40 rounded-2xl p-4 flex items-center justify-between shadow-[0_0_15px_rgba(236,72,153,0.1)] fade-in-text"><div className="flex items-center gap-3"><AlertTriangle className="w-5 h-5 text-[#EC4899]" /><div><span className="text-xs font-bold text-[#EC4899]">미입금 내역 ({unpaidRecords.length}건) 회수 필요</span><div className="text-xl font-extrabold text-white">총 {totalUnpaidAmount.toLocaleString()}원</div></div></div><button onClick={() => setActiveTab('claims')} className="px-4 py-2 hp-primary-btn rounded-xl text-xs font-bold cursor-pointer">청구 관리</button></section>
         )}
@@ -651,17 +649,21 @@ export default function App() {
                       const dayRecords = records.filter(r => r.date === dateStr);
                       const isToday = dateStr === getTodayKST(); const dateNum = parseInt(dateStr.split('-')[2]);
                       return (
-                        <div key={dateStr} className={`border-b border-r border-white/5 p-1.5 flex flex-col min-h-[90px] transition-colors hover:bg-white/5 ${isToday ? 'bg-[#8B5CF6]/10' : ''}`}>
+                        // 💡 [클릭 이벤트 적용] 캘린더 날짜 클릭 시 입력폼 날짜 자동 업데이트 & 위로 스크롤
+                        <div key={dateStr} 
+                             onClick={() => { setNewDate(dateStr); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                             className={`border-b border-r border-white/5 p-1.5 flex flex-col min-h-[90px] transition-colors hover:bg-white/10 cursor-pointer ${isToday ? 'bg-[#8B5CF6]/10' : ''}`}>
                           <div className={`text-[10px] font-bold mb-1.5 ${isToday ? 'text-white bg-[#8B5CF6] w-5 h-5 rounded-full flex items-center justify-center' : 'text-slate-400 ml-1'}`}>{dateNum}</div>
                           <div className="flex flex-col gap-1 overflow-y-auto scrollbar-hide pr-0.5">
                             {dayRecords.map(r => {
                               const isChecked = selectedRecordIds.includes(r.id);
                               return (
-                                <div key={r.id} className={`relative group p-1.5 rounded-md border flex flex-col gap-1 transition-all ${isChecked ? 'bg-[#8B5CF6]/20 border-[#8B5CF6]/50' : 'bg-black/40 border-white/10 hover:border-white/30'}`}>
+                                // 💡 [클릭 방어] 캘린더 내 기존 기록 클릭 시 폼 날짜가 안 바뀌게 방어막 설정
+                                <div key={r.id} onClick={(e) => e.stopPropagation()} className={`relative group p-1.5 rounded-md border flex flex-col gap-1 transition-all ${isChecked ? 'bg-[#8B5CF6]/20 border-[#8B5CF6]/50' : 'bg-black/40 border-white/10 hover:border-white/30'}`}>
                                   <div className="flex items-start gap-1.5">
-                                    <input type="checkbox" checked={isChecked} onChange={(e) => { if (e.target.checked) setSelectedRecordIds([...selectedRecordIds, r.id]); else setSelectedRecordIds(selectedRecordIds.filter(id => id !== r.id)); }} className="w-3 h-3 text-[#8B5CF6] rounded bg-[#0B1120] border-white/20 mt-0.5 cursor-pointer shrink-0" />
+                                    <input type="checkbox" checked={isChecked} onChange={(e) => { e.stopPropagation(); if (e.target.checked) setSelectedRecordIds([...selectedRecordIds, r.id]); else setSelectedRecordIds(selectedRecordIds.filter(id => id !== r.id)); }} onClick={(e) => e.stopPropagation()} className="w-3 h-3 text-[#8B5CF6] rounded bg-[#0B1120] border-white/20 mt-0.5 cursor-pointer shrink-0" />
                                     <div className="min-w-0 flex-1 leading-tight">
-                                      <div className="text-[10px] font-extrabold text-white truncate cursor-pointer hover:text-[#38BDF8]" onClick={() => handleOpenEditModal(r)}>{r.destination}</div>
+                                      <div className="text-[10px] font-extrabold text-white truncate cursor-pointer hover:text-[#38BDF8]" onClick={(e) => { e.stopPropagation(); handleOpenEditModal(r); }}>{r.destination}</div>
                                       <div className="text-[9px] text-[#38BDF8] font-bold">{(r.netAmount / 10000).toFixed(1)}만</div>
                                     </div>
                                   </div>
@@ -1097,6 +1099,7 @@ export default function App() {
                 })}
               </div>
             </div>
+            <button onClick={() => setAdminSelectedUser(null)} className="w-full mt-4 py-3 bg-white/10 hover:bg-white/20 text-white font-bold rounded-lg text-xs transition-colors cursor-pointer">닫기</button>
           </div>
         </div>
       )}
