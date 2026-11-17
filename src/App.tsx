@@ -47,40 +47,6 @@ const formatPhoneNumber = (val: string) => {
   return num;
 };
 
-const parseImportedRow = (row: any) => {
-  const keys = Object.keys(row);
-  const dateKey = keys.find(k => k.includes('일') || k.includes('날짜') || k.includes('date'));
-  const depKey = keys.find(k => k.includes('출발') || k.includes('시작'));
-  const destKey = keys.find(k => k.includes('도착') || k.includes('종료'));
-  const grossKey = keys.find(k => k.includes('요금') || k.includes('매출') || k.includes('탁송료') || k.includes('수입'));
-  const feeKey = keys.find(k => k.includes('수수료') || k.includes('차감'));
-  
-  let parsedDate = getTodayKST();
-  if (dateKey && row[dateKey]) {
-    const rawDate = String(row[dateKey]).replace(/[\.\/]/g, '-');
-    const match = rawDate.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
-    if (match) parsedDate = `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
-  }
-
-  const gross = cleanNumber(row[grossKey]) || 0;
-  const fee = cleanNumber(row[feeKey]) || 0;
-  const net = gross - fee;
-
-  return {
-    date: parsedDate,
-    departure: row[depKey] ? String(row[depKey]).substring(0,20) : '출발지 미상',
-    destination: row[destKey] ? String(row[destKey]).substring(0,20) : '도착지 미상',
-    grossAmount: gross,
-    feeRate: gross > 0 ? Math.round((fee / gross) * 100) : 20,
-    fuelAmount: 0,
-    extraExpenseAmount: 0,
-    tipAmount: 0,
-    netAmount: net,
-    totalClaimAmount: gross,
-    paymentMethod: '현금'
-  };
-};
-
 interface DrivingRecord {
   id: string; userId?: string; date: string; startTime: string; endTime: string;
   departure: string; destination: string; grossAmount: number; feeRate: number;
@@ -151,6 +117,9 @@ export default function App() {
   const [adminSelectedUserRecords, setAdminSelectedUserRecords] = useState<DrivingRecord[]>([]);
 
   const [editingRecord, setEditingRecord] = useState<DrivingRecord | null>(null);
+  // 💡 [신규] 캘린더에서 기록 터치 시 열리는 '빠른 정산 팝업' 상태
+  const [actionRecordId, setActionRecordId] = useState<string | null>(null);
+  
   const [editDate, setEditDate] = useState('');
   const [editDeparture, setEditDeparture] = useState(''); const [editDestination, setEditDestination] = useState('');
   const [editGross, setEditGross] = useState(''); const [editFuel, setEditFuel] = useState('');
@@ -167,11 +136,6 @@ export default function App() {
   const [lastDeletedRecords, setLastDeletedRecords] = useState<DrivingRecord[]>([]);
   const [visibleRecordCount, setVisibleRecordCount] = useState<number>(30);
   const [visibleClaimCount, setVisibleClaimCount] = useState<number>(30);
-
-  const [importModalOpen, setImportModalOpen] = useState(false);
-  const [importData, setImportData] = useState<any[]>([]);
-  const [isImporting, setIsImporting] = useState(false);
-  const [importStep, setImportStep] = useState<1 | 2>(1);
 
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
   const [accounts, setAccounts] = useState<BankAccount[]>(() => {
@@ -360,33 +324,6 @@ export default function App() {
     setNewDeparture('수원'); setNewDestination('부산'); setNewGross('150,000'); setNewFuel(''); setNewExtraExpense(''); setNewTip(''); setNewPaymentMethod('현금');
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]; if (!file) return;
-    try {
-      const XLSX = await import('xlsx'); const reader = new FileReader();
-      reader.onload = (event) => {
-        try {
-          const data = new Uint8Array(event.target?.result as ArrayBuffer);
-          const workbook = XLSX.read(data, { type: 'array' });
-          const rawJson = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
-          const parsedRecords = rawJson.map(parseImportedRow).filter((r: any) => r.grossAmount > 0);
-          if (parsedRecords.length === 0) { alert('데이터를 변환할 수 없습니다.'); return; }
-          setImportData(parsedRecords); setImportStep(2);
-        } catch (error) { alert('파일 파싱 오류입니다.'); }
-      };
-      reader.readAsArrayBuffer(file);
-    } catch (err) { alert('변환 모듈을 불러올 수 없습니다.'); }
-  };
-
-  const handleBatchImport = async () => {
-    if (!session || importData.length === 0) return; setIsImporting(true);
-    try {
-      const payloads = importData.map((data, idx) => ({ id: `rec_import_${Date.now()}_${idx}`, user_id: session.user.id, date: data.date, start_time: '-', end_time: '-', departure: data.departure, destination: data.destination, gross_amount: data.grossAmount, fee_rate: data.feeRate, fuel_amount: 0, extra_expense_amount: 0, tip_amount: 0, is_gross_paid: true, is_expense_paid: true, net_amount: data.netAmount, total_claim_amount: data.totalClaimAmount }));
-      for (let i = 0; i < payloads.length; i += 50) { await supabase.from('driving_records').insert(payloads.slice(i, i + 50)); }
-      alert('장부가 이관되었습니다!'); setImportModalOpen(false); fetchUserData(session.user.id, session.user.email || '');
-    } catch (error: any) { alert('이관 실패: ' + error.message); } finally { setIsImporting(false); setImportData([]); setImportStep(1); }
-  };
-
   const toggleGrossPaid = async (id: string) => {
     const target = records.find((r) => r.id === id); if (!target) return;
     const { error } = await supabase.from('driving_records').update({ is_gross_paid: !target.isGrossPaid }).eq('id', id);
@@ -407,6 +344,18 @@ export default function App() {
     let error = (await supabase.from('driving_records').update(payload).eq('id', editingRecord.id)).error;
     if(error && error.message.includes('payment_method')) { const fb = { ...payload }; delete (fb as any).payment_method; error = (await supabase.from('driving_records').update(fb).eq('id', editingRecord.id)).error; }
     if (!error) { const updatedList = records.map((r) => r.id === editingRecord.id ? { ...r, date: editDate, departure: editDeparture, destination: editDestination, grossAmount: gross, fuelAmount: fuel, extraExpenseAmount: extraExp, tipAmount: tip, netAmount: Math.round(net), totalClaimAmount: Math.round(claimTotal), paymentMethod: editPaymentMethod } : r); updatedList.sort((a, b) => a.date.localeCompare(b.date)); setRecords(updatedList); setEditingRecord(null); } else { alert('수정 실패'); }
+  };
+
+  // 단일 삭제 (빠른 팝업에서 사용)
+  const handleDeleteSingleRecord = async (id: string) => {
+    if (!window.confirm('이 운행 기록을 삭제하시겠습니까? (삭제 직후 상단에서 복구 가능)')) return;
+    const target = records.find(r => r.id === id);
+    const { error } = await supabase.from('driving_records').delete().eq('id', id);
+    if (!error) {
+      setRecords(records.filter((r) => r.id !== id));
+      if(target) setLastDeletedRecords([target]); // 단일 삭제도 Undo 지원
+      setSelectedRecordIds(prev => prev.filter(rid => rid !== id));
+    }
   };
 
   const handleBulkDeleteRecords = async () => {
@@ -510,6 +459,9 @@ export default function App() {
   const calendarDaysArray: (string | null)[] = Array(firstDayIndex).fill(null);
   for (let i = 1; i <= daysInMonth; i++) { calendarDaysArray.push(`${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`); }
   const currentMonthDisplayRecords = records.filter(r => r.date.startsWith(`${calYear}-${String(calMonth + 1).padStart(2, '0')}`));
+  
+  // 💡 [신규] 빠른 팝업에 그릴 최신 레코드 데이터 가져오기
+  const currentActionRecord = actionRecordId ? records.find(r => r.id === actionRecordId) || null : null;
 
   const injectStyles = () => (
     <style dangerouslySetInnerHTML={{__html: `
@@ -621,7 +573,7 @@ export default function App() {
                   </div>
                 </div>
                 <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">통행료 등 기타 대납경비 (선택)</label><input type="text" placeholder="0" value={newExtraExpense} onChange={(e) => setNewExtraExpense(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" /></div>
-                <button type="submit" className="w-full py-3 hp-primary-btn font-bold rounded-lg text-xs cursor-pointer mt-2">운행 일지 등록</button>
+                <button type="submit" className="w-full py-3 hp-primary-btn font-bold rounded-lg text-xs cursor-pointer mt-2">운행 일지 등록 (미입금 상태로 저장)</button>
               </form>
             </div>
             
@@ -629,7 +581,6 @@ export default function App() {
               <div className="flex flex-col gap-3 mb-4 border-b border-white/10 pb-4 shrink-0">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-bold text-white flex items-center gap-2"><Calendar className="w-4 h-4 text-[#8B5CF6]" />운행 캘린더 및 정산 관리</h3>
-                  <button onClick={() => { setImportStep(1); setImportData([]); setImportModalOpen(true); }} className="px-3 py-1.5 bg-[#10B981]/10 text-[#10B981] border border-[#10B981]/30 hover:bg-[#10B981]/20 rounded-lg text-[10px] font-bold cursor-pointer transition-all flex items-center gap-1"><Download className="w-3.5 h-3.5" />타사 장부 이관</button>
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-3 bg-white/5 p-2.5 rounded-xl border border-white/10">
                   <div className="flex items-center gap-2">
@@ -668,28 +619,20 @@ export default function App() {
                             {dayRecords.map(r => {
                               const isChecked = selectedRecordIds.includes(r.id);
                               const hasExpense = r.fuelAmount > 0 || r.extraExpenseAmount > 0;
+                              const isFullyPaid = r.isGrossPaid && (!hasExpense || r.isExpensePaid);
+
                               return (
-                                // 💡 [복구] 탁송비/주유비 개별 체크 버튼 완벽 복구
-                                <div key={r.id} onClick={(e) => e.stopPropagation()} className={`relative group p-1.5 rounded-md border flex flex-col gap-1 transition-all ${isChecked ? 'bg-[#8B5CF6]/20 border-[#8B5CF6]/50' : 'bg-black/40 border-white/10 hover:border-white/30'}`}>
+                                // 💡 [UX 개선] 달력 안의 기록을 터치하면 '빠른 정산 팝업'이 열립니다.
+                                <div key={r.id} onClick={(e) => { e.stopPropagation(); setActionRecordId(r.id); }} className={`relative group p-1.5 rounded-md border flex flex-col gap-1 transition-all cursor-pointer ${isChecked ? 'bg-[#8B5CF6]/20 border-[#8B5CF6]/50' : 'bg-black/40 border-white/10 hover:border-[#8B5CF6]/50'}`}>
                                   <div className="flex items-start gap-1">
                                     <input type="checkbox" checked={isChecked} onChange={(e) => { e.stopPropagation(); if (e.target.checked) setSelectedRecordIds([...selectedRecordIds, r.id]); else setSelectedRecordIds(selectedRecordIds.filter(id => id !== r.id)); }} onClick={(e) => e.stopPropagation()} className="w-2.5 h-2.5 text-[#8B5CF6] rounded bg-[#0B1120] border-white/20 mt-0.5 cursor-pointer shrink-0" />
                                     <div className="min-w-0 flex-1 leading-tight">
                                       <div className="flex items-center justify-between">
-                                        <div className="text-[10px] font-extrabold text-white truncate cursor-pointer hover:text-[#38BDF8]" onClick={(e) => { e.stopPropagation(); handleOpenEditModal(r); }}>
-                                          {r.departure.substring(0,2)}➔{r.destination.substring(0,4)}
-                                        </div>
+                                        <div className="text-[10px] font-extrabold text-white truncate">{r.departure.substring(0,2)}➔{r.destination.substring(0,4)}</div>
+                                        {/* 💡 [직관성] 정산 완료 여부를 뱃지로 심플하게 표시 */}
+                                        {isFullyPaid ? <span className="text-[9px] text-emerald-400 font-bold ml-1 shrink-0">완료</span> : <span className="text-[9px] text-[#EC4899] font-bold ml-1 shrink-0">미수</span>}
                                       </div>
-                                      
-                                      <div className="flex flex-wrap items-center gap-1 mt-1">
-                                        <button onClick={(e) => { e.stopPropagation(); toggleGrossPaid(r.id); }} className={`px-1 py-0.5 rounded-[4px] text-[8px] font-bold cursor-pointer border transition-colors ${r.isGrossPaid ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-[#EC4899]/20 text-[#EC4899] border-[#EC4899]/40'}`}>
-                                          운임{r.isGrossPaid ? '✔' : '미수'}
-                                        </button>
-                                        {hasExpense && (
-                                          <button onClick={(e) => { e.stopPropagation(); toggleExpensePaid(r.id); }} className={`px-1 py-0.5 rounded-[4px] text-[8px] font-bold cursor-pointer border transition-colors ${r.isExpensePaid ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-[#EC4899]/20 text-[#EC4899] border-[#EC4899]/40'}`}>
-                                            대납{r.isExpensePaid ? '✔' : '미수'}
-                                          </button>
-                                        )}
-                                      </div>
+                                      <div className="text-[9px] text-[#38BDF8] font-bold mt-0.5">{(r.netAmount / 10000).toFixed(1)}만</div>
                                     </div>
                                   </div>
                                 </div>
@@ -1050,35 +993,45 @@ export default function App() {
         )}
       </main>
 
-      {importModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="w-full max-w-lg glass-card rounded-2xl p-6 shadow-2xl relative max-h-[90vh] flex flex-col">
-            <button onClick={() => setImportModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
-            <h3 className="text-base font-bold text-[#10B981] mb-2 flex items-center gap-2"><Download className="w-5 h-5" /> 엑셀/CSV 과거 장부 이관 (원터치 환승)</h3>
-            <p className="text-xs text-slate-300 mb-5 leading-relaxed">경쟁 앱(대리가계부 등)에서 추출한 엑셀 파일을 올리시면 JunDriver 양식으로 자동 변환되어 들어옵니다.</p>
-            {importStep === 1 ? (
-              <div className="border-2 border-dashed border-white/20 rounded-xl p-10 flex flex-col items-center justify-center bg-white/5 hover:bg-white/10 transition-colors relative cursor-pointer">
-                <input type="file" accept=".xlsx, .xls, .csv" onChange={handleFileUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
-                <FileText className="w-10 h-10 text-slate-400 mb-3" />
-                <div className="text-sm font-bold text-white mb-1">여기를 터치하여 엑셀 파일을 선택하세요</div>
-              </div>
-            ) : (
-              <div className="flex flex-col flex-1 min-h-0">
-                <div className="flex justify-between items-center mb-3"><span className="text-xs font-bold text-white">자동 인식된 데이터 미리보기</span><span className="text-[11px] font-bold text-[#10B981] px-2 py-0.5 bg-[#10B981]/10 rounded">총 {importData.length}건 인식성공</span></div>
-                <div className="overflow-y-auto bg-[#0B1120] border border-white/10 rounded-lg p-3 space-y-2 flex-1 scrollbar-hide mb-4">
-                  {importData.slice(0, 10).map((d, i) => (
-                    <div key={i} className="flex justify-between text-[11px] border-b border-white/5 pb-2"><span className="text-slate-400">{d.date}</span><span className="text-white font-semibold truncate max-w-[150px]">{d.departure} → {d.destination}</span><span className="text-[#38BDF8] font-bold">{d.grossAmount.toLocaleString()}원</span></div>
-                  ))}
-                </div>
-                <button onClick={handleBatchImport} disabled={isImporting} className="w-full py-3 bg-gradient-to-r from-[#10B981] to-emerald-600 hover:shadow-[0_0_15px_rgba(16,185,129,0.4)] text-white font-bold rounded-lg text-xs cursor-pointer transition-all border-0">{isImporting ? '데이터를 이관하는 중...' : `${importData.length}건 일괄 등록하기`}</button>
-              </div>
-            )}
+      {/* 💡 [신규] 빠른 정산 팝업 모달 */}
+      {actionRecordId && currentActionRecord && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setActionRecordId(null)}>
+          <div className="w-full max-w-sm glass-card rounded-2xl p-6 shadow-2xl relative" onClick={e => e.stopPropagation()}>
+             <button onClick={() => setActionRecordId(null)} className="absolute top-4 right-4 text-slate-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
+             <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-1.5"><Activity className="w-4 h-4 text-[#8B5CF6]" />빠른 정산 처리</h3>
+             
+             <div className="bg-[#0B1120] p-4 rounded-xl border border-white/10 mb-5">
+               <div className="text-xs text-slate-400 mb-1">{currentActionRecord.date}</div>
+               <div className="text-lg font-bold text-white mb-2">{currentActionRecord.departure} ➔ {currentActionRecord.destination}</div>
+               <div className="flex justify-between items-center border-t border-white/5 pt-2">
+                 <span className="text-xs text-slate-400">총 청구액</span>
+                 <span className="text-sm font-extrabold text-[#38BDF8]">{currentActionRecord.totalClaimAmount.toLocaleString()}원</span>
+               </div>
+             </div>
+             
+             <div className="space-y-3 mb-5">
+               <button onClick={() => toggleGrossPaid(currentActionRecord.id)} className={`w-full py-3.5 rounded-xl font-bold flex items-center justify-between px-4 transition-colors cursor-pointer border ${currentActionRecord.isGrossPaid ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-[#EC4899]/10 text-[#EC4899] border-[#EC4899]/30'}`}>
+                 <span className="text-xs">탁송 운임 ({currentActionRecord.grossAmount.toLocaleString()}원)</span>
+                 <span className="text-sm">{currentActionRecord.isGrossPaid ? '입금 완료 ✔' : '미수금 대기'}</span>
+               </button>
+               {(currentActionRecord.fuelAmount > 0 || currentActionRecord.extraExpenseAmount > 0) && (
+                 <button onClick={() => toggleExpensePaid(currentActionRecord.id)} className={`w-full py-3.5 rounded-xl font-bold flex items-center justify-between px-4 transition-colors cursor-pointer border ${currentActionRecord.isExpensePaid ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-[#EC4899]/10 text-[#EC4899] border-[#EC4899]/30'}`}>
+                   <span className="text-xs">대납 경비 ({(currentActionRecord.fuelAmount + currentActionRecord.extraExpenseAmount).toLocaleString()}원)</span>
+                   <span className="text-sm">{currentActionRecord.isExpensePaid ? '입금 완료 ✔' : '미수금 대기'}</span>
+                 </button>
+               )}
+             </div>
+
+             <div className="flex gap-2">
+               <button onClick={() => { handleOpenEditModal(currentActionRecord); setActionRecordId(null); }} className="flex-1 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition-colors flex justify-center items-center gap-1.5 cursor-pointer"><Edit2 className="w-3.5 h-3.5" /> 전체 내역 수정</button>
+               <button onClick={() => { handleDeleteSingleRecord(currentActionRecord.id); setActionRecordId(null); }} className="flex-1 py-3 bg-[#EC4899]/20 hover:bg-[#EC4899]/40 text-[#EC4899] rounded-xl text-xs font-bold transition-colors flex justify-center items-center gap-1.5 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /> 기록 삭제</button>
+             </div>
           </div>
         </div>
       )}
 
       {editingRecord && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="w-full max-w-sm glass-card rounded-2xl p-6 shadow-2xl relative">
             <div className="flex justify-between items-center mb-4"><h3 className="text-sm font-bold text-white flex items-center gap-1.5"><Edit2 className="w-4 h-4 text-[#8B5CF6]" /> 운행 내역 수정</h3><button onClick={() => setEditingRecord(null)} className="text-slate-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button></div>
             <form onSubmit={handleUpdateRecord} className="space-y-3.5">
