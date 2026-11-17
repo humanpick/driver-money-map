@@ -47,7 +47,6 @@ const formatPhoneNumber = (val: string) => {
   return num;
 };
 
-// 타사 엑셀 파싱 로직
 const parseImportedRow = (row: any) => {
   const keys = Object.keys(row);
   const dateKey = keys.find(k => k.includes('일') || k.includes('날짜') || k.includes('date'));
@@ -127,11 +126,7 @@ const AUCTION_SCHEDULES = [
 export default function App() {
   const { needRefresh: [needRefresh], updateServiceWorker } = useRegisterSW({ onRegistered(r) {}, onRegisterError(error) {} });
 
-  useEffect(() => {
-    if (needRefresh) {
-      updateServiceWorker(true);
-    }
-  }, [needRefresh, updateServiceWorker]);
+  useEffect(() => { if (needRefresh) updateServiceWorker(true); }, [needRefresh, updateServiceWorker]);
 
   const [session, setSession] = useState<any>(null);
   const [currentUserRole, setCurrentUserRole] = useState<string>('user');
@@ -153,7 +148,6 @@ export default function App() {
   const [customDate, setCustomDate] = useState<string>(() => getTodayKST());
   const [analyticsMode, setAnalyticsMode] = useState<'month' | 'year'>('month');
   const [analyticsYear, setAnalyticsYear] = useState<string>(new Date().getFullYear().toString());
-
   const [tradeFilter, setTradeFilter] = useState<'전체' | 'S등급' | 'A등급' | '수도권' | '충청권' | '영남권' | '호남권'>('전체');
 
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -215,14 +209,13 @@ export default function App() {
   const [bankName, setBankName] = useState(''); const [accountNumber, setAccountNumber] = useState(''); const [holder, setHolder] = useState('');
 
   const [targetIncome, setTargetIncome] = useState<string>(() => {
-    try { const s = localStorage.getItem('jundriver_target'); return s ? JSON.parse(s).income : '5000000'; } catch { return '5000000'; }
+    try { const s = localStorage.getItem('jundriver_target'); return s ? JSON.parse(s).income : '5,000,000'; } catch { return '5,000,000'; }
   });
   const [targetDays, setTargetDays] = useState<string>(() => {
     try { const s = localStorage.getItem('jundriver_target'); return s ? JSON.parse(s).days : '25'; } catch { return '25'; }
   });
-
   const [fixedDailyExp, setFixedDailyExp] = useState<string>(() => {
-    try { const s = localStorage.getItem('jundriver_fixed_exp'); return s ? JSON.parse(s).amount : '3200'; } catch { return '3200'; }
+    try { const s = localStorage.getItem('jundriver_fixed_exp'); return s ? JSON.parse(s).amount : '3,200'; } catch { return '3,200'; }
   });
   const [fixedDailyMemo, setFixedDailyMemo] = useState<string>(() => {
     try { const s = localStorage.getItem('jundriver_fixed_exp'); return s ? JSON.parse(s).memo : '일비 및 보험료'; } catch { return '일비 및 보험료'; }
@@ -266,7 +259,6 @@ export default function App() {
       last_login_at: nowIso, login_count: currentCount + 1
     };
     await supabase.from('profiles').upsert(profilePayload);
-
     setCurrentUserProfile({
       id: userId, email: cleanMail, name: profilePayload.name, phone: profilePayload.phone, role: profilePayload.role,
       createdAt: (profilePayload.created_at || '').substring(0, 10),
@@ -292,26 +284,19 @@ export default function App() {
   const fetchAdminData = async () => {
     const { data: profiles } = await supabase.from('profiles').select('*').order('last_login_at', { ascending: false });
     const { data: allRecs } = await supabase.from('driving_records').select('*').limit(20000);
-    
     const currentMonthStr = getTodayKST().substring(0, 7);
     
     if (profiles && allRecs) {
       setAdminMemberList(profiles.map((p: any) => {
         const userRecords = allRecs.filter((r: any) => r.user_id === p.id);
-        const monthlyGross = userRecords
-          .filter((r: any) => r.date.startsWith(currentMonthStr))
-          .reduce((sum: number, r: any) => sum + Number(r.gross_amount), 0);
-          
+        const monthlyGross = userRecords.filter((r: any) => r.date.startsWith(currentMonthStr)).reduce((sum: number, r: any) => sum + Number(r.gross_amount), 0);
         return { 
           id: p.id, email: p.email, name: p.name, phone: p.phone, role: p.role || 'user', 
           createdAt: p.created_at ? p.created_at.substring(0, 10) : '-', 
           lastLoginAt: p.last_login_at ? p.last_login_at.substring(0, 16).replace('T', ' ') : '기록없음',
-          loginCount: p.login_count || 0,
-          recordCount: userRecords.length,
-          monthlyGross: monthlyGross
+          loginCount: p.login_count || 0, recordCount: userRecords.length, monthlyGross: monthlyGross
         };
       }));
-      
       setAdminAllRecords(allRecs.map((r: any) => ({ 
         id: r.id, userId: r.user_id, date: r.date, startTime: r.start_time || '-', endTime: r.end_time || '-', departure: r.departure, destination: r.destination, 
         grossAmount: Number(r.gross_amount), fuelAmount: Number(r.fuel_amount), feeRate: Number(r.fee_rate), extraExpenseAmount: Number(r.extra_expense_amount), tipAmount: Number(r.tip_amount), isGrossPaid: Boolean(r.is_gross_paid), isExpensePaid: Boolean(r.is_expense_paid), netAmount: Number(r.net_amount), totalClaimAmount: Number(r.total_claim_amount),
@@ -361,9 +346,7 @@ export default function App() {
 
     if (error) { setAuthError('가입 실패: ' + error.message); }
     else {
-      if (data.user) {
-        await supabase.from('profiles').upsert([{ id: data.user.id, email: cleanEmail, name: trimmedName, phone: cleanPhone, role: cleanEmail === ADMIN_DEFAULT_EMAIL ? 'super_admin' : 'user', created_at: nowIso, last_login_at: nowIso, login_count: 1 }]);
-      }
+      if (data.user) { await supabase.from('profiles').upsert([{ id: data.user.id, email: cleanEmail, name: trimmedName, phone: cleanPhone, role: cleanEmail === ADMIN_DEFAULT_EMAIL ? 'super_admin' : 'user', created_at: nowIso, last_login_at: nowIso, login_count: 1 }]); }
       setAuthSuccess('회원가입이 완료되었습니다. 로그인해 주세요.'); setAuthMode('login');
     }
     setAuthLoading(false);
@@ -420,49 +403,33 @@ export default function App() {
       is_gross_paid: false, is_expense_paid: false, net_amount: Math.round(net), total_claim_amount: Math.round(claimTotal),
       payment_method: newPaymentMethod 
     };
-    
     const newRecord: DrivingRecord = { ...payload, startTime: payload.start_time, endTime: payload.end_time, grossAmount: gross, feeRate, fuelAmount: fuel, extraExpenseAmount: extraExp, tipAmount: tip, isGrossPaid: false, isExpensePaid: false, netAmount: Math.round(net), totalClaimAmount: Math.round(claimTotal), paymentMethod: newPaymentMethod };
     
     const { error } = await supabase.from('driving_records').insert([payload]);
-    
     if (error && error.message.includes('payment_method')) {
-       const fallbackPayload = { ...payload };
-       delete (fallbackPayload as any).payment_method;
+       const fallbackPayload = { ...payload }; delete (fallbackPayload as any).payment_method;
        await supabase.from('driving_records').insert([fallbackPayload]);
-    } else if (error) {
-       console.error(error);
-    }
+    } else if (error) { console.error(error); }
 
     const updated = [newRecord, ...records];
     updated.sort((a, b) => a.date.localeCompare(b.date));
-    setRecords(updated); 
-    setCustomDate(newDate);
-    setDateFilter('day');
+    setRecords(updated); setCustomDate(newDate); setDateFilter('day');
     setNewDeparture(''); setNewDestination(''); setNewGross(''); setNewFuel(''); setNewExtraExpense(''); setNewTip(''); setNewPaymentMethod('현금');
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
         const data = new Uint8Array(event.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
-        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-        const rawJson = XLSX.utils.sheet_to_json(firstSheet);
-        
+        const rawJson = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
         const parsedRecords = rawJson.map(parseImportedRow).filter(r => r.grossAmount > 0);
-        if (parsedRecords.length === 0) {
-          alert('데이터를 변환할 수 없습니다. 엑셀 파일 양식을 확인해주세요.');
-          return;
-        }
-        setImportData(parsedRecords);
-        setImportStep(2);
-      } catch (error) {
-        alert('파일을 읽는 중 오류가 발생했습니다. 정상적인 엑셀/CSV 파일인지 확인해주세요.');
-      }
+        if (parsedRecords.length === 0) { alert('데이터를 변환할 수 없습니다. 엑셀 양식을 확인해주세요.'); return; }
+        setImportData(parsedRecords); setImportStep(2);
+      } catch (error) { alert('파일을 읽는 중 오류가 발생했습니다.'); }
     };
     reader.readAsArrayBuffer(file);
   };
@@ -470,41 +437,23 @@ export default function App() {
   const handleBatchImport = async () => {
     if (!session || importData.length === 0) return;
     setIsImporting(true);
-
     try {
       const payloads = importData.map((data, idx) => ({
-        id: `rec_import_${Date.now()}_${idx}`,
-        user_id: session.user.id,
-        date: data.date,
-        start_time: '-', end_time: '-',
-        departure: data.departure,
-        destination: data.destination,
-        gross_amount: data.grossAmount,
-        fee_rate: data.feeRate,
-        fuel_amount: 0, extra_expense_amount: 0, tip_amount: 0,
-        is_gross_paid: true, 
-        is_expense_paid: true,
-        net_amount: data.netAmount,
-        total_claim_amount: data.totalClaimAmount
+        id: `rec_import_${Date.now()}_${idx}`, user_id: session.user.id, date: data.date, start_time: '-', end_time: '-',
+        departure: data.departure, destination: data.destination, gross_amount: data.grossAmount, fee_rate: data.feeRate,
+        fuel_amount: 0, extra_expense_amount: 0, tip_amount: 0, is_gross_paid: true, is_expense_paid: true,
+        net_amount: data.netAmount, total_claim_amount: data.totalClaimAmount
       }));
-
       const chunkSize = 50;
       for (let i = 0; i < payloads.length; i += chunkSize) {
         const chunk = payloads.slice(i, i + chunkSize);
         const { error } = await supabase.from('driving_records').insert(chunk);
         if (error) throw error;
       }
-
       alert(`총 ${payloads.length}건의 과거 운행 일지가 성공적으로 이관되었습니다!`);
-      setImportModalOpen(false);
-      fetchUserData(session.user.id, session.user.email || '');
-    } catch (error: any) {
-      alert('데이터 이관 실패: ' + error.message);
-    } finally {
-      setIsImporting(false);
-      setImportData([]);
-      setImportStep(1);
-    }
+      setImportModalOpen(false); fetchUserData(session.user.id, session.user.email || '');
+    } catch (error: any) { alert('데이터 이관 실패: ' + error.message); } 
+    finally { setIsImporting(false); setImportData([]); setImportStep(1); }
   };
 
   const toggleGrossPaid = async (id: string) => {
@@ -519,9 +468,7 @@ export default function App() {
   };
 
   const handleOpenEditModal = (r: DrivingRecord) => {
-    setEditingRecord(r);
-    setEditDate(r.date);
-    setEditDeparture(r.departure); setEditDestination(r.destination);
+    setEditingRecord(r); setEditDate(r.date); setEditDeparture(r.departure); setEditDestination(r.destination);
     setEditGross(formatNumberWithComma(r.grossAmount)); setEditFuel(formatNumberWithComma(r.fuelAmount));
     setEditExtra(formatNumberWithComma(r.extraExpenseAmount)); setEditTip(formatNumberWithComma(r.tipAmount));
     setEditPaymentMethod(r.paymentMethod || '현금'); 
@@ -532,21 +479,15 @@ export default function App() {
     const gross = cleanNumber(editGross); const feeRate = cleanNumber(editingRecord.feeRate);
     const fuel = cleanNumber(editFuel); const extraExp = cleanNumber(editExtra); const tip = cleanNumber(editTip);
     const net = gross - (gross * (feeRate / 100)) + tip; const claimTotal = gross + fuel + extraExp;
-
     const payload = {
       date: editDate, departure: editDeparture, destination: editDestination,
-      gross_amount: gross, fuel_amount: fuel, extra_expense_amount: extraExp, tip_amount: tip, net_amount: Math.round(net), total_claim_amount: Math.round(claimTotal),
-      payment_method: editPaymentMethod
+      gross_amount: gross, fuel_amount: fuel, extra_expense_amount: extraExp, tip_amount: tip, net_amount: Math.round(net), total_claim_amount: Math.round(claimTotal), payment_method: editPaymentMethod
     };
-
     let error = (await supabase.from('driving_records').update(payload).eq('id', editingRecord.id)).error;
-    
     if(error && error.message.includes('payment_method')) {
-      const fallbackPayload = { ...payload };
-      delete (fallbackPayload as any).payment_method;
+      const fallbackPayload = { ...payload }; delete (fallbackPayload as any).payment_method;
       error = (await supabase.from('driving_records').update(fallbackPayload).eq('id', editingRecord.id)).error;
     }
-
     if (!error) {
       const updatedList = records.map((r) => r.id === editingRecord.id ? {
         ...r, date: editDate, departure: editDeparture, destination: editDestination, grossAmount: gross, fuelAmount: fuel, extraExpenseAmount: extraExp, tipAmount: tip, netAmount: Math.round(net), totalClaimAmount: Math.round(claimTotal), paymentMethod: editPaymentMethod
@@ -559,16 +500,12 @@ export default function App() {
   const handleDeleteRecord = async (id: string) => {
     if (!window.confirm('이 운행 일지를 삭제하시겠습니까?')) return;
     const { error } = await supabase.from('driving_records').delete().eq('id', id);
-    if (!error) {
-      setRecords(records.filter((r) => r.id !== id));
-      setSelectedRecordIds(prev => prev.filter(rid => rid !== id));
-    }
+    if (!error) { setRecords(records.filter((r) => r.id !== id)); setSelectedRecordIds(prev => prev.filter(rid => rid !== id)); }
   };
 
   const handleBulkDeleteRecords = async () => {
     if (selectedRecordIds.length === 0) return;
     if (!window.confirm(`선택한 ${selectedRecordIds.length}건의 운행 일지를 정말 삭제하시겠습니까?`)) return;
-    
     try {
       const chunkSize = 50;
       for (let i = 0; i < selectedRecordIds.length; i += chunkSize) {
@@ -576,12 +513,9 @@ export default function App() {
         const { error } = await supabase.from('driving_records').delete().in('id', chunk);
         if (error) throw error;
       }
-      setRecords(records.filter((r) => !selectedRecordIds.includes(r.id)));
-      setSelectedRecordIds([]);
-      alert('일괄 삭제가 성공적으로 완료되었습니다.');
-    } catch (error: any) {
-      alert('삭제 실패: ' + error.message);
-    }
+      setRecords(records.filter((r) => !selectedRecordIds.includes(r.id))); setSelectedRecordIds([]);
+      alert('일괄 삭제가 완료되었습니다.');
+    } catch (error: any) { alert('삭제 실패: ' + error.message); }
   };
 
   const handleAddExpense = async (e: React.FormEvent) => {
@@ -590,9 +524,7 @@ export default function App() {
     const { error } = await supabase.from('expenses').insert([{ id: expenseId, user_id: session.user.id, date: newDate, category: expCategory, amount: cleanAmt, memo: expMemo }]);
     if (!error) { 
       const updatedExp = [{ id: expenseId, date: newDate, category: expCategory, amount: cleanAmt, memo: expMemo }, ...expenses];
-      updatedExp.sort((a, b) => a.date.localeCompare(b.date));
-      setExpenses(updatedExp); 
-      setExpAmount(''); setExpMemo(''); 
+      updatedExp.sort((a, b) => a.date.localeCompare(b.date)); setExpenses(updatedExp); setExpAmount(''); setExpMemo(''); 
     }
   };
   const handleDeleteExpense = async (id: string) => { await supabase.from('expenses').delete().eq('id', id); setExpenses(expenses.filter((e) => e.id !== id)); };
@@ -604,36 +536,22 @@ export default function App() {
     
     const currentMonthPrefix = customDate.substring(0, 7); 
     const currentMonthRecords = records.filter((r) => r.date.startsWith(currentMonthPrefix));
-    
     const uniqueDrivingDates = Array.from(new Set(currentMonthRecords.map(r => r.date)));
     const currentMonthExpenses = expenses.filter((e) => e.date.startsWith(currentMonthPrefix));
     const datesWithExpense = new Set(currentMonthExpenses.filter(e => e.memo === fixedDailyMemo.trim()).map(e => e.date));
-
     const datesToApply = uniqueDrivingDates.filter(d => !datesWithExpense.has(d));
 
-    if (datesToApply.length === 0) {
-      alert('이번 달 운행일에는 이미 해당 고정비가 모두 반영되어 있습니다.');
-      return;
-    }
-
+    if (datesToApply.length === 0) { alert('이번 달 운행일에는 이미 해당 고정비가 모두 반영되어 있습니다.'); return; }
     if (!window.confirm(`총 ${datesToApply.length}일치 고정비(일 ${amount.toLocaleString()}원)를 일괄 등록하시겠습니까?\n총액: ${(datesToApply.length * amount).toLocaleString()}원`)) return;
 
     try {
-      const newExpenses = datesToApply.map((date, idx) => ({
-        id: `exp_fixed_${Date.now()}_${idx}`, user_id: session.user.id, date: date,
-        category: '기타', amount: amount, memo: fixedDailyMemo.trim()
-      }));
-
+      const newExpenses = datesToApply.map((date, idx) => ({ id: `exp_fixed_${Date.now()}_${idx}`, user_id: session.user.id, date: date, category: '기타', amount: amount, memo: fixedDailyMemo.trim() }));
       const { error } = await supabase.from('expenses').insert(newExpenses);
       if (error) throw error;
-
       const updatedExp = [...newExpenses.map(e => ({...e, id: e.id, date: e.date, category: e.category, amount: e.amount, memo: e.memo})), ...expenses];
-      updatedExp.sort((a, b) => a.date.localeCompare(b.date)); 
-      setExpenses(updatedExp);
+      updatedExp.sort((a, b) => a.date.localeCompare(b.date)); setExpenses(updatedExp);
       alert(`${datesToApply.length}건의 고정비가 자동 등록되어 순수익에 반영되었습니다.`);
-    } catch (err: any) {
-      alert('고정비 일괄 등록 실패: ' + err.message);
-    }
+    } catch (err: any) { alert('고정비 일괄 등록 실패: ' + err.message); }
   };
 
   const handleAddAccount = (e: React.FormEvent) => {
@@ -784,11 +702,11 @@ export default function App() {
     `}} />
   );
 
+  // 💡 [여기서부터 메인 렌더링 코드 단 한 번만 시작합니다. (중복 방지 철저히 적용)]
   if (!session) {
     return (
       <div className="min-h-screen bg-[#0B1120] text-slate-100 flex items-center justify-center p-4 relative overflow-hidden">
         {injectStyles()}
-        
         {needRefresh && (
           <div className="fixed bottom-6 inset-x-0 mx-auto z-[9999] glass-card border border-[#8B5CF6]/50 p-5 rounded-2xl shadow-[0_0_20px_rgba(139,92,246,0.3)] flex flex-col items-center gap-3 w-[90%] max-w-[340px] fade-in-text">
             <div className="flex items-center gap-2"><RefreshCw className="w-5 h-5 text-[#8B5CF6] animate-spin" /><span className="text-sm font-bold text-white">새로운 버전이 출시되었습니다!</span></div>
@@ -799,7 +717,6 @@ export default function App() {
             </div>
           </div>
         )}
-
         <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[380px] h-[380px] bg-[#8B5CF6]/10 rounded-full blur-[100px] pointer-events-none" />
         <div className="w-full max-w-[420px] glass-card rounded-2xl p-7 shadow-2xl relative z-10">
           <div className="flex flex-col items-center mb-6">
@@ -846,14 +763,13 @@ export default function App() {
     );
   }
 
-  const userName = currentUserProfile?.name || session?.user?.user_metadata?.name || ADMIN_DEFAULT_NAME;
-
+  // 💡 메인 렌더링 화면
   return (
     <div className="min-h-screen bg-[#0B1120] text-slate-100 pb-20 relative">
       {injectStyles()}
       
       {needRefresh && (
-        <div className="fixed bottom-6 inset-x-0 mx-auto z-[10000] glass-card border border-[#8B5CF6]/50 p-5 rounded-2xl shadow-[0_0_20px_rgba(139,92,246,0.3)] flex flex-col items-center gap-3 w-[90%] max-w-sm fade-in-text">
+        <div className="fixed bottom-6 inset-x-0 mx-auto z-[10000] glass-card border border-[#8B5CF6]/50 p-5 rounded-2xl shadow-[0_0_20px_rgba(139,92,246,0.3)] flex flex-col items-center gap-3 w-[90%] max-w-[340px] fade-in-text">
           <div className="flex items-center gap-2"><RefreshCw className="w-5 h-5 text-[#8B5CF6] animate-spin" /><span className="text-sm font-bold text-white">새로운 버전이 출시되었습니다!</span></div>
           <p className="text-[11px] text-[#38BDF8] text-center font-medium">안정적인 최신 기능 사용을 위해 앱을 업데이트 해주세요.</p>
           <div className="flex gap-2 w-full mt-2">
@@ -872,7 +788,7 @@ export default function App() {
           <div className="flex items-center gap-2">
             {isAdminUser && <button onClick={() => { fetchAdminData(); setActiveTab('admin'); }} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all ${activeTab === 'admin' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#38BDF8]/10 border border-[#38BDF8]/30 text-[#38BDF8] hover:bg-[#38BDF8]/20'}`}><Crown className="w-3.5 h-3.5" /><span className="hidden sm:inline">관제탑</span></button>}
             <button onClick={() => setShowProfileModal(true)} className="flex items-center gap-2 px-3 py-1.5 rounded-lg glass-card text-xs text-slate-200 cursor-pointer">
-              <User className="w-3.5 h-3.5 text-[#8B5CF6]" /><div className="text-left"><span className="block font-bold text-white leading-tight">{userName}님</span></div>
+              <User className="w-3.5 h-3.5 text-[#8B5CF6]" /><div className="text-left"><span className="block font-bold text-white leading-tight">{currentUserProfile?.name || userName}님</span></div>
             </button>
             <button onClick={handleLogout} className="p-1.5 rounded-lg glass-card text-slate-400 hover:text-[#EC4899] cursor-pointer"><LogOut className="w-4 h-4" /></button>
           </div>
@@ -916,13 +832,13 @@ export default function App() {
               <form onSubmit={handleAddRecord} className="space-y-3.5">
                 <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">운행 일자</label><input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} required className="w-full px-3 py-2 rounded-lg" /></div>
                 
-                {/* 💡 [플레이스홀더 변경] 기본 예시를 수원, 부산으로 변경 */}
+                {/* 💡 [수정] 출발지 도착지 예시 강제 고정 */}
                 <div className="grid grid-cols-2 gap-2">
                   <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">출발지</label><input type="text" placeholder="수원" value={newDeparture} onChange={(e) => setNewDeparture(e.target.value)} required className="w-full px-3 py-2 rounded-lg" /></div>
                   <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">도착지</label><input type="text" placeholder="부산" value={newDestination} onChange={(e) => setNewDestination(e.target.value)} required className="w-full px-3 py-2 rounded-lg" /></div>
                 </div>
                 
-                {/* 💡 [플레이스홀더 변경] 기본 탁송료 예시를 150,000으로 변경 */}
+                {/* 💡 [수정] 탁송료 예시 150,000으로 고정 */}
                 <div className="grid grid-cols-2 gap-2">
                   <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">탁송료(원)</label><input type="text" placeholder="150,000" value={newGross} onChange={(e) => setNewGross(formatNumberWithComma(e.target.value))} required className="w-full px-3 py-2 rounded-lg text-right" /></div>
                   <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">수수료(%)</label><input type="number" placeholder="20" value={newFeeRate} onChange={(e) => setNewFeeRate(e.target.value)} className="w-full px-3 py-2 rounded-lg text-right" /></div>
@@ -935,10 +851,10 @@ export default function App() {
                   </label>
                   <input type="text" placeholder="선결제한 주유 금액" value={newFuel} onChange={(e) => setNewFuel(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" />
                   
-                  {/* 💡 [UI 수정] 현금/카드 토글 버튼 CSS 수정하여 항상 표시되게 함 */}
-                  <div className="flex w-full items-center gap-2 pt-1 mt-1">
-                    <button type="button" onClick={() => setNewPaymentMethod('현금')} className={`flex-1 py-1.5 rounded-md border text-[11px] font-bold cursor-pointer transition-colors ${newPaymentMethod === '현금' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-sm' : 'bg-transparent text-slate-400 border-white/20 hover:border-white/40'}`}>현금 결제</button>
-                    <button type="button" onClick={() => setNewPaymentMethod('카드')} className={`flex-1 py-1.5 rounded-md border text-[11px] font-bold cursor-pointer transition-colors ${newPaymentMethod === '카드' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-sm' : 'bg-transparent text-slate-400 border-white/20 hover:border-white/40'}`}>카드 결제</button>
+                  {/* 💡 [수정] 현금/카드 토글 스위치 (절대 가려지지 않는 명확한 UI) */}
+                  <div className="flex items-center gap-2 pt-1 mt-1">
+                    <button type="button" onClick={() => setNewPaymentMethod('현금')} className={`flex-1 py-1.5 rounded-md border text-[11px] font-bold cursor-pointer transition-colors ${newPaymentMethod === '현금' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-sm' : 'bg-[#0B1120] text-slate-400 border-white/20 hover:border-white/40'}`}>현금 결제</button>
+                    <button type="button" onClick={() => setNewPaymentMethod('카드')} className={`flex-1 py-1.5 rounded-md border text-[11px] font-bold cursor-pointer transition-colors ${newPaymentMethod === '카드' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-sm' : 'bg-[#0B1120] text-slate-400 border-white/20 hover:border-white/40'}`}>카드 결제</button>
                   </div>
                 </div>
 
@@ -1033,7 +949,7 @@ export default function App() {
                             <div className="flex items-center gap-2">
                               <div className="text-right pr-2 border-r border-white/10 mr-1">
                                 <span className="text-[10px] text-slate-400 block">총 청구액</span>
-                                {/* 💡 [금액 포맷] 콤마(,) 100% 적용 */}
+                                {/* 💡 [수정] 콤마 철저 적용 */}
                                 <span className="text-sm font-extrabold text-white">{r.totalClaimAmount.toLocaleString()}원</span>
                               </div>
                               <button onClick={() => handleOpenEditModal(r)} title="날짜 및 내역 수정" className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 transition-all cursor-pointer"><Edit2 className="w-3.5 h-3.5" /></button>
@@ -1540,7 +1456,6 @@ export default function App() {
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-6">
-                  {/* 플랫폼 핫플레이스 리스트 */}
                   <div className="glass-card p-5 rounded-xl border-t-2 border-t-[#EC4899]">
                     <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2"><MapPin className="w-4 h-4 text-[#EC4899]" /> 플랫폼 누적 도착지 랭킹 (핫플레이스 Top 5)</h3>
                     <div className="space-y-2">
@@ -1554,7 +1469,6 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* 매출 랭킹 리스트 */}
                   <div className="glass-card p-5 rounded-xl border-t-2 border-t-amber-500">
                     <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2"><Award className="w-4 h-4 text-amber-500" /> 당월 최고 매출 기사 (리더보드 Top 5)</h3>
                     <div className="space-y-2">
