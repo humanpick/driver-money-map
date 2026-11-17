@@ -110,7 +110,7 @@ const AUCTION_SCHEDULES = [
 ];
 
 export default function App() {
-  const { needRefresh: [needRefresh], updateServiceWorker } = useRegisterSW({ onRegistered(r) {}, onRegisterError(error) {} });
+  const { needRefresh: [needRefresh, setNeedRefresh], updateServiceWorker } = useRegisterSW({ onRegistered(r) {}, onRegisterError(error) {} });
   useEffect(() => { if (needRefresh) updateServiceWorker(true); }, [needRefresh, updateServiceWorker]);
 
   const [session, setSession] = useState<any>(null);
@@ -126,11 +126,15 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'records' | 'claims' | 'expense' | 'analytics' | 'wallet' | 'trade_centers' | 'auctions' | 'admin'>('records');
   const [adminSubTab, setAdminSubTab] = useState<'campaign' | 'members' | 'analytics'>('members');
   
-  // 💡 [캘린더 기본 상태값] KST 기준 오늘 날짜로 캘린더 기본 세팅
+  // 💡 [에러 해결 구역] 실수로 삭제되었던 날짜 필터 변수 복구 완료!
+  const [dateFilter, setDateFilter] = useState<'day' | 'month' | 'year' | 'custom'>('month');
+  const [customDate, setCustomDate] = useState<string>(() => getTodayKST());
+  
   const [currentCalDate, setCurrentCalDate] = useState<Date>(() => {
     const now = new Date();
     return new Date(now.getTime() + 9 * 60 * 60 * 1000);
   });
+  
   const [analyticsMode, setAnalyticsMode] = useState<'month' | 'year'>('month');
   const [analyticsYear, setAnalyticsYear] = useState<string>(new Date().getFullYear().toString());
   const [tradeFilter, setTradeFilter] = useState<'전체' | 'S등급' | 'A등급' | '수도권' | '충청권' | '영남권' | '호남권'>('전체');
@@ -158,7 +162,6 @@ export default function App() {
   const [records, setRecords] = useState<DrivingRecord[]>([]);
   const [selectedRecordIds, setSelectedRecordIds] = useState<string[]>([]);
   
-  // 💡 [복구 기능] 삭제된 기록을 담아두는 버퍼
   const [lastDeletedRecords, setLastDeletedRecords] = useState<DrivingRecord[]>([]);
   const [visibleClaimCount, setVisibleClaimCount] = useState<number>(30);
 
@@ -224,8 +227,8 @@ export default function App() {
 
   useEffect(() => {
     setSelectedRecordIds([]);
-    setLastDeletedRecords([]); // 탭 변경 시 복구 버퍼 리셋
-  }, [currentCalDate, activeTab]);
+    setLastDeletedRecords([]); 
+  }, [currentCalDate, activeTab, dateFilter, customDate]);
 
   const fetchNotices = async () => {
     const { data, error } = await supabase.from('announcements').select('*').order('updated_at', { ascending: false });
@@ -361,6 +364,15 @@ export default function App() {
 
   const handleLogout = async () => { await supabase.auth.signOut(); setShowProfileModal(false); setActiveTab('records'); };
 
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault(); setPwdLoading(true); setPwdMessage(null);
+    if (newPassword.length < 6) { setPwdMessage({ type: 'error', text: '비밀번호는 최소 6자리 이상이어야 합니다.' }); setPwdLoading(false); return; }
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) setPwdMessage({ type: 'error', text: error.message });
+    else { setPwdMessage({ type: 'success', text: '비밀번호가 성공적으로 변경되었습니다.' }); setNewPassword(''); }
+    setPwdLoading(false);
+  };
+
   const handleAddRecord = async (e: React.FormEvent) => {
     e.preventDefault(); if (!session) return;
     const gross = cleanNumber(newGross); const feeRate = cleanNumber(newFeeRate); const fuel = cleanNumber(newFuel);
@@ -391,7 +403,6 @@ export default function App() {
     updated.sort((a, b) => a.date.localeCompare(b.date));
     setRecords(updated); 
     
-    // 등록 후 달력을 해당 날짜의 월로 자동 이동
     const [y, m] = newDate.split('-');
     setCurrentCalDate(new Date(Number(y), Number(m) - 1, 1));
     
@@ -469,17 +480,6 @@ export default function App() {
     }
   };
 
-  const toggleGrossPaid = async (id: string) => {
-    const target = records.find((r) => r.id === id); if (!target) return;
-    const { error } = await supabase.from('driving_records').update({ is_gross_paid: !target.isGrossPaid }).eq('id', id);
-    if (!error) setRecords(records.map((r) => (r.id === id ? { ...r, isGrossPaid: !target.isGrossPaid } : r)));
-  };
-  const toggleExpensePaid = async (id: string) => {
-    const target = records.find((r) => r.id === id); if (!target) return;
-    const { error } = await supabase.from('driving_records').update({ is_expense_paid: !target.isExpensePaid }).eq('id', id);
-    if (!error) setRecords(records.map((r) => (r.id === id ? { ...r, isExpensePaid: !target.isExpensePaid } : r)));
-  };
-
   const handleOpenEditModal = (r: DrivingRecord) => {
     setEditingRecord(r);
     setEditDate(r.date);
@@ -518,7 +518,6 @@ export default function App() {
     } else { alert('수정 실패: ' + error?.message); }
   };
 
-  // 💡 [선택 삭제 및 복구 기능]
   const handleBulkDeleteRecords = async () => {
     if (selectedRecordIds.length === 0) return;
     if (!window.confirm(`선택한 ${selectedRecordIds.length}건의 운행 기록을 삭제하시겠습니까?\n(삭제 직후 상단에서 바로 복구할 수 있습니다.)`)) return;
@@ -533,7 +532,7 @@ export default function App() {
         if (error) throw error;
       }
       setRecords(records.filter((r) => !selectedRecordIds.includes(r.id)));
-      setLastDeletedRecords(recordsToDelete); // 방금 삭제한 데이터를 복구 버퍼에 저장
+      setLastDeletedRecords(recordsToDelete); 
       setSelectedRecordIds([]);
     } catch (error: any) {
       alert('삭제 실패: ' + error.message);
@@ -571,7 +570,7 @@ export default function App() {
       const updated = [...records, ...lastDeletedRecords];
       updated.sort((a, b) => a.date.localeCompare(b.date));
       setRecords(updated);
-      setLastDeletedRecords([]); // 복구 완료 후 버퍼 비우기
+      setLastDeletedRecords([]); 
       alert(`${lastDeletedRecords.length}건이 완벽하게 복구되었습니다.`);
     } catch (error: any) {
       alert('복구 실패: ' + error.message);
@@ -591,6 +590,58 @@ export default function App() {
   };
   const handleDeleteExpense = async (id: string) => { await supabase.from('expenses').delete().eq('id', id); setExpenses(expenses.filter((e) => e.id !== id)); };
   
+  const handleApplyFixedExpenses = async () => {
+    if (!session) return;
+    const amount = cleanNumber(fixedDailyExp);
+    if (amount <= 0 || !fixedDailyMemo.trim()) { alert('고정비 금액과 항목명을 정확히 입력해주세요.'); return; }
+    
+    const currentMonthPrefix = customDate.substring(0, 7); 
+    const currentMonthRecords = records.filter((r) => (r.date || '').startsWith(currentMonthPrefix));
+    
+    const uniqueDrivingDates = Array.from(new Set(currentMonthRecords.map(r => r.date)));
+    const currentMonthExpenses = expenses.filter((e) => (e.date || '').startsWith(currentMonthPrefix));
+    const datesWithExpense = new Set(currentMonthExpenses.filter(e => e.memo === fixedDailyMemo.trim()).map(e => e.date));
+
+    const datesToApply = uniqueDrivingDates.filter(d => !datesWithExpense.has(d));
+
+    if (datesToApply.length === 0) {
+      alert('이번 달 운행일에는 이미 해당 고정비가 모두 반영되어 있습니다.');
+      return;
+    }
+
+    if (!window.confirm(`총 ${datesToApply.length}일치 고정비(일 ${amount.toLocaleString()}원)를 일괄 등록하시겠습니까?\n총액: ${(datesToApply.length * amount).toLocaleString()}원`)) return;
+
+    try {
+      const newExpenses = datesToApply.map((date, idx) => ({
+        id: `exp_fixed_${Date.now()}_${idx}`, user_id: session.user.id, date: date,
+        category: '기타', amount: amount, memo: fixedDailyMemo.trim()
+      }));
+
+      const { error } = await supabase.from('expenses').insert(newExpenses);
+      if (error) throw error;
+
+      const updatedExp = [...newExpenses.map(e => ({...e, id: e.id, date: e.date, category: e.category, amount: e.amount, memo: e.memo})), ...expenses];
+      updatedExp.sort((a, b) => a.date.localeCompare(b.date)); 
+      setExpenses(updatedExp);
+      alert(`${datesToApply.length}건의 고정비가 자동 등록되어 순수익에 반영되었습니다.`);
+    } catch (err: any) {
+      alert('고정비 일괄 등록 실패: ' + err.message);
+    }
+  };
+
+  const handleAddAccount = (e: React.FormEvent) => {
+    e.preventDefault(); if (!bankName || !accountNumber) return;
+    setAccounts([...accounts, { id: Date.now().toString(), bankName, accountNumber, holder: holder || '김탁송' }]);
+    setBankName(''); setAccountNumber(''); setHolder('');
+  };
+  const handleDeleteAccount = (id: string) => { setAccounts(accounts.filter(a => a.id !== id)); };
+
+  const handleUpdateMemberRole = async (memberId: string, newRole: string) => {
+    if (currentUserRole !== 'super_admin') { alert('최고 관리자만 변경 가능합니다.'); return; }
+    const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', memberId);
+    if (!error) { alert('권한이 변경되었습니다.'); fetchAdminData(); } else { alert('변경 실패: ' + error.message); }
+  };
+
   const handleExportAdminCSV = () => {
     if (adminAllRecords.length === 0) { alert('데이터가 없습니다.'); return; }
     const headers = ['일자', '출발지', '도착지', '운임', '수수료율', '주유비', '결제수단', '추가경비', '팁', '순수익', '운임입금', '대납입금'];
@@ -613,11 +664,25 @@ export default function App() {
     return `[탁송 정산 요청]\n* 운행일자: ${r.date}\n* 운행구간: ${r.departure} → ${r.destination}\n${itemsText}--------------------------------\n* 총 청구금액: ${total.toLocaleString()}원\n* 입금계좌: ${primaryAccount.bankName} ${primaryAccount.accountNumber} (${primaryAccount.holder})${driverPhone ? `\n* 탁송기사: ${driverName} (${driverPhone})` : ''}\n\n확인 후 빠른 입금 부탁드립니다. 감사합니다.`;
   };
 
+  const handleToggleInclude = (type: 'gross' | 'fuel' | 'extra') => {
+    if (!selectedClaimRecord) return;
+    const newGross = type === 'gross' ? !includeGross : includeGross; const newFuel = type === 'fuel' ? !includeFuel : includeFuel; const newExtra = type === 'extra' ? !includeExtra : includeExtra;
+    setIncludeGross(newGross); setIncludeFuel(newFuel); setIncludeExtra(newExtra);
+    setClaimMessageText(buildClaimText(selectedClaimRecord, newGross, newFuel, newExtra));
+  };
+
   const openClaimMessageModal = (r: DrivingRecord) => {
     setSelectedClaimRecord(r);
     const initGross = !r.isGrossPaid; const initFuel = !r.isExpensePaid && r.fuelAmount > 0; const initExtra = !r.isExpensePaid && r.extraExpenseAmount > 0;
     setIncludeGross(initGross); setIncludeFuel(initFuel); setIncludeExtra(initExtra);
     setClaimMessageText(buildClaimText(r, initGross, initFuel, initExtra)); setClaimModalOpen(true);
+  };
+
+  const openAdminUserDetail = (user: MemberProfile) => {
+    setAdminSelectedUser(user);
+    const allUserRecs = adminAllRecords.filter(r => r.userId === user.id);
+    const recentRecs = allUserRecs.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10);
+    setAdminSelectedUserRecords(recentRecs);
   };
 
   const todayKstStr = getTodayKST();
@@ -628,7 +693,6 @@ export default function App() {
   
   const isAdminUser = currentUserRole === 'super_admin' || currentUserRole === 'manager';
 
-  // 💡 [캘린더 렌더링 로직]
   const calYear = currentCalDate.getFullYear();
   const calMonth = currentCalDate.getMonth();
   const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
@@ -764,10 +828,8 @@ export default function App() {
               </form>
             </div>
             
-            {/* 💡 [핵심 교체 구간] 기존 리스트 뷰를 '풀스크린 캘린더'로 완전 교체 */}
             <div className="lg:col-span-2 glass-card rounded-xl p-5 shadow-lg flex flex-col h-[750px]">
               
-              {/* 상단 툴바 구역 */}
               <div className="flex flex-col gap-3 mb-4 border-b border-white/10 pb-4 shrink-0">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-bold text-white flex items-center gap-2"><Calendar className="w-4 h-4 text-[#8B5CF6]" />운행 캘린더 및 정산 관리</h3>
@@ -775,14 +837,12 @@ export default function App() {
                 </div>
 
                 <div className="flex flex-wrap items-center justify-between gap-3 bg-white/5 p-2.5 rounded-xl border border-white/10">
-                  {/* 월간 이동 네비게이션 */}
                   <div className="flex items-center gap-2">
                     <button onClick={() => setCurrentCalDate(new Date(calYear, calMonth - 1, 1))} className="p-1 hover:bg-white/10 rounded cursor-pointer text-slate-300"><ChevronLeft className="w-5 h-5" /></button>
                     <input type="month" value={`${calYear}-${String(calMonth + 1).padStart(2, '0')}`} onChange={(e) => { const [y, m] = e.target.value.split('-'); setCurrentCalDate(new Date(Number(y), Number(m) - 1, 1)); }} className="bg-transparent text-white text-base font-extrabold focus:outline-none cursor-pointer text-center w-32 border-0" />
                     <button onClick={() => setCurrentCalDate(new Date(calYear, calMonth + 1, 1))} className="p-1 hover:bg-white/10 rounded cursor-pointer text-slate-300"><ChevronRight className="w-5 h-5" /></button>
                   </div>
 
-                  {/* 선택 및 삭제 복구 기능 */}
                   <div className="flex items-center gap-2">
                     <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-300 cursor-pointer border-r border-white/10 pr-2 mr-1">
                       <input type="checkbox" checked={currentMonthDisplayRecords.length > 0 && selectedRecordIds.length === currentMonthDisplayRecords.length} onChange={(e) => setSelectedRecordIds(e.target.checked ? currentMonthDisplayRecords.map(r => r.id) : [])} className="w-4 h-4 rounded text-[#8B5CF6] cursor-pointer bg-[#0B1120] border-white/20" />
@@ -796,17 +856,14 @@ export default function App() {
                 </div>
               </div>
 
-              {/* 캘린더 그리드 구역 */}
               <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto scrollbar-hide rounded-xl border border-white/10 bg-[#0B1120]">
                 <div className="min-w-[650px] h-full flex flex-col">
-                  {/* 요일 헤더 */}
                   <div className="grid grid-cols-7 border-b border-white/10 shrink-0 sticky top-0 bg-[#0B1120] z-10">
                     {['일', '월', '화', '수', '목', '금', '토'].map((day, i) => (
                       <div key={day} className={`p-2 text-center text-xs font-bold ${i === 0 ? 'text-[#EC4899]' : i === 6 ? 'text-[#38BDF8]' : 'text-slate-400'}`}>{day}</div>
                     ))}
                   </div>
                   
-                  {/* 날짜 셀 렌더링 */}
                   <div className="grid grid-cols-7 auto-rows-fr flex-1">
                     {calendarDaysArray.map((dateStr, idx) => {
                       if (!dateStr) return <div key={`empty-${idx}`} className="border-b border-r border-white/5 bg-white/[0.01]"></div>;
@@ -821,7 +878,6 @@ export default function App() {
                             {dateNum}
                           </div>
                           
-                          {/* 해당 일자의 운행 기록 리스트 */}
                           <div className="flex flex-col gap-1 overflow-y-auto scrollbar-hide pr-0.5">
                             {dayRecords.map(r => {
                               const isChecked = selectedRecordIds.includes(r.id);
@@ -923,10 +979,12 @@ export default function App() {
 
         {activeTab === 'analytics' && (
           <div className="space-y-6 fade-in-text">
+            
             <div className="flex gap-2 bg-[#0B1120] p-1.5 rounded-xl border border-white/10 w-fit">
               <button onClick={() => setAnalyticsMode('month')} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${analyticsMode === 'month' ? 'bg-[#8B5CF6] text-white shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'text-slate-400 hover:text-white'}`}>월간 상세 요약</button>
               <button onClick={() => setAnalyticsMode('year')} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${analyticsMode === 'year' ? 'bg-[#8B5CF6] text-white shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'text-slate-400 hover:text-white'}`}>연간 종합 통계</button>
             </div>
+
             {analyticsMode === 'month' && (
               <div className="space-y-4 fade-in-text">
                 <div className="glass-card rounded-2xl p-5 md:p-6 shadow-xl border-2 border-[#8B5CF6]/40 relative overflow-hidden">
@@ -1000,7 +1058,6 @@ export default function App() {
         )}
       </main>
 
-      {/* 모달 영역 생략 없이 전체 코드 유지 */}
       {importModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="w-full max-w-lg glass-card rounded-2xl p-6 shadow-2xl relative max-h-[90vh] flex flex-col">
