@@ -94,7 +94,7 @@ interface BankAccount { id: string; bankName: string; accountNumber: string; hol
 interface MemberProfile { id: string; email: string; name: string; phone: string; role: string; createdAt: string; lastLoginAt?: string; loginCount?: number; recordCount?: number; monthlyGross?: number; }
 interface NoticeItem { id: string; title: string; content: string; isActive: boolean; updatedAt?: string; }
 
-// 💡 매매단지 18대 핵심 거점 (완전체 유지)
+// 💡 매매단지 18대 핵심 거점
 const TRADE_CENTERS = [
   { id: '1', name: '수원 도이치오토월드', tier: 'S', region: '수도권', addr: '경기 수원시 권선구 권선로 308-5', desc: '전국 최대 실내 복합단지.' },
   { id: '2', name: '수원 SK V1 모터스', tier: 'S', region: '수도권', addr: '경기 수원시 권선구 평동로79번길 45', desc: '도이치오토월드 옆.' },
@@ -116,12 +116,12 @@ const TRADE_CENTERS = [
   { id: '18', name: '전주 월드컵매매단지', tier: 'B', region: '호남권', addr: '전북 전주시 덕진구 온고을로 860', desc: '전북권 핵심 거점.' }
 ];
 
-// 💡 [경매장 팩트 체크 완료] 중복 오류 제거 및 전국 9대 메가 경매장 스케줄 세팅
+// 💡 [확인 완료] 요일별 중복 경매장 포함 오리지널 데이터 100% 원복
 const AUCTION_SCHEDULES = [
-  { day: '월요일', hex: '#38BDF8', locations: [{ name: '안성 롯데오토옥션', tier: 'S', addr: '경기 안성시 원곡면 내가천리 12', tag: '롯데' }, { name: '진천 오토보이', tier: 'B', addr: '충북 진천군 금천길 37', tag: '오토보이' }] },
-  { day: '화요일', hex: '#EC4899', locations: [{ name: '분당(오포) 현대글로비스', tier: 'S', addr: '경기 광주시 능평리 174-25', tag: '글로비스' }, { name: '천안 SK V1 옥션', tier: 'B', addr: '충남 천안시 동남구 구성동', tag: 'SK' }, { name: '세종 K Car 옥션', tier: 'A', addr: '세종 부강면 문곡리 산 249', tag: '케이카' }] },
-  { day: '수요일', hex: '#10B981', locations: [{ name: '안성 오토허브옥션', tier: 'S', addr: '경기 안성시 공도읍 문터길 60', tag: '오토허브' }] },
-  { day: '목요일', hex: '#F59E0B', locations: [{ name: '양산 현대글로비스', tier: 'S', addr: '경남 양산시 산막동 572-1', tag: '글로비스' }, { name: '오산 K Car 옥션', tier: 'A', addr: '경기 오산시 은계동 7-30', tag: '케이카' }] },
+  { day: '월요일', hex: '#38BDF8', locations: [{ name: '안성 롯데렌탈', tier: 'S', addr: '경기 안성시 내가천리 12', tag: '롯데' }, { name: '진천 광혜원 오토보이', tier: 'B', addr: '충북 진천군 금천길 37', tag: '오토보이' }] },
+  { day: '화요일', hex: '#EC4899', locations: [{ name: '시화 현대글로비스', tier: 'S', addr: '경기 시흥시 정왕천로 271', tag: '글로비스' }, { name: '오포 현대글로비스', tier: 'S', addr: '경기 광주시 능평리 174-25', tag: '글로비스' }, { name: '세종 K Car', tier: 'A', addr: '세종 부강면 문곡리 산 249', tag: '케이카' }, { name: '천안 SK경매장', tier: 'B', addr: '충남 천안시 구성동', tag: 'SK' }] },
+  { day: '수요일', hex: '#10B981', locations: [{ name: '안성 오토허브', tier: 'S', addr: '경기 안성시 문터길 60', tag: '오토허브' }] },
+  { day: '목요일', hex: '#F59E0B', locations: [{ name: '양산 현대글로비스', tier: 'S', addr: '경남 양산시 산막동 572-1', tag: '글로비스' }, { name: '오산 K Car', tier: 'A', addr: '경기 오산시 은계동 7-30', tag: '케이카' }] },
   { day: '금요일', hex: '#8B5CF6', locations: [{ name: '시화 현대글로비스', tier: 'S', addr: '경기 시흥시 정왕동 2122-4', tag: '글로비스' }] }
 ];
 
@@ -621,6 +621,7 @@ export default function App() {
               <div className="flex flex-col gap-3 mb-4 border-b border-white/10 pb-4 shrink-0">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-bold text-white flex items-center gap-2"><Calendar className="w-4 h-4 text-[#8B5CF6]" />운행 캘린더 및 정산 관리</h3>
+                  <button onClick={() => { setImportStep(1); setImportData([]); setImportModalOpen(true); }} className="px-3 py-1.5 bg-[#10B981]/10 text-[#10B981] border border-[#10B981]/30 hover:bg-[#10B981]/20 rounded-lg text-[10px] font-bold cursor-pointer transition-all flex items-center gap-1"><Download className="w-3.5 h-3.5" />타사 장부 이관</button>
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-3 bg-white/5 p-2.5 rounded-xl border border-white/10">
                   <div className="flex items-center gap-2">
@@ -687,7 +688,6 @@ export default function App() {
           </div>
         )}
 
-        {/* 💡 청구 관리 탭 (입금 취소 등 완벽 유지) */}
         {activeTab === 'claims' && (
           <div className="glass-card rounded-xl p-6 shadow-lg fade-in-text">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
@@ -707,6 +707,7 @@ export default function App() {
                       )}
                     </div>
                   </div>
+                  
                   <div className="mt-4 pt-4 border-t border-white/10 flex flex-col gap-3">
                     <div className="flex gap-2">
                       <button onClick={() => toggleGrossPaid(r.id)} className={`flex-1 py-1.5 rounded-lg border text-[11px] font-bold transition-colors flex items-center justify-center gap-1 cursor-pointer ${r.isGrossPaid ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400' : 'border-[#8B5CF6]/50 text-[#8B5CF6] hover:bg-[#8B5CF6]/10'}`}>
@@ -718,6 +719,7 @@ export default function App() {
                         </button>
                       )}
                     </div>
+                    
                     <div className="flex justify-between items-center mt-1">
                       <div className="flex gap-1.5">
                         <button onClick={() => handleOpenEditModal(r)} className="p-2 bg-white/5 hover:bg-white/10 text-slate-300 rounded-lg transition-colors cursor-pointer" title="수정"><Edit2 className="w-3.5 h-3.5" /></button>
@@ -747,7 +749,7 @@ export default function App() {
               </div>
               <div className="glass-card rounded-xl p-5 shadow-lg border-t-2 border-t-[#38BDF8]">
                 <h3 className="text-sm font-bold text-white mb-2 flex items-center gap-1.5"><Smartphone className="w-4 h-4 text-[#38BDF8]" /> 매일 나가는 고정비 세팅</h3>
-                <div className="space-y-3 mt-4"><input type="text" value={fixedDailyMemo} onChange={(e) => setFixedDailyMemo(e.target.value)} placeholder="예: 프로그램 일비 및 보험료" className="w-full px-3 py-2 rounded-lg text-xs" /><div className="relative"><input type="text" value={fixedDailyExp} onChange={(e) => setFixedDailyExp(formatNumberWithComma(e.target.value))} placeholder="차 차감 금액 (예: 3,200)" className="w-full px-3 py-2 rounded-lg text-xs text-right pr-6" /><span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">원</span></div><button onClick={handleApplyFixedExpenses} className="w-full py-2.5 bg-white/10 hover:bg-[#38BDF8]/20 text-[#38BDF8] border border-[#38BDF8]/30 font-bold rounded-lg text-xs cursor-pointer transition-colors shadow-sm">이번 달 운행일에 일괄 차감 적용</button></div>
+                <div className="space-y-3 mt-4"><input type="text" value={fixedDailyMemo} onChange={(e) => setFixedDailyMemo(e.target.value)} placeholder="예: 프로그램 일비 및 보험료" className="w-full px-3 py-2 rounded-lg text-xs" /><div className="relative"><input type="text" value={fixedDailyExp} onChange={(e) => setFixedDailyExp(formatNumberWithComma(e.target.value))} placeholder="차감 금액 (예: 3,200)" className="w-full px-3 py-2 rounded-lg text-xs text-right pr-6" /><span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">원</span></div><button onClick={handleApplyFixedExpenses} className="w-full py-2.5 bg-white/10 hover:bg-[#38BDF8]/20 text-[#38BDF8] border border-[#38BDF8]/30 font-bold rounded-lg text-xs cursor-pointer transition-colors shadow-sm">이번 달 운행일에 일괄 차감 적용</button></div>
               </div>
             </div>
             <div className="lg:col-span-2 glass-card rounded-xl p-6 shadow-lg h-fit">
@@ -892,7 +894,6 @@ export default function App() {
           </div>
         )}
 
-        {/* 💡 매매단지, 경매장 스케줄 탭 렌더링 유지 */}
         {activeTab === 'trade_centers' && (
           <div className="space-y-5 fade-in-text">
             <div className="glass-card rounded-xl p-5 shadow-lg border border-[#8B5CF6]/30">
