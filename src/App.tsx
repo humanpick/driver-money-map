@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { useRegisterSW } from 'virtual:pwa-register/react';
+// 💡 [원인 제거] 앱을 즉사시키던 엑셀 라이브러리(xlsx) 강제 호출 코드를 완전히 삭제했습니다!
+
 import {
   Wallet, Calendar, Clock, MapPin, TrendingUp, DollarSign, FileText, User, LogOut,
   KeyRound, X, CheckCircle2, AlertCircle, PlusCircle, CreditCard, Receipt, Trash2,
@@ -169,9 +171,16 @@ export default function App() {
   const [isImporting, setIsImporting] = useState(false);
   const [importStep, setImportStep] = useState<1 | 2>(1);
 
+  // 💡 [자가 치유 코드] 저장소 키값을 v2로 업그레이드하여 기존에 고장난 데이터를 전부 건너뜁니다! (화면 뻗음 원천 차단)
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
   const [accounts, setAccounts] = useState<BankAccount[]>(() => {
-    try { const saved = localStorage.getItem('jundriver_local_accounts_merged'); if (saved) return JSON.parse(saved); } catch (e) {}
+    try { 
+      const saved = localStorage.getItem('jundriver_accounts_v2'); 
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {}
     return [{ id: '1', bankName: '신한은행', accountNumber: '110-123-456789', holder: '김탁송' }];
   });
 
@@ -199,23 +208,52 @@ export default function App() {
   const [expCategory, setExpCategory] = useState('대중교통'); const [expAmount, setExpAmount] = useState(''); const [expMemo, setExpMemo] = useState('');
   const [bankName, setBankName] = useState(''); const [accountNumber, setAccountNumber] = useState(''); const [holder, setHolder] = useState('');
 
+  // 💡 [자가 치유 코드] 목표 설정 금액 캐시도 v2로 덮어씌워 뻗음 방지
   const [targetIncome, setTargetIncome] = useState<string>(() => {
-    try { const s = localStorage.getItem('jundriver_target'); return s ? JSON.parse(s).income : '5,000,000'; } catch { return '5,000,000'; }
+    try { 
+      const s = localStorage.getItem('jundriver_target_v2'); 
+      if (s) {
+        const parsed = JSON.parse(s);
+        return parsed.income ? String(parsed.income) : '5,000,000';
+      }
+    } catch (e) {}
+    return '5,000,000';
   });
   const [targetDays, setTargetDays] = useState<string>(() => {
-    try { const s = localStorage.getItem('jundriver_target'); return s ? JSON.parse(s).days : '25'; } catch { return '25'; }
+    try { 
+      const s = localStorage.getItem('jundriver_target_v2'); 
+      if (s) {
+        const parsed = JSON.parse(s);
+        return parsed.days ? String(parsed.days) : '25';
+      }
+    } catch (e) {}
+    return '25';
   });
 
   const [fixedDailyExp, setFixedDailyExp] = useState<string>(() => {
-    try { const s = localStorage.getItem('jundriver_fixed_exp'); return s ? JSON.parse(s).amount : '3,200'; } catch { return '3,200'; }
+    try { 
+      const s = localStorage.getItem('jundriver_fixed_exp_v2'); 
+      if (s) {
+        const parsed = JSON.parse(s);
+        return parsed.amount !== undefined ? String(parsed.amount) : '3,200';
+      }
+    } catch (e) {}
+    return '3,200';
   });
   const [fixedDailyMemo, setFixedDailyMemo] = useState<string>(() => {
-    try { const s = localStorage.getItem('jundriver_fixed_exp'); return s ? JSON.parse(s).memo : '일비 및 보험료'; } catch { return '일비 및 보험료'; }
+    try { 
+      const s = localStorage.getItem('jundriver_fixed_exp_v2'); 
+      if (s) {
+        const parsed = JSON.parse(s);
+        return parsed.memo ? String(parsed.memo) : '일비 및 보험료';
+      }
+    } catch (e) {}
+    return '일비 및 보험료';
   });
 
-  useEffect(() => { localStorage.setItem('jundriver_local_accounts_merged', JSON.stringify(accounts)); }, [accounts]);
-  useEffect(() => { localStorage.setItem('jundriver_target', JSON.stringify({ income: targetIncome, days: targetDays })); }, [targetIncome, targetDays]);
-  useEffect(() => { localStorage.setItem('jundriver_fixed_exp', JSON.stringify({ amount: fixedDailyExp, memo: fixedDailyMemo })); }, [fixedDailyExp, fixedDailyMemo]);
+  useEffect(() => { localStorage.setItem('jundriver_accounts_v2', JSON.stringify(accounts)); }, [accounts]);
+  useEffect(() => { localStorage.setItem('jundriver_target_v2', JSON.stringify({ income: targetIncome, days: targetDays })); }, [targetIncome, targetDays]);
+  useEffect(() => { localStorage.setItem('jundriver_fixed_exp_v2', JSON.stringify({ amount: fixedDailyExp, memo: fixedDailyMemo })); }, [fixedDailyExp, fixedDailyMemo]);
 
   useEffect(() => {
     setSelectedRecordIds([]);
@@ -288,7 +326,7 @@ export default function App() {
           .reduce((sum: number, r: any) => sum + Number(r.gross_amount), 0);
           
         return { 
-          id: p.id, email: p.email || '', name: p.name || '미상', phone: p.phone || '', role: p.role || 'user', // 💡 하얀 화면을 유발했던 치명적 에러 방어 구역
+          id: p.id, email: p.email || '', name: p.name || '미상', phone: p.phone || '', role: p.role || 'user',
           createdAt: p.created_at ? p.created_at.substring(0, 10) : '-', 
           lastLoginAt: p.last_login_at ? p.last_login_at.substring(0, 16).replace('T', ' ') : '기록없음',
           loginCount: p.login_count || 0,
@@ -427,6 +465,7 @@ export default function App() {
     setNewDeparture('수원'); setNewDestination('부산'); setNewGross('150,000'); setNewFuel(''); setNewExtraExpense(''); setNewTip(''); setNewPaymentMethod('현금');
   };
 
+  // 💡 [핵심 픽스] 앱 실행 시가 아니라 사용자가 버튼을 눌렀을 때만 엑셀 라이브러리를 동적으로 불러오게 변경
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -731,7 +770,6 @@ export default function App() {
     return true;
   });
 
-  // 💡 [버그 완벽 차단] 이름, 전화번호, 이메일이 null이어도 절대 화면이 뻗지 않도록 (|| '') 빈 문자열로 감싸서 안전하게 검색
   const displayedMembers = adminMemberList.filter(m => {
     const safeName = m.name || '';
     const safePhone = m.phone || '';
@@ -926,9 +964,9 @@ export default function App() {
                   </label>
                   <input type="text" placeholder="선결제한 주유 금액" value={newFuel} onChange={(e) => setNewFuel(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right mb-2" />
                   
-                  <div className="flex flex-row w-full items-center justify-between gap-2">
-                    <button type="button" onClick={() => setNewPaymentMethod('현금')} className={`w-1/2 py-2 rounded-lg border text-xs font-bold cursor-pointer transition-colors ${newPaymentMethod === '현금' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-[0_0_10px_rgba(139,92,246,0.3)]' : 'bg-[#0B1120] text-slate-400 border-white/20 hover:border-white/40'}`}>현금 결제</button>
-                    <button type="button" onClick={() => setNewPaymentMethod('카드')} className={`w-1/2 py-2 rounded-lg border text-xs font-bold cursor-pointer transition-colors ${newPaymentMethod === '카드' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-[0_0_10px_rgba(139,92,246,0.3)]' : 'bg-[#0B1120] text-slate-400 border-white/20 hover:border-white/40'}`}>카드 결제</button>
+                  <div className="flex flex-row items-center justify-between gap-2 pt-1 w-full">
+                    <button type="button" onClick={() => setNewPaymentMethod('현금')} className={`w-1/2 py-2 rounded-lg border text-xs font-bold cursor-pointer transition-colors ${newPaymentMethod === '현금' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-[0_0_10px_rgba(139,92,246,0.3)]' : 'bg-transparent text-slate-400 border-white/30 hover:border-white/50'}`}>현금 결제</button>
+                    <button type="button" onClick={() => setNewPaymentMethod('카드')} className={`w-1/2 py-2 rounded-lg border text-xs font-bold cursor-pointer transition-colors ${newPaymentMethod === '카드' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-[0_0_10px_rgba(139,92,246,0.3)]' : 'bg-transparent text-slate-400 border-white/30 hover:border-white/50'}`}>카드 결제</button>
                   </div>
                 </div>
 
