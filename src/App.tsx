@@ -387,6 +387,18 @@ export default function App() {
     } catch (error: any) { alert('이관 실패: ' + error.message); } finally { setIsImporting(false); setImportData([]); setImportStep(1); }
   };
 
+  // 💡 [입금 확인 함수 연동]
+  const toggleGrossPaid = async (id: string) => {
+    const target = records.find((r) => r.id === id); if (!target) return;
+    const { error } = await supabase.from('driving_records').update({ is_gross_paid: !target.isGrossPaid }).eq('id', id);
+    if (!error) setRecords(records.map((r) => (r.id === id ? { ...r, isGrossPaid: !target.isGrossPaid } : r)));
+  };
+  const toggleExpensePaid = async (id: string) => {
+    const target = records.find((r) => r.id === id); if (!target) return;
+    const { error } = await supabase.from('driving_records').update({ is_expense_paid: !target.isExpensePaid }).eq('id', id);
+    if (!error) setRecords(records.map((r) => (r.id === id ? { ...r, isExpensePaid: !target.isExpensePaid } : r)));
+  };
+
   const handleOpenEditModal = (r: DrivingRecord) => { setEditingRecord(r); setEditDate(r.date); setEditDeparture(r.departure); setEditDestination(r.destination); setEditGross(formatNumberWithComma(r.grossAmount)); setEditFuel(formatNumberWithComma(r.fuelAmount)); setEditExtra(formatNumberWithComma(r.extraExpenseAmount)); setEditTip(formatNumberWithComma(r.tipAmount)); setEditPaymentMethod(r.paymentMethod || '현금'); };
   const handleUpdateRecord = async (e: React.FormEvent) => {
     e.preventDefault(); if (!editingRecord || !session) return;
@@ -649,7 +661,6 @@ export default function App() {
                       const dayRecords = records.filter(r => r.date === dateStr);
                       const isToday = dateStr === getTodayKST(); const dateNum = parseInt(dateStr.split('-')[2]);
                       return (
-                        // 💡 [클릭 이벤트 적용] 캘린더 날짜 클릭 시 입력폼 날짜 자동 업데이트 & 위로 스크롤
                         <div key={dateStr} 
                              onClick={() => { setNewDate(dateStr); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
                              className={`border-b border-r border-white/5 p-1.5 flex flex-col min-h-[90px] transition-colors hover:bg-white/10 cursor-pointer ${isToday ? 'bg-[#8B5CF6]/10' : ''}`}>
@@ -657,14 +668,30 @@ export default function App() {
                           <div className="flex flex-col gap-1 overflow-y-auto scrollbar-hide pr-0.5">
                             {dayRecords.map(r => {
                               const isChecked = selectedRecordIds.includes(r.id);
+                              const hasExpense = r.fuelAmount > 0 || r.extraExpenseAmount > 0;
                               return (
-                                // 💡 [클릭 방어] 캘린더 내 기존 기록 클릭 시 폼 날짜가 안 바뀌게 방어막 설정
                                 <div key={r.id} onClick={(e) => e.stopPropagation()} className={`relative group p-1.5 rounded-md border flex flex-col gap-1 transition-all ${isChecked ? 'bg-[#8B5CF6]/20 border-[#8B5CF6]/50' : 'bg-black/40 border-white/10 hover:border-white/30'}`}>
-                                  <div className="flex items-start gap-1.5">
-                                    <input type="checkbox" checked={isChecked} onChange={(e) => { e.stopPropagation(); if (e.target.checked) setSelectedRecordIds([...selectedRecordIds, r.id]); else setSelectedRecordIds(selectedRecordIds.filter(id => id !== r.id)); }} onClick={(e) => e.stopPropagation()} className="w-3 h-3 text-[#8B5CF6] rounded bg-[#0B1120] border-white/20 mt-0.5 cursor-pointer shrink-0" />
+                                  <div className="flex items-start gap-1">
+                                    <input type="checkbox" checked={isChecked} onChange={(e) => { e.stopPropagation(); if (e.target.checked) setSelectedRecordIds([...selectedRecordIds, r.id]); else setSelectedRecordIds(selectedRecordIds.filter(id => id !== r.id)); }} onClick={(e) => e.stopPropagation()} className="w-2.5 h-2.5 text-[#8B5CF6] rounded bg-[#0B1120] border-white/20 mt-0.5 cursor-pointer shrink-0" />
                                     <div className="min-w-0 flex-1 leading-tight">
-                                      <div className="text-[10px] font-extrabold text-white truncate cursor-pointer hover:text-[#38BDF8]" onClick={(e) => { e.stopPropagation(); handleOpenEditModal(r); }}>{r.destination}</div>
-                                      <div className="text-[9px] text-[#38BDF8] font-bold">{(r.netAmount / 10000).toFixed(1)}만</div>
+                                      <div className="flex items-center justify-between">
+                                        <div className="text-[10px] font-extrabold text-white truncate cursor-pointer hover:text-[#38BDF8]" onClick={(e) => { e.stopPropagation(); handleOpenEditModal(r); }}>
+                                          {r.departure.substring(0,2)}➔{r.destination.substring(0,4)}
+                                        </div>
+                                      </div>
+                                      
+                                      {/* 💡 [수정 구역] 달력 내 입금 체크 버튼(초소형) 복구 */}
+                                      <div className="flex flex-wrap items-center gap-1 mt-1">
+                                        <button onClick={(e) => { e.stopPropagation(); toggleGrossPaid(r.id); }} className={`px-1 py-0.5 rounded-[4px] text-[8px] font-bold cursor-pointer border transition-colors ${r.isGrossPaid ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-[#EC4899]/20 text-[#EC4899] border-[#EC4899]/40'}`}>
+                                          운임{r.isGrossPaid ? '✔' : '미수'}
+                                        </button>
+                                        {hasExpense && (
+                                          <button onClick={(e) => { e.stopPropagation(); toggleExpensePaid(r.id); }} className={`px-1 py-0.5 rounded-[4px] text-[8px] font-bold cursor-pointer border transition-colors ${r.isExpensePaid ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-[#EC4899]/20 text-[#EC4899] border-[#EC4899]/40'}`}>
+                                            대납{r.isExpensePaid ? '✔' : '미수'}
+                                          </button>
+                                        )}
+                                      </div>
+
                                     </div>
                                   </div>
                                 </div>
