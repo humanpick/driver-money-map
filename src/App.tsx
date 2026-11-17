@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { useRegisterSW } from 'virtual:pwa-register/react';
-// 💡 [원인 제거] 앱을 즉사시키던 엑셀 라이브러리(xlsx) 강제 호출 코드를 완전히 삭제했습니다!
-
 import {
   Wallet, Calendar, Clock, MapPin, TrendingUp, DollarSign, FileText, User, LogOut,
   KeyRound, X, CheckCircle2, AlertCircle, PlusCircle, CreditCard, Receipt, Trash2,
@@ -171,7 +169,6 @@ export default function App() {
   const [isImporting, setIsImporting] = useState(false);
   const [importStep, setImportStep] = useState<1 | 2>(1);
 
-  // 💡 [자가 치유 코드] 저장소 키값을 v2로 업그레이드하여 기존에 고장난 데이터를 전부 건너뜁니다! (화면 뻗음 원천 차단)
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
   const [accounts, setAccounts] = useState<BankAccount[]>(() => {
     try { 
@@ -208,7 +205,6 @@ export default function App() {
   const [expCategory, setExpCategory] = useState('대중교통'); const [expAmount, setExpAmount] = useState(''); const [expMemo, setExpMemo] = useState('');
   const [bankName, setBankName] = useState(''); const [accountNumber, setAccountNumber] = useState(''); const [holder, setHolder] = useState('');
 
-  // 💡 [자가 치유 코드] 목표 설정 금액 캐시도 v2로 덮어씌워 뻗음 방지
   const [targetIncome, setTargetIncome] = useState<string>(() => {
     try { 
       const s = localStorage.getItem('jundriver_target_v2'); 
@@ -465,7 +461,6 @@ export default function App() {
     setNewDeparture('수원'); setNewDestination('부산'); setNewGross('150,000'); setNewFuel(''); setNewExtraExpense(''); setNewTip(''); setNewPaymentMethod('현금');
   };
 
-  // 💡 [핵심 픽스] 앱 실행 시가 아니라 사용자가 버튼을 눌렀을 때만 엑셀 라이브러리를 동적으로 불러오게 변경
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -902,9 +897,17 @@ export default function App() {
           </div>
           <div className="flex items-center gap-2">
             {isAdminUser && <button onClick={() => { fetchAdminData(); setActiveTab('admin'); }} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all ${activeTab === 'admin' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#38BDF8]/10 border border-[#38BDF8]/30 text-[#38BDF8] hover:bg-[#38BDF8]/20'}`}><Crown className="w-3.5 h-3.5" /><span className="hidden sm:inline">관제탑</span></button>}
+            
+            {/* 💡 [핵심 버그 수정 구역] 상단 헤더 이름 출력 시 절대 에러가 나지 않도록 방탄 처리 */}
             <button onClick={() => setShowProfileModal(true)} className="flex items-center gap-2 px-3 py-1.5 rounded-lg glass-card text-xs text-slate-200 cursor-pointer">
-              <User className="w-3.5 h-3.5 text-[#8B5CF6]" /><div className="text-left"><span className="block font-bold text-white leading-tight">{currentUserProfile?.name || userName}님</span></div>
+              <User className="w-3.5 h-3.5 text-[#8B5CF6]" />
+              <div className="text-left">
+                <span className="block font-bold text-white leading-tight">
+                  {currentUserProfile?.name || session?.user?.user_metadata?.name || '기사'}님
+                </span>
+              </div>
             </button>
+
             <button onClick={handleLogout} className="p-1.5 rounded-lg glass-card text-slate-400 hover:text-[#EC4899] cursor-pointer"><LogOut className="w-4 h-4" /></button>
           </div>
         </div>
@@ -958,15 +961,15 @@ export default function App() {
                 </div>
                 <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">기사 팁/추가운임 (선택)</label><input type="text" placeholder="5,000" value={newTip} onChange={(e) => setNewTip(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" /></div>
                 
-                <div className="p-3.5 rounded-xl bg-[#0B1120] border border-white/20">
+                <div className="p-3.5 rounded-xl bg-white/5 border border-white/20">
                   <label className="text-xs font-bold text-[#8B5CF6] flex items-center justify-between gap-1.5 mb-2">
                     <div className="flex items-center gap-1.5"><Fuel className="w-4 h-4 text-[#8B5CF6]" />대납 주유/충전비 (100% 회수)</div>
                   </label>
                   <input type="text" placeholder="선결제한 주유 금액" value={newFuel} onChange={(e) => setNewFuel(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right mb-2" />
                   
                   <div className="flex flex-row items-center justify-between gap-2 pt-1 w-full">
-                    <button type="button" onClick={() => setNewPaymentMethod('현금')} className={`w-1/2 py-2 rounded-lg border text-xs font-bold cursor-pointer transition-colors ${newPaymentMethod === '현금' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-[0_0_10px_rgba(139,92,246,0.3)]' : 'bg-transparent text-slate-400 border-white/30 hover:border-white/50'}`}>현금 결제</button>
-                    <button type="button" onClick={() => setNewPaymentMethod('카드')} className={`w-1/2 py-2 rounded-lg border text-xs font-bold cursor-pointer transition-colors ${newPaymentMethod === '카드' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-[0_0_10px_rgba(139,92,246,0.3)]' : 'bg-transparent text-slate-400 border-white/30 hover:border-white/50'}`}>카드 결제</button>
+                    <button type="button" onClick={() => setNewPaymentMethod('현금')} className={`flex-1 py-2 rounded-lg border text-xs font-bold cursor-pointer transition-colors ${newPaymentMethod === '현금' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-[0_0_10px_rgba(139,92,246,0.3)]' : 'bg-transparent text-slate-400 border-white/30 hover:border-white/50'}`}>현금 결제</button>
+                    <button type="button" onClick={() => setNewPaymentMethod('카드')} className={`flex-1 py-2 rounded-lg border text-xs font-bold cursor-pointer transition-colors ${newPaymentMethod === '카드' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-[0_0_10px_rgba(139,92,246,0.3)]' : 'bg-transparent text-slate-400 border-white/30 hover:border-white/50'}`}>카드 결제</button>
                   </div>
                 </div>
 
@@ -1781,7 +1784,7 @@ export default function App() {
             <div className="bg-[#0B1120] border border-white/10 rounded-xl p-3.5 space-y-2 mb-5">
               <div className="flex justify-between items-center text-xs">
                 <span className="text-slate-400">기사 성함</span>
-                <span className="text-white font-bold">{currentUserProfile?.name || userName}</span>
+                <span className="text-white font-bold">{currentUserProfile?.name || session?.user?.user_metadata?.name || '미상'}</span>
               </div>
               <div className="flex justify-between items-center text-xs">
                 <span className="text-slate-400">연락처</span>
