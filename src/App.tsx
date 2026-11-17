@@ -170,6 +170,11 @@ export default function App() {
   const [visibleRecordCount, setVisibleRecordCount] = useState<number>(30);
   const [visibleClaimCount, setVisibleClaimCount] = useState<number>(30);
 
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importData, setImportData] = useState<any[]>([]);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importStep, setImportStep] = useState<1 | 2>(1);
+
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
   const [accounts, setAccounts] = useState<BankAccount[]>(() => {
     try { 
@@ -186,6 +191,7 @@ export default function App() {
 
   const [adminMemberList, setAdminMemberList] = useState<MemberProfile[]>([]);
   const [adminAllRecords, setAdminAllRecords] = useState<DrivingRecord[]>([]);
+  
   const [adminSearchTerm, setAdminSearchTerm] = useState('');
   const [showScoutOnly, setShowScoutOnly] = useState(false);
 
@@ -194,6 +200,7 @@ export default function App() {
   const [newDeparture, setNewDeparture] = useState('수원'); 
   const [newDestination, setNewDestination] = useState('부산');
   const [newGross, setNewGross] = useState('150,000'); 
+  
   const [newFeeRate, setNewFeeRate] = useState('20');
   const [newFuel, setNewFuel] = useState(''); const [newExtraExpense, setNewExtraExpense] = useState(''); const [newTip, setNewTip] = useState('');
   const [newPaymentMethod, setNewPaymentMethod] = useState<'현금' | '카드'>('현금'); 
@@ -355,6 +362,34 @@ export default function App() {
     setNewDeparture('수원'); setNewDestination('부산'); setNewGross('150,000'); setNewFuel(''); setNewExtraExpense(''); setNewTip(''); setNewPaymentMethod('현금');
   };
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    try {
+      const XLSX = await import('xlsx'); const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const data = new Uint8Array(event.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const rawJson = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+          const parsedRecords = rawJson.map(parseImportedRow).filter((r: any) => r.grossAmount > 0);
+          if (parsedRecords.length === 0) { alert('데이터를 변환할 수 없습니다.'); return; }
+          setImportData(parsedRecords); setImportStep(2);
+        } catch (error) { alert('파일 파싱 오류입니다.'); }
+      };
+      reader.readAsArrayBuffer(file);
+    } catch (err) { alert('변환 모듈을 불러올 수 없습니다.'); }
+  };
+
+  const handleBatchImport = async () => {
+    if (!session || importData.length === 0) return; setIsImporting(true);
+    try {
+      const payloads = importData.map((data, idx) => ({ id: `rec_import_${Date.now()}_${idx}`, user_id: session.user.id, date: data.date, start_time: '-', end_time: '-', departure: data.departure, destination: data.destination, gross_amount: data.grossAmount, fee_rate: data.feeRate, fuel_amount: 0, extra_expense_amount: 0, tip_amount: 0, is_gross_paid: true, is_expense_paid: true, net_amount: data.netAmount, total_claim_amount: data.totalClaimAmount }));
+      for (let i = 0; i < payloads.length; i += 50) { await supabase.from('driving_records').insert(payloads.slice(i, i + 50)); }
+      alert('장부가 이관되었습니다!'); setImportModalOpen(false); fetchUserData(session.user.id, session.user.email || '');
+    } catch (error: any) { alert('이관 실패: ' + error.message); } finally { setIsImporting(false); setImportData([]); setImportStep(1); }
+  };
+
+  // 💡 [개선] 입금 확인 토글(취소 포함) 기능 완벽 연동
   const toggleGrossPaid = async (id: string) => {
     const target = records.find((r) => r.id === id); if (!target) return;
     const { error } = await supabase.from('driving_records').update({ is_gross_paid: !target.isGrossPaid }).eq('id', id);
@@ -601,7 +636,7 @@ export default function App() {
                   </div>
                 </div>
                 <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">통행료 등 기타 대납경비 (선택)</label><input type="text" placeholder="0" value={newExtraExpense} onChange={(e) => setNewExtraExpense(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" /></div>
-                <button type="submit" className="w-full py-3 hp-primary-btn font-bold rounded-lg text-xs cursor-pointer mt-2">운행 일지 등록</button>
+                <button type="submit" className="w-full py-3 hp-primary-btn font-bold rounded-lg text-xs cursor-pointer mt-2">운행 일지 등록 (미입금 상태로 저장)</button>
               </form>
             </div>
             
@@ -1102,28 +1137,8 @@ export default function App() {
         </div>
       )}
 
-      {claimModalOpen && selectedClaimRecord && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="w-full max-w-lg glass-card rounded-2xl p-6 shadow-2xl relative">
-            <button onClick={() => setClaimModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 cursor-pointer"><X className="w-5 h-5" /></button>
-            <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2"><MessageSquare className="w-5 h-5 text-[#8B5CF6]" />정산 청구 문자 편집 및 복사</h3>
-            <p className="text-xs text-slate-400 mb-4">미입금된 내역만 자동으로 체크되어 문구가 생성됩니다. 수정한 후 복사하세요.</p>
-            <div className="flex gap-4 mb-4 pb-4 border-b border-white/10">
-              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 cursor-pointer"><input type="checkbox" checked={includeGross} onChange={() => handleToggleInclude('gross')} className="rounded text-[#8B5CF6]" disabled={selectedClaimRecord.isGrossPaid} /> 기본 운임</label>
-              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 cursor-pointer"><input type="checkbox" checked={includeFuel} onChange={() => handleToggleInclude('fuel')} className="rounded text-[#8B5CF6]" disabled={selectedClaimRecord.fuelAmount === 0 || selectedClaimRecord.isExpensePaid} /> 주유비</label>
-              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 cursor-pointer"><input type="checkbox" checked={includeExtra} onChange={() => handleToggleInclude('extra')} className="rounded text-[#8B5CF6]" disabled={selectedClaimRecord.extraExpenseAmount === 0 || selectedClaimRecord.isExpensePaid} /> 추가경비</label>
-            </div>
-            <textarea rows={10} value={claimMessageText} onChange={(e) => setClaimMessageText(e.target.value)} className="w-full p-4 rounded-xl text-xs font-mono mb-4 leading-relaxed bg-[#FFFFFF] text-[#000000] focus:shadow-[0_0_12px_#8B5CF6] focus:border-[#8B5CF6] transition-all outline-none" />
-            <div className="flex gap-2">
-              <button onClick={() => setClaimModalOpen(false)} className="flex-1 py-3 bg-[#0B1120] border border-white/10 hover:bg-white/10 text-white font-semibold rounded-lg text-xs cursor-pointer transition-colors">닫기</button>
-              <button onClick={() => { navigator.clipboard.writeText(claimMessageText); alert('수정된 정산 청구 문자가 복사되었습니다.'); setClaimModalOpen(false); }} className="flex-1 py-3 hp-primary-btn text-white font-bold rounded-lg text-xs cursor-pointer shadow-md flex items-center justify-center gap-1.5"><Copy className="w-3.5 h-3.5" />복사하기</button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {adminSelectedUser && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="w-full max-w-2xl glass-card rounded-2xl p-6 shadow-2xl relative max-h-[90vh] flex flex-col">
             <button onClick={() => setAdminSelectedUser(null)} className="absolute top-4 right-4 text-slate-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
             <h3 className="text-base font-bold text-[#38BDF8] mb-4 flex items-center gap-2"><Search className="w-5 h-5" /> {adminSelectedUser.name || '미상'} 기사님 상세 리포트</h3>
