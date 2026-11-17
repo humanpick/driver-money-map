@@ -98,12 +98,18 @@ const TRADE_CENTERS = [
   { id: '1', name: '수원 도이치오토월드', tier: 'S', region: '수도권', addr: '경기 수원시 권선구 권선로 308-5', desc: '전국 최대 실내 복합단지.' },
   { id: '2', name: '수원 SK V1 모터스', tier: 'S', region: '수도권', addr: '경기 수원시 권선구 평동로79번길 45', desc: '도이치오토월드 옆.' },
   { id: '3', name: '인천 엠파크', tier: 'S', region: '수도권', addr: '인천 서구 봉수대로 158', desc: '인천 권역 최대 메가 허브.' },
-  { id: '4', name: '용인 오토허브', tier: 'S', region: '수도권', addr: '경기 용인시 기흥구 중부대로 242', desc: '경부 신갈IC 인근 초대형 복합단지.' }
+  { id: '4', name: '용인 오토허브', tier: 'S', region: '수도권', addr: '경기 용인시 기흥구 중부대로 242', desc: '경부 신갈IC 인근 초대형 복합단지.' },
+  { id: '5', name: '서울 서서울모터리움', tier: 'A', region: '수도권', addr: '서울 강서구 양천로53길 30', desc: '서울 서부권 최대 실내.' },
+  { id: '6', name: '김포 국민차매매단지', tier: 'A', region: '수도권', addr: '경기 김포시 고촌읍 아라육로152번길 45', desc: '수도권 서북부 대형 실내.' },
+  { id: '7', name: '부산 경동오토필드', tier: 'A', region: '영남권', addr: '부산 기장군 장안읍 반룡산단3로 95', desc: '영남 최대.' },
+  { id: '8', name: '대구 엠월드', tier: 'A', region: '영남권', addr: '대구 서구 문화로 37', desc: '대구 경북 최대.' },
+  { id: '9', name: '부산 사직오토랜드', tier: 'A', region: '영남권', addr: '부산 연제구 경기장로 15', desc: '전통 대표 단지.' },
+  { id: '10', name: '대전 디오토몰', tier: 'A', region: '충청권', addr: '대전 유성구 복용동로 35', desc: '충청권 핵심.' }
 ];
 
 const AUCTION_SCHEDULES = [
   { day: '월요일', hex: '#38BDF8', locations: [{ name: '안성 롯데렌탈', tier: 'S', addr: '경기 안성시 내가천리 12', tag: '롯데' }, { name: '진천 광혜원 오토보이', tier: 'B', addr: '충북 진천군 금천길 37', tag: '오토보이' }] },
-  { day: '화요일', hex: '#EC4899', locations: [{ name: '시화 현대글로비스', tier: 'S', addr: '경기 시흥시 정왕천로 271', tag: '글로비스' }, { name: '오포 현대글로비스', tier: 'S', addr: '경기 광주시 능평리 174-25', tag: '글로비스' }, { name: '세종 K Car', tier: 'A', addr: '세종 부강면 문곡리 산 249', tag: '케이카' }] },
+  { day: '화요일', hex: '#EC4899', locations: [{ name: '시화 현대글로비스', tier: 'S', addr: '경기 시흥시 정왕천로 271', tag: '글로비스' }, { name: '오포 현대글로비스', tier: 'S', addr: '경기 광주시 능평리 174-25', tag: '글로비스' }, { name: '세종 K Car', tier: 'A', addr: '세종 부강면 문곡리 산 249', tag: '케이카' }, { name: '천안 SK경매장', tier: 'B', addr: '충남 천안시 구성동', tag: 'SK' }] },
   { day: '수요일', hex: '#10B981', locations: [{ name: '안성 오토허브', tier: 'S', addr: '경기 안성시 문터길 60', tag: '오토허브' }] },
   { day: '목요일', hex: '#F59E0B', locations: [{ name: '양산 현대글로비스', tier: 'S', addr: '경남 양산시 산막동 572-1', tag: '글로비스' }, { name: '오산 K Car', tier: 'A', addr: '경기 오산시 은계동 7-30', tag: '케이카' }] },
   { day: '금요일', hex: '#8B5CF6', locations: [{ name: '시화 현대글로비스', tier: 'S', addr: '경기 시흥시 정왕동 2122-4', tag: '글로비스' }] }
@@ -126,13 +132,10 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'records' | 'claims' | 'expense' | 'analytics' | 'wallet' | 'trade_centers' | 'auctions' | 'admin'>('records');
   const [adminSubTab, setAdminSubTab] = useState<'campaign' | 'members' | 'analytics'>('members');
   
-  // 💡 [에러 해결 구역] 실수로 삭제되었던 날짜 필터 변수 복구 완료!
   const [dateFilter, setDateFilter] = useState<'day' | 'month' | 'year' | 'custom'>('month');
   const [customDate, setCustomDate] = useState<string>(() => getTodayKST());
-  
   const [currentCalDate, setCurrentCalDate] = useState<Date>(() => {
-    const now = new Date();
-    return new Date(now.getTime() + 9 * 60 * 60 * 1000);
+    const now = new Date(); return new Date(now.getTime() + 9 * 60 * 60 * 1000);
   });
   
   const [analyticsMode, setAnalyticsMode] = useState<'month' | 'year'>('month');
@@ -161,8 +164,8 @@ export default function App() {
   
   const [records, setRecords] = useState<DrivingRecord[]>([]);
   const [selectedRecordIds, setSelectedRecordIds] = useState<string[]>([]);
-  
   const [lastDeletedRecords, setLastDeletedRecords] = useState<DrivingRecord[]>([]);
+  const [visibleRecordCount, setVisibleRecordCount] = useState<number>(30);
   const [visibleClaimCount, setVisibleClaimCount] = useState<number>(30);
 
   const [importModalOpen, setImportModalOpen] = useState(false);
@@ -172,10 +175,7 @@ export default function App() {
 
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
   const [accounts, setAccounts] = useState<BankAccount[]>(() => {
-    try { 
-      const saved = localStorage.getItem('jundriver_accounts_v2'); 
-      if (saved) { const parsed = JSON.parse(saved); if (Array.isArray(parsed)) return parsed; }
-    } catch (e) {}
+    try { const saved = localStorage.getItem('jundriver_accounts_v2'); if (saved) { const parsed = JSON.parse(saved); if (Array.isArray(parsed)) return parsed; } } catch (e) {}
     return [{ id: '1', bankName: '신한은행', accountNumber: '110-123-456789', holder: '김탁송' }];
   });
 
@@ -186,7 +186,6 @@ export default function App() {
 
   const [adminMemberList, setAdminMemberList] = useState<MemberProfile[]>([]);
   const [adminAllRecords, setAdminAllRecords] = useState<DrivingRecord[]>([]);
-  
   const [adminSearchTerm, setAdminSearchTerm] = useState('');
   const [showScoutOnly, setShowScoutOnly] = useState(false);
 
@@ -195,7 +194,6 @@ export default function App() {
   const [newDeparture, setNewDeparture] = useState('수원'); 
   const [newDestination, setNewDestination] = useState('부산');
   const [newGross, setNewGross] = useState('150,000'); 
-  
   const [newFeeRate, setNewFeeRate] = useState('20');
   const [newFuel, setNewFuel] = useState(''); const [newExtraExpense, setNewExtraExpense] = useState(''); const [newTip, setNewTip] = useState('');
   const [newPaymentMethod, setNewPaymentMethod] = useState<'현금' | '카드'>('현금'); 
@@ -211,7 +209,6 @@ export default function App() {
     try { const s = localStorage.getItem('jundriver_target_v2'); if (s) { const parsed = JSON.parse(s); return parsed.days ? String(parsed.days) : '25'; } } catch (e) {}
     return '25';
   });
-
   const [fixedDailyExp, setFixedDailyExp] = useState<string>(() => {
     try { const s = localStorage.getItem('jundriver_fixed_exp_v2'); if (s) { const parsed = JSON.parse(s); return parsed.amount !== undefined ? String(parsed.amount) : '3,200'; } } catch (e) {}
     return '3,200';
@@ -285,30 +282,21 @@ export default function App() {
   const fetchAdminData = async () => {
     const { data: profiles } = await supabase.from('profiles').select('*').order('last_login_at', { ascending: false });
     const { data: allRecs } = await supabase.from('driving_records').select('*').limit(20000);
-    
     const currentMonthStr = getTodayKST().substring(0, 7);
     
     if (profiles && allRecs) {
       setAdminMemberList(profiles.map((p: any) => {
         const userRecords = allRecs.filter((r: any) => r.user_id === p.id);
-        const monthlyGross = userRecords
-          .filter((r: any) => (r.date || '').startsWith(currentMonthStr))
-          .reduce((sum: number, r: any) => sum + Number(r.gross_amount), 0);
-          
+        const monthlyGross = userRecords.filter((r: any) => (r.date || '').startsWith(currentMonthStr)).reduce((sum: number, r: any) => sum + Number(r.gross_amount), 0);
         return { 
           id: p.id, email: p.email || '', name: p.name || '미상', phone: p.phone || '', role: p.role || 'user',
-          createdAt: p.created_at ? p.created_at.substring(0, 10) : '-', 
-          lastLoginAt: p.last_login_at ? p.last_login_at.substring(0, 16).replace('T', ' ') : '기록없음',
-          loginCount: p.login_count || 0,
-          recordCount: userRecords.length,
-          monthlyGross: monthlyGross
+          createdAt: p.created_at ? p.created_at.substring(0, 10) : '-', lastLoginAt: p.last_login_at ? p.last_login_at.substring(0, 16).replace('T', ' ') : '기록없음',
+          loginCount: p.login_count || 0, recordCount: userRecords.length, monthlyGross: monthlyGross
         };
       }));
-      
       setAdminAllRecords(allRecs.map((r: any) => ({ 
         id: r.id, userId: r.user_id, date: r.date || '-', startTime: r.start_time || '-', endTime: r.end_time || '-', departure: r.departure, destination: r.destination, 
-        grossAmount: Number(r.gross_amount), fuelAmount: Number(r.fuel_amount), feeRate: Number(r.fee_rate), extraExpenseAmount: Number(r.extra_expense_amount), tipAmount: Number(r.tip_amount), isGrossPaid: Boolean(r.is_gross_paid), isExpensePaid: Boolean(r.is_expense_paid), netAmount: Number(r.net_amount), totalClaimAmount: Number(r.total_claim_amount),
-        paymentMethod: r.payment_method || '현금' 
+        grossAmount: Number(r.gross_amount), fuelAmount: Number(r.fuel_amount), feeRate: Number(r.fee_rate), extraExpenseAmount: Number(r.extra_expense_amount), tipAmount: Number(r.tip_amount), isGrossPaid: Boolean(r.is_gross_paid), isExpensePaid: Boolean(r.is_expense_paid), netAmount: Number(r.net_amount), totalClaimAmount: Number(r.total_claim_amount), paymentMethod: r.payment_method || '현금' 
       })));
     }
   };
@@ -327,51 +315,28 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault(); setAuthLoading(true); setAuthError(''); setAuthSuccess('');
-    const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password: password.trim() });
-    if (error) setAuthError('이메일 또는 비밀번호가 일치하지 않습니다.');
-    setAuthLoading(false);
-  };
-
+  const handleLogin = async (e: React.FormEvent) => { e.preventDefault(); setAuthLoading(true); setAuthError(''); setAuthSuccess(''); const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password: password.trim() }); if (error) setAuthError('이메일 또는 비밀번호가 일치하지 않습니다.'); setAuthLoading(false); };
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault(); setAuthLoading(true); setAuthError(''); setAuthSuccess('');
     if (honeypot.trim() !== '') { setAuthLoading(false); return; }
     if (!captchaVerified) { setAuthError('보안 확인(인간 인증 체크)을 완료해 주세요.'); setAuthLoading(false); return; }
     const trimmedName = name.trim(); const cleanPhone = phone.replace(/[^0-9]/g, ''); const cleanEmail = email.trim().toLowerCase();
-    
     if (password.length < 6) { setAuthError('비밀번호는 최소 6자리 이상이어야 합니다.'); setAuthLoading(false); return; }
     if (password !== passwordConfirm) { setAuthError('비밀번호가 일치하지 않습니다.'); setAuthLoading(false); return; }
     if (!agreePrivacy) { setAuthError('개인정보 수집 및 이용에 동의해 주세요.'); setAuthLoading(false); return; }
     if (!trimmedName || cleanPhone.length < 10) { setAuthError('이름과 휴대폰 번호를 정확히 입력해 주세요.'); setAuthLoading(false); return; }
-
     const nowIso = new Date().toISOString();
-    const { data, error } = await supabase.auth.signUp({
-      email: cleanEmail,
-      password: password.trim(),
-      options: { data: { name: trimmedName, phone: cleanPhone, privacy_policy_agreed: true, created_at: nowIso } }
-    });
-
-    if (error) { setAuthError('가입 실패: ' + error.message); }
-    else {
-      if (data.user) {
-        await supabase.from('profiles').upsert([{ id: data.user.id, email: cleanEmail, name: trimmedName, phone: cleanPhone, role: cleanEmail === ADMIN_DEFAULT_EMAIL ? 'super_admin' : 'user', created_at: nowIso, last_login_at: nowIso, login_count: 1 }]);
-      }
-      setAuthSuccess('회원가입이 완료되었습니다. 로그인해 주세요.'); setAuthMode('login');
-    }
+    const { data, error } = await supabase.auth.signUp({ email: cleanEmail, password: password.trim(), options: { data: { name: trimmedName, phone: cleanPhone, privacy_policy_agreed: true, created_at: nowIso } } });
+    if (error) { setAuthError('가입 실패: ' + error.message); } else { if (data.user) { await supabase.from('profiles').upsert([{ id: data.user.id, email: cleanEmail, name: trimmedName, phone: cleanPhone, role: cleanEmail === ADMIN_DEFAULT_EMAIL ? 'super_admin' : 'user', created_at: nowIso, last_login_at: nowIso, login_count: 1 }]); } setAuthSuccess('회원가입이 완료되었습니다. 로그인해 주세요.'); setAuthMode('login'); }
     setAuthLoading(false);
   };
-
   const handleLogout = async () => { await supabase.auth.signOut(); setShowProfileModal(false); setActiveTab('records'); };
-
-  const handlePasswordChange = async (e: React.FormEvent) => {
-    e.preventDefault(); setPwdLoading(true); setPwdMessage(null);
-    if (newPassword.length < 6) { setPwdMessage({ type: 'error', text: '비밀번호는 최소 6자리 이상이어야 합니다.' }); setPwdLoading(false); return; }
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
-    if (error) setPwdMessage({ type: 'error', text: error.message });
-    else { setPwdMessage({ type: 'success', text: '비밀번호가 성공적으로 변경되었습니다.' }); setNewPassword(''); }
-    setPwdLoading(false);
-  };
+  const handlePasswordChange = async (e: React.FormEvent) => { e.preventDefault(); setPwdLoading(true); setPwdMessage(null); if (newPassword.length < 6) { setPwdMessage({ type: 'error', text: '비밀번호는 최소 6자리 이상이어야 합니다.' }); setPwdLoading(false); return; } const { error } = await supabase.auth.updateUser({ password: newPassword }); if (error) setPwdMessage({ type: 'error', text: error.message }); else { setPwdMessage({ type: 'success', text: '비밀번호가 성공적으로 변경되었습니다.' }); setNewPassword(''); } setPwdLoading(false); };
+  
+  const handleSaveNoticeTemplate = async (e: React.FormEvent) => { e.preventDefault(); if (!inputNoticeTitle.trim() || !inputNoticeContent.trim()) return; setNoticeLoading(true); const targetId = editingNoticeId || `notice_${Date.now()}`; const { error } = await supabase.from('announcements').upsert({ id: targetId, title: inputNoticeTitle.trim(), content: inputNoticeContent.trim(), is_active: editingNoticeId ? (noticeList.find(n => n.id === editingNoticeId)?.isActive || false) : false, updated_at: new Date().toISOString() }); if (!error) { alert(editingNoticeId ? '수정되었습니다.' : '저장되었습니다.'); setInputNoticeTitle(''); setInputNoticeContent(''); setEditingNoticeId(null); fetchNotices(); } setNoticeLoading(false); };
+  const handleActivateNotice = async (targetNotice: NoticeItem) => { setNoticeLoading(true); await supabase.from('announcements').update({ is_active: false }).neq('id', 'dummy'); const { error } = await supabase.from('announcements').update({ is_active: true, updated_at: new Date().toISOString() }).eq('id', targetNotice.id); if (!error) { alert('메인 배너로 활성화되었습니다.'); fetchNotices(); } setNoticeLoading(false); };
+  const handleDeactivateAllNotices = async () => { setNoticeLoading(true); const { error } = await supabase.from('announcements').update({ is_active: false }).neq('id', 'dummy'); if (!error) { alert('메인 배너 송출이 중단되었습니다.'); fetchNotices(); } setNoticeLoading(false); };
+  const handleDeleteNotice = async (id: string) => { if (!window.confirm('삭제하시겠습니까?')) return; await supabase.from('announcements').delete().eq('id', id); fetchNotices(); };
 
   const handleAddRecord = async (e: React.FormEvent) => {
     e.preventDefault(); if (!session) return;
@@ -379,329 +344,156 @@ export default function App() {
     const extraExp = cleanNumber(newExtraExpense); const tip = cleanNumber(newTip);
     const net = gross - (gross * (feeRate / 100)) + tip; const claimTotal = gross + fuel + extraExp;
     const recordId = 'rec_' + Date.now().toString();
-
-    const payload = { 
-      id: recordId, user_id: session.user.id, date: newDate, start_time: newStartTime || '-', end_time: newEndTime || '-', departure: newDeparture, destination: newDestination, 
-      gross_amount: gross, fee_rate: feeRate, fuel_amount: fuel, extra_expense_amount: extraExp, tip_amount: tip, 
-      is_gross_paid: false, is_expense_paid: false, net_amount: Math.round(net), total_claim_amount: Math.round(claimTotal),
-      payment_method: newPaymentMethod 
-    };
-    
+    const payload = { id: recordId, user_id: session.user.id, date: newDate, start_time: newStartTime || '-', end_time: newEndTime || '-', departure: newDeparture, destination: newDestination, gross_amount: gross, fee_rate: feeRate, fuel_amount: fuel, extra_expense_amount: extraExp, tip_amount: tip, is_gross_paid: false, is_expense_paid: false, net_amount: Math.round(net), total_claim_amount: Math.round(claimTotal), payment_method: newPaymentMethod };
     const newRecord: DrivingRecord = { ...payload, startTime: payload.start_time, endTime: payload.end_time, grossAmount: gross, feeRate, fuelAmount: fuel, extraExpenseAmount: extraExp, tipAmount: tip, isGrossPaid: false, isExpensePaid: false, netAmount: Math.round(net), totalClaimAmount: Math.round(claimTotal), paymentMethod: newPaymentMethod };
     
     const { error } = await supabase.from('driving_records').insert([payload]);
+    if (error && error.message.includes('payment_method')) { const fallbackPayload = { ...payload }; delete (fallbackPayload as any).payment_method; await supabase.from('driving_records').insert([fallbackPayload]); }
     
-    if (error && error.message.includes('payment_method')) {
-       const fallbackPayload = { ...payload };
-       delete (fallbackPayload as any).payment_method;
-       await supabase.from('driving_records').insert([fallbackPayload]);
-    } else if (error) {
-       console.error(error);
-    }
-
-    const updated = [newRecord, ...records];
-    updated.sort((a, b) => a.date.localeCompare(b.date));
-    setRecords(updated); 
-    
-    const [y, m] = newDate.split('-');
-    setCurrentCalDate(new Date(Number(y), Number(m) - 1, 1));
-    
+    const updated = [newRecord, ...records]; updated.sort((a, b) => a.date.localeCompare(b.date)); setRecords(updated); 
+    const [y, m] = newDate.split('-'); setCurrentCalDate(new Date(Number(y), Number(m) - 1, 1));
     setNewDeparture('수원'); setNewDestination('부산'); setNewGross('150,000'); setNewFuel(''); setNewExtraExpense(''); setNewTip(''); setNewPaymentMethod('현금');
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+    const file = e.target.files?.[0]; if (!file) return;
     try {
-      const XLSX = await import('xlsx');
-      const reader = new FileReader();
+      const XLSX = await import('xlsx'); const reader = new FileReader();
       reader.onload = (event) => {
         try {
           const data = new Uint8Array(event.target?.result as ArrayBuffer);
           const workbook = XLSX.read(data, { type: 'array' });
-          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-          const rawJson = XLSX.utils.sheet_to_json(firstSheet);
-          
+          const rawJson = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
           const parsedRecords = rawJson.map(parseImportedRow).filter((r: any) => r.grossAmount > 0);
-          if (parsedRecords.length === 0) {
-            alert('데이터를 변환할 수 없습니다. 엑셀 파일 양식을 확인해주세요.');
-            return;
-          }
-          setImportData(parsedRecords);
-          setImportStep(2);
-        } catch (error) {
-          alert('파일을 파싱하는 중 오류가 발생했습니다. 정상적인 엑셀/CSV 파일인지 확인해주세요.');
-        }
+          if (parsedRecords.length === 0) { alert('데이터를 변환할 수 없습니다.'); return; }
+          setImportData(parsedRecords); setImportStep(2);
+        } catch (error) { alert('파일 파싱 오류입니다.'); }
       };
       reader.readAsArrayBuffer(file);
-    } catch (err) {
-      alert('엑셀 변환 모듈을 불러올 수 없습니다. 인터넷 상태를 확인하거나 잠시 후 다시 시도해주세요.');
-    }
+    } catch (err) { alert('변환 모듈을 불러올 수 없습니다.'); }
   };
 
   const handleBatchImport = async () => {
-    if (!session || importData.length === 0) return;
-    setIsImporting(true);
-
+    if (!session || importData.length === 0) return; setIsImporting(true);
     try {
-      const payloads = importData.map((data, idx) => ({
-        id: `rec_import_${Date.now()}_${idx}`,
-        user_id: session.user.id,
-        date: data.date,
-        start_time: '-', end_time: '-',
-        departure: data.departure,
-        destination: data.destination,
-        gross_amount: data.grossAmount,
-        fee_rate: data.feeRate,
-        fuel_amount: 0, extra_expense_amount: 0, tip_amount: 0,
-        is_gross_paid: true, 
-        is_expense_paid: true,
-        net_amount: data.netAmount,
-        total_claim_amount: data.totalClaimAmount
-      }));
-
-      const chunkSize = 50;
-      for (let i = 0; i < payloads.length; i += chunkSize) {
-        const chunk = payloads.slice(i, i + chunkSize);
-        const { error } = await supabase.from('driving_records').insert(chunk);
-        if (error) throw error;
-      }
-
-      alert(`총 ${payloads.length}건의 과거 운행 일지가 성공적으로 이관되었습니다!`);
-      setImportModalOpen(false);
-      fetchUserData(session.user.id, session.user.email || '');
-    } catch (error: any) {
-      alert('데이터 이관 실패: ' + error.message);
-    } finally {
-      setIsImporting(false);
-      setImportData([]);
-      setImportStep(1);
-    }
+      const payloads = importData.map((data, idx) => ({ id: `rec_import_${Date.now()}_${idx}`, user_id: session.user.id, date: data.date, start_time: '-', end_time: '-', departure: data.departure, destination: data.destination, gross_amount: data.grossAmount, fee_rate: data.feeRate, fuel_amount: 0, extra_expense_amount: 0, tip_amount: 0, is_gross_paid: true, is_expense_paid: true, net_amount: data.netAmount, total_claim_amount: data.totalClaimAmount }));
+      for (let i = 0; i < payloads.length; i += 50) { await supabase.from('driving_records').insert(payloads.slice(i, i + 50)); }
+      alert('장부가 이관되었습니다!'); setImportModalOpen(false); fetchUserData(session.user.id, session.user.email || '');
+    } catch (error: any) { alert('이관 실패: ' + error.message); } finally { setIsImporting(false); setImportData([]); setImportStep(1); }
   };
 
-  const handleOpenEditModal = (r: DrivingRecord) => {
-    setEditingRecord(r);
-    setEditDate(r.date);
-    setEditDeparture(r.departure); setEditDestination(r.destination);
-    setEditGross(formatNumberWithComma(r.grossAmount)); setEditFuel(formatNumberWithComma(r.fuelAmount));
-    setEditExtra(formatNumberWithComma(r.extraExpenseAmount)); setEditTip(formatNumberWithComma(r.tipAmount));
-    setEditPaymentMethod(r.paymentMethod || '현금'); 
-  };
-
+  const handleOpenEditModal = (r: DrivingRecord) => { setEditingRecord(r); setEditDate(r.date); setEditDeparture(r.departure); setEditDestination(r.destination); setEditGross(formatNumberWithComma(r.grossAmount)); setEditFuel(formatNumberWithComma(r.fuelAmount)); setEditExtra(formatNumberWithComma(r.extraExpenseAmount)); setEditTip(formatNumberWithComma(r.tipAmount)); setEditPaymentMethod(r.paymentMethod || '현금'); };
   const handleUpdateRecord = async (e: React.FormEvent) => {
     e.preventDefault(); if (!editingRecord || !session) return;
-    const gross = cleanNumber(editGross); const feeRate = cleanNumber(editingRecord.feeRate);
-    const fuel = cleanNumber(editFuel); const extraExp = cleanNumber(editExtra); const tip = cleanNumber(editTip);
+    const gross = cleanNumber(editGross); const feeRate = cleanNumber(editingRecord.feeRate); const fuel = cleanNumber(editFuel); const extraExp = cleanNumber(editExtra); const tip = cleanNumber(editTip);
     const net = gross - (gross * (feeRate / 100)) + tip; const claimTotal = gross + fuel + extraExp;
-
-    const payload = {
-      date: editDate, departure: editDeparture, destination: editDestination,
-      gross_amount: gross, fuel_amount: fuel, extra_expense_amount: extraExp, tip_amount: tip, net_amount: Math.round(net), total_claim_amount: Math.round(claimTotal),
-      payment_method: editPaymentMethod
-    };
-
+    const payload = { date: editDate, departure: editDeparture, destination: editDestination, gross_amount: gross, fuel_amount: fuel, extra_expense_amount: extraExp, tip_amount: tip, net_amount: Math.round(net), total_claim_amount: Math.round(claimTotal), payment_method: editPaymentMethod };
     let error = (await supabase.from('driving_records').update(payload).eq('id', editingRecord.id)).error;
-    
-    if(error && error.message.includes('payment_method')) {
-      const fallbackPayload = { ...payload };
-      delete (fallbackPayload as any).payment_method;
-      error = (await supabase.from('driving_records').update(fallbackPayload).eq('id', editingRecord.id)).error;
-    }
-
-    if (!error) {
-      const updatedList = records.map((r) => r.id === editingRecord.id ? {
-        ...r, date: editDate, departure: editDeparture, destination: editDestination, grossAmount: gross, fuelAmount: fuel, extraExpenseAmount: extraExp, tipAmount: tip, netAmount: Math.round(net), totalClaimAmount: Math.round(claimTotal), paymentMethod: editPaymentMethod
-      } : r);
-      updatedList.sort((a, b) => a.date.localeCompare(b.date));
-      setRecords(updatedList); setEditingRecord(null);
-    } else { alert('수정 실패: ' + error?.message); }
+    if(error && error.message.includes('payment_method')) { const fb = { ...payload }; delete (fb as any).payment_method; error = (await supabase.from('driving_records').update(fb).eq('id', editingRecord.id)).error; }
+    if (!error) { const updatedList = records.map((r) => r.id === editingRecord.id ? { ...r, date: editDate, departure: editDeparture, destination: editDestination, grossAmount: gross, fuelAmount: fuel, extraExpenseAmount: extraExp, tipAmount: tip, netAmount: Math.round(net), totalClaimAmount: Math.round(claimTotal), paymentMethod: editPaymentMethod } : r); updatedList.sort((a, b) => a.date.localeCompare(b.date)); setRecords(updatedList); setEditingRecord(null); } else { alert('수정 실패'); }
   };
 
   const handleBulkDeleteRecords = async () => {
-    if (selectedRecordIds.length === 0) return;
-    if (!window.confirm(`선택한 ${selectedRecordIds.length}건의 운행 기록을 삭제하시겠습니까?\n(삭제 직후 상단에서 바로 복구할 수 있습니다.)`)) return;
-    
+    if (selectedRecordIds.length === 0) return; if (!window.confirm('선택한 운행 기록을 삭제하시겠습니까? (삭제 직후 상단에서 복구 가능)')) return;
     const recordsToDelete = records.filter(r => selectedRecordIds.includes(r.id));
-
     try {
-      const chunkSize = 50;
-      for (let i = 0; i < selectedRecordIds.length; i += chunkSize) {
-        const chunk = selectedRecordIds.slice(i, i + chunkSize);
-        const { error } = await supabase.from('driving_records').delete().in('id', chunk);
-        if (error) throw error;
-      }
-      setRecords(records.filter((r) => !selectedRecordIds.includes(r.id)));
-      setLastDeletedRecords(recordsToDelete); 
-      setSelectedRecordIds([]);
-    } catch (error: any) {
-      alert('삭제 실패: ' + error.message);
-    }
+      for (let i = 0; i < selectedRecordIds.length; i += 50) { await supabase.from('driving_records').delete().in('id', selectedRecordIds.slice(i, i + 50)); }
+      setRecords(records.filter((r) => !selectedRecordIds.includes(r.id))); setLastDeletedRecords(recordsToDelete); setSelectedRecordIds([]);
+    } catch (error: any) { alert('삭제 실패: ' + error.message); }
   };
 
   const handleUndoDelete = async () => {
     if (lastDeletedRecords.length === 0 || !session) return;
-    
-    const payloads = lastDeletedRecords.map(r => ({
-      id: r.id, user_id: session.user.id, date: r.date, start_time: r.startTime, end_time: r.endTime, 
-      departure: r.departure, destination: r.destination, gross_amount: r.grossAmount, fee_rate: r.feeRate, 
-      fuel_amount: r.fuelAmount, extra_expense_amount: r.extraExpenseAmount, tip_amount: r.tipAmount, 
-      is_gross_paid: r.isGrossPaid, is_expense_paid: r.isExpensePaid, net_amount: r.netAmount, 
-      total_claim_amount: r.totalClaimAmount, payment_method: r.paymentMethod || '현금'
-    }));
-
-    const insertWithFallback = async (chunk: any[]) => {
-      let result = await supabase.from('driving_records').insert(chunk);
-      if (result.error && result.error.message.includes('payment_method')) {
-        const fallbackChunk = chunk.map(p => { const { payment_method, ...rest } = p; return rest; });
-        result = await supabase.from('driving_records').insert(fallbackChunk);
-      }
-      return result;
-    };
-
+    const payloads = lastDeletedRecords.map(r => ({ id: r.id, user_id: session.user.id, date: r.date, start_time: r.startTime, end_time: r.endTime, departure: r.departure, destination: r.destination, gross_amount: r.grossAmount, fee_rate: r.feeRate, fuel_amount: r.fuelAmount, extra_expense_amount: r.extraExpenseAmount, tip_amount: r.tipAmount, is_gross_paid: r.isGrossPaid, is_expense_paid: r.isExpensePaid, net_amount: r.netAmount, total_claim_amount: r.totalClaimAmount, payment_method: r.paymentMethod || '현금' }));
+    const insertWithFallback = async (chunk: any[]) => { let res = await supabase.from('driving_records').insert(chunk); if (res.error && res.error.message.includes('payment_method')) { const fb = chunk.map(p => { const { payment_method, ...rest } = p; return rest; }); res = await supabase.from('driving_records').insert(fb); } return res; };
     try {
-      const chunkSize = 50;
-      for (let i = 0; i < payloads.length; i += chunkSize) {
-        const chunk = payloads.slice(i, i + chunkSize);
-        const { error } = await insertWithFallback(chunk);
-        if (error) throw error;
-      }
-      
-      const updated = [...records, ...lastDeletedRecords];
-      updated.sort((a, b) => a.date.localeCompare(b.date));
-      setRecords(updated);
-      setLastDeletedRecords([]); 
-      alert(`${lastDeletedRecords.length}건이 완벽하게 복구되었습니다.`);
-    } catch (error: any) {
-      alert('복구 실패: ' + error.message);
-    }
+      for (let i = 0; i < payloads.length; i += 50) { await insertWithFallback(payloads.slice(i, i + 50)); }
+      const updated = [...records, ...lastDeletedRecords]; updated.sort((a, b) => a.date.localeCompare(b.date));
+      setRecords(updated); setLastDeletedRecords([]); alert(`${lastDeletedRecords.length}건 복구 완료`);
+    } catch (error: any) { alert('복구 실패: ' + error.message); }
   };
 
-  const handleAddExpense = async (e: React.FormEvent) => {
-    e.preventDefault(); const cleanAmt = cleanNumber(expAmount); if (!cleanAmt || !session) return;
-    const expenseId = 'exp_' + Date.now().toString();
-    const { error } = await supabase.from('expenses').insert([{ id: expenseId, user_id: session.user.id, date: newDate, category: expCategory, amount: cleanAmt, memo: expMemo }]);
-    if (!error) { 
-      const updatedExp = [{ id: expenseId, date: newDate, category: expCategory, amount: cleanAmt, memo: expMemo }, ...expenses];
-      updatedExp.sort((a, b) => a.date.localeCompare(b.date));
-      setExpenses(updatedExp); 
-      setExpAmount(''); setExpMemo(''); 
-    }
-  };
+  const handleAddExpense = async (e: React.FormEvent) => { e.preventDefault(); const cleanAmt = cleanNumber(expAmount); if (!cleanAmt || !session) return; const expenseId = 'exp_' + Date.now().toString(); const { error } = await supabase.from('expenses').insert([{ id: expenseId, user_id: session.user.id, date: newDate, category: expCategory, amount: cleanAmt, memo: expMemo }]); if (!error) { const updatedExp = [{ id: expenseId, date: newDate, category: expCategory, amount: cleanAmt, memo: expMemo }, ...expenses]; updatedExp.sort((a, b) => a.date.localeCompare(b.date)); setExpenses(updatedExp); setExpAmount(''); setExpMemo(''); } };
   const handleDeleteExpense = async (id: string) => { await supabase.from('expenses').delete().eq('id', id); setExpenses(expenses.filter((e) => e.id !== id)); };
   
   const handleApplyFixedExpenses = async () => {
-    if (!session) return;
-    const amount = cleanNumber(fixedDailyExp);
-    if (amount <= 0 || !fixedDailyMemo.trim()) { alert('고정비 금액과 항목명을 정확히 입력해주세요.'); return; }
-    
-    const currentMonthPrefix = customDate.substring(0, 7); 
-    const currentMonthRecords = records.filter((r) => (r.date || '').startsWith(currentMonthPrefix));
-    
-    const uniqueDrivingDates = Array.from(new Set(currentMonthRecords.map(r => r.date)));
-    const currentMonthExpenses = expenses.filter((e) => (e.date || '').startsWith(currentMonthPrefix));
-    const datesWithExpense = new Set(currentMonthExpenses.filter(e => e.memo === fixedDailyMemo.trim()).map(e => e.date));
-
-    const datesToApply = uniqueDrivingDates.filter(d => !datesWithExpense.has(d));
-
-    if (datesToApply.length === 0) {
-      alert('이번 달 운행일에는 이미 해당 고정비가 모두 반영되어 있습니다.');
-      return;
-    }
-
-    if (!window.confirm(`총 ${datesToApply.length}일치 고정비(일 ${amount.toLocaleString()}원)를 일괄 등록하시겠습니까?\n총액: ${(datesToApply.length * amount).toLocaleString()}원`)) return;
-
+    if (!session) return; const amount = cleanNumber(fixedDailyExp); if (amount <= 0 || !fixedDailyMemo.trim()) { alert('정확히 입력해주세요.'); return; }
+    const cmPrefix = customDate.substring(0, 7); const cmRecords = records.filter(r => (r.date || '').startsWith(cmPrefix));
+    const uniqueDates = Array.from(new Set(cmRecords.map(r => r.date))); const cmExpenses = expenses.filter(e => (e.date || '').startsWith(cmPrefix));
+    const datesWithExp = new Set(cmExpenses.filter(e => e.memo === fixedDailyMemo.trim()).map(e => e.date));
+    const datesToApply = uniqueDates.filter(d => !datesWithExp.has(d));
+    if (datesToApply.length === 0) { alert('이미 모두 반영되어 있습니다.'); return; }
+    if (!window.confirm(`${datesToApply.length}일치 고정비 일괄 등록하시겠습니까?`)) return;
     try {
-      const newExpenses = datesToApply.map((date, idx) => ({
-        id: `exp_fixed_${Date.now()}_${idx}`, user_id: session.user.id, date: date,
-        category: '기타', amount: amount, memo: fixedDailyMemo.trim()
-      }));
-
-      const { error } = await supabase.from('expenses').insert(newExpenses);
-      if (error) throw error;
-
+      const newExpenses = datesToApply.map((date, idx) => ({ id: `exp_fixed_${Date.now()}_${idx}`, user_id: session.user.id, date: date, category: '기타', amount: amount, memo: fixedDailyMemo.trim() }));
+      await supabase.from('expenses').insert(newExpenses);
       const updatedExp = [...newExpenses.map(e => ({...e, id: e.id, date: e.date, category: e.category, amount: e.amount, memo: e.memo})), ...expenses];
-      updatedExp.sort((a, b) => a.date.localeCompare(b.date)); 
-      setExpenses(updatedExp);
-      alert(`${datesToApply.length}건의 고정비가 자동 등록되어 순수익에 반영되었습니다.`);
-    } catch (err: any) {
-      alert('고정비 일괄 등록 실패: ' + err.message);
-    }
+      updatedExp.sort((a, b) => a.date.localeCompare(b.date)); setExpenses(updatedExp); alert('자동 등록 완료');
+    } catch (err: any) { alert('등록 실패: ' + err.message); }
   };
 
-  const handleAddAccount = (e: React.FormEvent) => {
-    e.preventDefault(); if (!bankName || !accountNumber) return;
-    setAccounts([...accounts, { id: Date.now().toString(), bankName, accountNumber, holder: holder || '김탁송' }]);
-    setBankName(''); setAccountNumber(''); setHolder('');
-  };
+  const handleAddAccount = (e: React.FormEvent) => { e.preventDefault(); if (!bankName || !accountNumber) return; setAccounts([...accounts, { id: Date.now().toString(), bankName, accountNumber, holder: holder || '김탁송' }]); setBankName(''); setAccountNumber(''); setHolder(''); };
   const handleDeleteAccount = (id: string) => { setAccounts(accounts.filter(a => a.id !== id)); };
-
-  const handleUpdateMemberRole = async (memberId: string, newRole: string) => {
-    if (currentUserRole !== 'super_admin') { alert('최고 관리자만 변경 가능합니다.'); return; }
-    const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', memberId);
-    if (!error) { alert('권한이 변경되었습니다.'); fetchAdminData(); } else { alert('변경 실패: ' + error.message); }
-  };
-
-  const handleExportAdminCSV = () => {
-    if (adminAllRecords.length === 0) { alert('데이터가 없습니다.'); return; }
-    const headers = ['일자', '출발지', '도착지', '운임', '수수료율', '주유비', '결제수단', '추가경비', '팁', '순수익', '운임입금', '대납입금'];
-    const rows = adminAllRecords.map((r) => [r.date, `"${r.departure}"`, `"${r.destination}"`, r.grossAmount, `${r.feeRate}%`, r.fuelAmount, r.paymentMethod || '현금', r.extraExpenseAmount, r.tipAmount, r.netAmount, r.isGrossPaid ? '완료' : '미수금', r.isExpensePaid ? '완료' : '미수금']);
-    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a'); link.href = url; link.setAttribute('download', `JunDriver_전체운행.csv`);
-    document.body.appendChild(link); link.click(); document.body.removeChild(link);
-  };
+  const handleUpdateMemberRole = async (memberId: string, newRole: string) => { if (currentUserRole !== 'super_admin') return; await supabase.from('profiles').update({ role: newRole }).eq('id', memberId); fetchAdminData(); };
+  const handleExportAdminCSV = () => { if (adminAllRecords.length === 0) return; const headers = ['일자','출발지','도착지','운임','수수료율','주유비','결제수단','추가경비','팁','순수익','운임입금','대납입금']; const rows = adminAllRecords.map((r) => [r.date, `"${r.departure}"`, `"${r.destination}"`, r.grossAmount, `${r.feeRate}%`, r.fuelAmount, r.paymentMethod || '현금', r.extraExpenseAmount, r.tipAmount, r.netAmount, r.isGrossPaid ? '완료' : '미수금', r.isExpensePaid ? '완료' : '미수금']); const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n'); const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `JunDriver_운행내역.csv`; link.click(); };
 
   const buildClaimText = (r: DrivingRecord, withGross: boolean, withFuel: boolean, withExtra: boolean) => {
-    const primaryAccount = accounts[0] || { bankName: '은행명', accountNumber: '계좌번호', holder: '예금주' };
-    const driverPhone = formatPhoneNumber(currentUserProfile?.phone || session?.user?.user_metadata?.phone || ADMIN_DEFAULT_PHONE);
-    const driverName = currentUserProfile?.name || session?.user?.user_metadata?.name || ADMIN_DEFAULT_NAME;
-    let total = 0; let itemsText = '';
-    if (withGross) { total += r.grossAmount; itemsText += `* 탁송운임: ${r.grossAmount.toLocaleString()}원\n`; }
-    if (withFuel && r.fuelAmount > 0) { total += r.fuelAmount; itemsText += `* 대납 주유비(${r.paymentMethod || '현금'}): ${r.fuelAmount.toLocaleString()}원\n`; }
-    if (withExtra && r.extraExpenseAmount > 0) { total += r.extraExpenseAmount; itemsText += `* 대납 추가경비: ${r.extraExpenseAmount.toLocaleString()}원\n`; }
-    return `[탁송 정산 요청]\n* 운행일자: ${r.date}\n* 운행구간: ${r.departure} → ${r.destination}\n${itemsText}--------------------------------\n* 총 청구금액: ${total.toLocaleString()}원\n* 입금계좌: ${primaryAccount.bankName} ${primaryAccount.accountNumber} (${primaryAccount.holder})${driverPhone ? `\n* 탁송기사: ${driverName} (${driverPhone})` : ''}\n\n확인 후 빠른 입금 부탁드립니다. 감사합니다.`;
+    const pAcc = accounts[0] || { bankName: '은행', accountNumber: '계좌', holder: '예금주' }; const dPhone = formatPhoneNumber(currentUserProfile?.phone || session?.user?.user_metadata?.phone || ADMIN_DEFAULT_PHONE); const dName = currentUserProfile?.name || session?.user?.user_metadata?.name || ADMIN_DEFAULT_NAME;
+    let total = 0; let iText = '';
+    if (withGross) { total += r.grossAmount; iText += `* 탁송운임: ${r.grossAmount.toLocaleString()}원\n`; }
+    if (withFuel && r.fuelAmount > 0) { total += r.fuelAmount; iText += `* 대납 주유비: ${r.fuelAmount.toLocaleString()}원\n`; }
+    if (withExtra && r.extraExpenseAmount > 0) { total += r.extraExpenseAmount; iText += `* 추가경비: ${r.extraExpenseAmount.toLocaleString()}원\n`; }
+    return `[정산 요청]\n* 일자: ${r.date}\n* 구간: ${r.departure} → ${r.destination}\n${iText}-----------------\n* 총 청구금액: ${total.toLocaleString()}원\n* 계좌: ${pAcc.bankName} ${pAcc.accountNumber} (${pAcc.holder})${dPhone ? `\n* 기사: ${dName} (${dPhone})` : ''}\n감사합니다.`;
   };
+  const handleToggleInclude = (type: 'gross'|'fuel'|'extra') => { if (!selectedClaimRecord) return; const nG = type === 'gross' ? !includeGross : includeGross; const nF = type === 'fuel' ? !includeFuel : includeFuel; const nE = type === 'extra' ? !includeExtra : includeExtra; setIncludeGross(nG); setIncludeFuel(nF); setIncludeExtra(nE); setClaimMessageText(buildClaimText(selectedClaimRecord, nG, nF, nE)); };
+  const openClaimMessageModal = (r: DrivingRecord) => { setSelectedClaimRecord(r); const iG = !r.isGrossPaid; const iF = !r.isExpensePaid && r.fuelAmount > 0; const iE = !r.isExpensePaid && r.extraExpenseAmount > 0; setIncludeGross(iG); setIncludeFuel(iF); setIncludeExtra(iE); setClaimMessageText(buildClaimText(r, iG, iF, iE)); setClaimModalOpen(true); };
+  const openAdminUserDetail = (user: MemberProfile) => { setAdminSelectedUser(user); setAdminSelectedUserRecords(adminAllRecords.filter(r => r.userId === user.id).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,10)); };
 
-  const handleToggleInclude = (type: 'gross' | 'fuel' | 'extra') => {
-    if (!selectedClaimRecord) return;
-    const newGross = type === 'gross' ? !includeGross : includeGross; const newFuel = type === 'fuel' ? !includeFuel : includeFuel; const newExtra = type === 'extra' ? !includeExtra : includeExtra;
-    setIncludeGross(newGross); setIncludeFuel(newFuel); setIncludeExtra(newExtra);
-    setClaimMessageText(buildClaimText(selectedClaimRecord, newGross, newFuel, newExtra));
-  };
-
-  const openClaimMessageModal = (r: DrivingRecord) => {
-    setSelectedClaimRecord(r);
-    const initGross = !r.isGrossPaid; const initFuel = !r.isExpensePaid && r.fuelAmount > 0; const initExtra = !r.isExpensePaid && r.extraExpenseAmount > 0;
-    setIncludeGross(initGross); setIncludeFuel(initFuel); setIncludeExtra(initExtra);
-    setClaimMessageText(buildClaimText(r, initGross, initFuel, initExtra)); setClaimModalOpen(true);
-  };
-
-  const openAdminUserDetail = (user: MemberProfile) => {
-    setAdminSelectedUser(user);
-    const allUserRecs = adminAllRecords.filter(r => r.userId === user.id);
-    const recentRecs = allUserRecs.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10);
-    setAdminSelectedUserRecords(recentRecs);
-  };
-
+  // 💡 [핵심 복구 구역] 지워졌던 통계/수익 연산 로직 완벽 복구
   const todayKstStr = getTodayKST();
   const currentMonthPrefix = customDate.substring(0, 7); 
-  
   const unpaidRecords = records.filter((r) => !r.isGrossPaid || (!r.isExpensePaid && (r.fuelAmount > 0 || r.extraExpenseAmount > 0)));
   const totalUnpaidAmount = unpaidRecords.reduce((acc, r) => acc + (!r.isGrossPaid ? r.grossAmount : 0) + (!r.isExpensePaid ? (r.fuelAmount + r.extraExpenseAmount) : 0), 0);
-  
   const isAdminUser = currentUserRole === 'super_admin' || currentUserRole === 'manager';
 
-  const calYear = currentCalDate.getFullYear();
-  const calMonth = currentCalDate.getMonth();
-  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
-  const firstDayIndex = new Date(calYear, calMonth, 1).getDay();
+  const monthlyRecords = records.filter((r) => (r.date || '').startsWith(currentMonthPrefix));
+  const monthlyExpenses = expenses.filter((e) => (e.date || '').startsWith(currentMonthPrefix));
+  const monthlyGross = monthlyRecords.reduce((acc, cur) => acc + cur.grossAmount, 0);
+  const monthlyNet = monthlyRecords.reduce((acc, cur) => acc + cur.netAmount, 0);
+  const monthlyExpense = monthlyExpenses.reduce((acc, cur) => acc + cur.amount, 0);
+  const monthlyProfit = monthlyNet - monthlyExpense;
 
+  const targetIncNum = cleanNumber(targetIncome) || 0;
+  const targetDaysNum = cleanNumber(targetDays) || 0;
+  const uniqueWorkedDates = new Set(monthlyRecords.map(r => r.date)).size;
+  const remainingDays = Math.max(0, targetDaysNum - uniqueWorkedDates);
+  const remainingIncome = targetIncNum - monthlyProfit;
+  const dailyRequired = remainingDays > 0 && remainingIncome > 0 ? Math.ceil(remainingIncome / remainingDays) : 0;
+  const achievementRate = targetIncNum > 0 ? Math.min(100, Math.round((monthlyProfit / targetIncNum) * 100)) : 0;
+
+  const filteredTradeCenters = TRADE_CENTERS.filter(center => {
+    if (tradeFilter === '전체') return true; if (tradeFilter === 'S등급') return center.tier === 'S'; if (tradeFilter === 'A등급') return center.tier === 'A';
+    if (tradeFilter === '수도권') return center.region === '수도권'; if (tradeFilter === '충청권') return center.region === '충청권'; if (tradeFilter === '영남권') return center.region === '영남권'; if (tradeFilter === '호남권') return center.region === '호남권'; return true;
+  });
+
+  const displayedMembers = adminMemberList.filter(m => {
+    const safeName = m.name || ''; const safePhone = m.phone || ''; const safeEmail = m.email || '';
+    const matchesSearch = safeName.includes(adminSearchTerm) || safePhone.includes(adminSearchTerm) || safeEmail.includes(adminSearchTerm);
+    const isAce = (m.monthlyGross || 0) >= 1500000 || (m.recordCount || 0) >= 10;
+    if (showScoutOnly) return matchesSearch && isAce; return matchesSearch;
+  });
+
+  const getTopDestinations = () => {
+    if (adminAllRecords.length === 0) return []; const counts: Record<string, number> = {};
+    adminAllRecords.forEach(r => { if (r.destination) counts[r.destination] = (counts[r.destination] || 0) + 1; });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  };
+  const getTopEarners = () => { if (adminMemberList.length === 0) return []; return [...adminMemberList].sort((a, b) => (b.monthlyGross || 0) - (a.monthlyGross || 0)).slice(0, 5); };
+
+  const calYear = currentCalDate.getFullYear(); const calMonth = currentCalDate.getMonth();
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate(); const firstDayIndex = new Date(calYear, calMonth, 1).getDay();
   const calendarDaysArray: (string | null)[] = Array(firstDayIndex).fill(null);
-  for (let i = 1; i <= daysInMonth; i++) {
-    calendarDaysArray.push(`${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`);
-  }
+  for (let i = 1; i <= daysInMonth; i++) { calendarDaysArray.push(`${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`); }
   const currentMonthDisplayRecords = records.filter(r => r.date.startsWith(`${calYear}-${String(calMonth + 1).padStart(2, '0')}`));
 
   const injectStyles = () => (
@@ -746,7 +538,7 @@ export default function App() {
               <div className="grid grid-cols-2 gap-2"><input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="이름 (김탁송)" required className="w-full px-3.5 py-2.5 rounded-lg" /><input type="tel" value={phone} onChange={(e) => setPhone(e.target.value.replace(/[^0-9]/g, ''))} placeholder="휴대폰번호" maxLength={11} required className="w-full px-3.5 py-2.5 rounded-lg" /></div>
               <div className="grid grid-cols-2 gap-2"><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="비밀번호(6자리 이상)" required className="w-full px-3.5 py-2.5 rounded-lg" /><input type="password" value={passwordConfirm} onChange={(e) => setPasswordConfirm(e.target.value)} placeholder="비밀번호 재입력" required className="w-full px-3.5 py-2.5 rounded-lg" /></div>
               <div onClick={() => setCaptchaVerified(!captchaVerified)} className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer ${captchaVerified ? 'bg-[#38BDF8]/20 border-[#38BDF8]/50 text-[#38BDF8]' : 'bg-[#0B1120] border-white/10'}`}><div className="flex items-center gap-2.5"><div className={`w-5 h-5 rounded-md border flex items-center justify-center ${captchaVerified ? 'bg-[#38BDF8] border-[#38BDF8] text-white' : 'border-slate-600 bg-slate-800'}`}>{captchaVerified && <Check className="w-3.5 h-3.5" />}</div><span className="text-xs font-semibold">로봇이 아닙니다 (터치)</span></div></div>
-              <div className="pt-2"><div className="p-3 rounded-xl bg-[#0B1120] border border-white/10 space-y-2"><div className="flex items-start gap-2.5"><input type="checkbox" id="agreeChk" checked={agreePrivacy} onChange={(e) => setAgreePrivacy(e.target.checked)} className="mt-0.5 w-4 h-4 rounded text-[#8B5CF6] cursor-pointer" /><label htmlFor="agreeChk" className="text-xs text-slate-200 font-medium cursor-pointer">[필수] 개인정보 수집 및 운행일지 저장에 동의합니다.</label></div></div></div>
+              <div className="pt-2"><div className="p-3 rounded-xl bg-[#0B1120] border border-white/10 space-y-2"><div className="flex items-start gap-2.5"><input type="checkbox" id="agreeChk" checked={agreePrivacy} onChange={(e) => setAgreePrivacy(e.target.checked)} className="mt-0.5 w-4 h-4 rounded text-[#8B5CF6] cursor-pointer" /><label htmlFor="agreeChk" className="text-xs text-slate-200 font-medium cursor-pointer">[필수] 개인정보 수집 및 운행일지 저장 동의</label></div></div></div>
               {authError && <div className="p-2.5 bg-[#EC4899]/10 border border-[#EC4899]/30 rounded-lg text-[#EC4899] text-xs">{authError}</div>}
               <button type="submit" disabled={authLoading} className="w-full py-3 hp-primary-btn font-bold text-sm rounded-lg cursor-pointer mt-2">{authLoading ? '처리 중...' : '동의하고 회원가입'}</button>
             </form>
@@ -761,20 +553,10 @@ export default function App() {
       {injectStyles()}
       <header className="sticky top-0 z-30 glass-card border-b-0 border-white/5 px-4 lg:px-8 py-3">
         <div className="max-w-[1400px] mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 bg-gradient-to-br from-[#8B5CF6] to-[#EC4899] rounded-lg flex items-center justify-center shadow-[0_0_10px_#8B5CF6]"><Car className="w-4 h-4 text-white" /></div>
-            <span className="font-bold text-base text-white">JunDriver</span><span className="px-1.5 py-0.5 text-[10px] font-extrabold bg-[#8B5CF6]/20 text-[#8B5CF6] rounded border border-[#8B5CF6]/30">PRO</span>
-          </div>
+          <div className="flex items-center gap-2.5"><div className="w-8 h-8 bg-gradient-to-br from-[#8B5CF6] to-[#EC4899] rounded-lg flex items-center justify-center shadow-[0_0_10px_#8B5CF6]"><Car className="w-4 h-4 text-white" /></div><span className="font-bold text-base text-white">JunDriver</span><span className="px-1.5 py-0.5 text-[10px] font-extrabold bg-[#8B5CF6]/20 text-[#8B5CF6] rounded border border-[#8B5CF6]/30">PRO</span></div>
           <div className="flex items-center gap-2">
             {isAdminUser && <button onClick={() => { fetchAdminData(); setActiveTab('admin'); }} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all ${activeTab === 'admin' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#38BDF8]/10 border border-[#38BDF8]/30 text-[#38BDF8] hover:bg-[#38BDF8]/20'}`}><Crown className="w-3.5 h-3.5" /><span className="hidden sm:inline">관제탑</span></button>}
-            <button onClick={() => setShowProfileModal(true)} className="flex items-center gap-2 px-3 py-1.5 rounded-lg glass-card text-xs text-slate-200 cursor-pointer">
-              <User className="w-3.5 h-3.5 text-[#8B5CF6]" />
-              <div className="text-left">
-                <span className="block font-bold text-white leading-tight">
-                  {currentUserProfile?.name || session?.user?.user_metadata?.name || '기사'}님
-                </span>
-              </div>
-            </button>
+            <button onClick={() => setShowProfileModal(true)} className="flex items-center gap-2 px-3 py-1.5 rounded-lg glass-card text-xs text-slate-200 cursor-pointer"><User className="w-3.5 h-3.5 text-[#8B5CF6]" /><span className="block font-bold text-white">{currentUserProfile?.name || '기사'}님</span></button>
             <button onClick={handleLogout} className="p-1.5 rounded-lg glass-card text-slate-400 hover:text-[#EC4899] cursor-pointer"><LogOut className="w-4 h-4" /></button>
           </div>
         </div>
@@ -824,7 +606,7 @@ export default function App() {
                   </div>
                 </div>
                 <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">통행료 등 기타 대납경비 (선택)</label><input type="text" placeholder="0" value={newExtraExpense} onChange={(e) => setNewExtraExpense(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" /></div>
-                <button type="submit" className="w-full py-3 hp-primary-btn font-bold rounded-lg text-xs cursor-pointer mt-2">운행 일지 등록</button>
+                <button type="submit" className="w-full py-3 hp-primary-btn font-bold rounded-lg text-xs cursor-pointer mt-2">운행 일지 등록 (미입금 상태로 저장)</button>
               </form>
             </div>
             
@@ -874,20 +656,14 @@ export default function App() {
 
                       return (
                         <div key={dateStr} className={`border-b border-r border-white/5 p-1.5 flex flex-col min-h-[90px] transition-colors hover:bg-white/5 ${isToday ? 'bg-[#8B5CF6]/10' : ''}`}>
-                          <div className={`text-[10px] font-bold mb-1.5 ${isToday ? 'text-white bg-[#8B5CF6] w-5 h-5 rounded-full flex items-center justify-center' : 'text-slate-400 ml-1'}`}>
-                            {dateNum}
-                          </div>
-                          
+                          <div className={`text-[10px] font-bold mb-1.5 ${isToday ? 'text-white bg-[#8B5CF6] w-5 h-5 rounded-full flex items-center justify-center' : 'text-slate-400 ml-1'}`}>{dateNum}</div>
                           <div className="flex flex-col gap-1 overflow-y-auto scrollbar-hide pr-0.5">
                             {dayRecords.map(r => {
                               const isChecked = selectedRecordIds.includes(r.id);
                               return (
                                 <div key={r.id} className={`relative group p-1.5 rounded-md border flex flex-col gap-1 transition-all ${isChecked ? 'bg-[#8B5CF6]/20 border-[#8B5CF6]/50' : 'bg-black/40 border-white/10 hover:border-white/30'}`}>
                                   <div className="flex items-start gap-1.5">
-                                    <input type="checkbox" checked={isChecked} onChange={(e) => {
-                                      if (e.target.checked) setSelectedRecordIds([...selectedRecordIds, r.id]);
-                                      else setSelectedRecordIds(selectedRecordIds.filter(id => id !== r.id));
-                                    }} className="w-3 h-3 text-[#8B5CF6] rounded bg-[#0B1120] border-white/20 mt-0.5 cursor-pointer shrink-0" />
+                                    <input type="checkbox" checked={isChecked} onChange={(e) => { if (e.target.checked) setSelectedRecordIds([...selectedRecordIds, r.id]); else setSelectedRecordIds(selectedRecordIds.filter(id => id !== r.id)); }} className="w-3 h-3 text-[#8B5CF6] rounded bg-[#0B1120] border-white/20 mt-0.5 cursor-pointer shrink-0" />
                                     <div className="min-w-0 flex-1 leading-tight">
                                       <div className="text-[10px] font-extrabold text-white truncate cursor-pointer hover:text-[#38BDF8]" onClick={() => handleOpenEditModal(r)}>{r.destination}</div>
                                       <div className="text-[9px] text-[#38BDF8] font-bold">{(r.netAmount / 10000).toFixed(1)}만</div>
@@ -918,28 +694,20 @@ export default function App() {
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {unpaidRecords.length === 0 ? (
-                <div className="col-span-full text-center py-10 text-slate-500 text-xs">현재 미입금 내역이 없습니다.</div>
-              ) : (
-                <>
-                  {unpaidRecords.slice(0, visibleClaimCount).map((r) => (
-                    <div key={r.id} className="bg-[#0B1120] border border-white/10 rounded-xl p-5 flex flex-col justify-between hover:border-[#8B5CF6]/50 transition-all">
-                      <div>
-                        <div className="flex justify-between items-start mb-2"><span className="px-2 py-0.5 bg-[#EC4899]/20 text-[#EC4899] text-[10px] font-bold rounded">청구 대기</span><span className="text-[10px] text-slate-400 font-mono">{r.date}</span></div>
-                        <div className="font-bold text-white text-sm mb-1 flex items-center gap-1.5"><span>{r.departure}</span><ChevronRight className="w-3.5 h-3.5 text-[#8B5CF6]" /><span>{r.destination}</span></div>
-                        <div className="text-xs text-slate-400 mt-3 space-y-1">
-                          {!r.isGrossPaid && <div className="flex justify-between"><span>탁송운임</span><span className="text-white">{r.grossAmount.toLocaleString()}원</span></div>}
-                          {!r.isExpensePaid && r.fuelAmount > 0 && <div className="flex justify-between"><span>대납 주유비</span><span className="text-white">{r.fuelAmount.toLocaleString()}원 <span className="text-[10px] text-slate-500">({r.paymentMethod || '현금'})</span></span></div>}
-                          {!r.isExpensePaid && r.extraExpenseAmount > 0 && <div className="flex justify-between"><span>대납 추가경비</span><span className="text-white">{r.extraExpenseAmount.toLocaleString()}원</span></div>}
-                        </div>
-                      </div>
-                      <div className="mt-4 pt-4 border-t border-white/10 flex justify-between items-center">
-                        <button onClick={() => openClaimMessageModal(r)} className="px-3 py-1.5 hp-primary-btn text-xs font-bold rounded cursor-pointer transition-colors flex items-center gap-1 ml-auto"><MessageSquare className="w-3.5 h-3.5" />문자 생성</button>
-                      </div>
+              {unpaidRecords.length === 0 ? <div className="col-span-full text-center py-10 text-slate-500 text-xs">현재 미입금 내역이 없습니다.</div> : unpaidRecords.slice(0, visibleClaimCount).map((r) => (
+                <div key={r.id} className="bg-[#0B1120] border border-white/10 rounded-xl p-5 flex flex-col justify-between hover:border-[#8B5CF6]/50 transition-all">
+                  <div>
+                    <div className="flex justify-between items-start mb-2"><span className="px-2 py-0.5 bg-[#EC4899]/20 text-[#EC4899] text-[10px] font-bold rounded">청구 대기</span><span className="text-[10px] text-slate-400 font-mono">{r.date}</span></div>
+                    <div className="font-bold text-white text-sm mb-1 flex items-center gap-1.5"><span>{r.departure}</span><ChevronRight className="w-3.5 h-3.5 text-[#8B5CF6]" /><span>{r.destination}</span></div>
+                    <div className="text-xs text-slate-400 mt-3 space-y-1">
+                      {!r.isGrossPaid && <div className="flex justify-between"><span>탁송운임</span><span className="text-white">{r.grossAmount.toLocaleString()}원</span></div>}
+                      {!r.isExpensePaid && r.fuelAmount > 0 && <div className="flex justify-between"><span>대납 주유비</span><span className="text-white">{r.fuelAmount.toLocaleString()}원 <span className="text-[10px] text-slate-500">({r.paymentMethod || '현금'})</span></span></div>}
+                      {!r.isExpensePaid && r.extraExpenseAmount > 0 && <div className="flex justify-between"><span>대납 추가경비</span><span className="text-white">{r.extraExpenseAmount.toLocaleString()}원</span></div>}
                     </div>
-                  ))}
-                </>
-              )}
+                  </div>
+                  <div className="mt-4 pt-4 border-t border-white/10 flex justify-between items-center"><button onClick={() => openClaimMessageModal(r)} className="px-3 py-1.5 hp-primary-btn text-xs font-bold rounded cursor-pointer transition-colors flex items-center gap-1 ml-auto"><MessageSquare className="w-3.5 h-3.5" />문자 생성</button></div>
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -979,12 +747,10 @@ export default function App() {
 
         {activeTab === 'analytics' && (
           <div className="space-y-6 fade-in-text">
-            
             <div className="flex gap-2 bg-[#0B1120] p-1.5 rounded-xl border border-white/10 w-fit">
               <button onClick={() => setAnalyticsMode('month')} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${analyticsMode === 'month' ? 'bg-[#8B5CF6] text-white shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'text-slate-400 hover:text-white'}`}>월간 상세 요약</button>
               <button onClick={() => setAnalyticsMode('year')} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${analyticsMode === 'year' ? 'bg-[#8B5CF6] text-white shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'text-slate-400 hover:text-white'}`}>연간 종합 통계</button>
             </div>
-
             {analyticsMode === 'month' && (
               <div className="space-y-4 fade-in-text">
                 <div className="glass-card rounded-2xl p-5 md:p-6 shadow-xl border-2 border-[#8B5CF6]/40 relative overflow-hidden">
@@ -1018,6 +784,24 @@ export default function App() {
                     <div><div className="text-[11px] text-slate-400 mb-1">최종 실수령액 (예상)</div><div className="text-xl lg:text-2xl font-extrabold text-[#38BDF8]">{monthlyProfit.toLocaleString()}원</div></div>
                   </div>
                 </section>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="glass-card rounded-xl p-5 border-t-2 border-t-[#8B5CF6]">
+                    <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-1.5"><PieChart className="w-4 h-4 text-[#8B5CF6]" /> 당월 매출 세부 구성</h3>
+                    <div className="space-y-3 text-xs">
+                      <div className="flex justify-between items-center"><span className="text-slate-400">기본 탁송 운임</span><span className="text-white font-semibold">{monthlyRecords.reduce((sum, r) => sum + r.grossAmount, 0).toLocaleString()}원</span></div>
+                      <div className="flex justify-between items-center"><span className="text-slate-400">기사 팁 / 추가 운임</span><span className="text-[#38BDF8] font-semibold">+{monthlyRecords.reduce((sum, r) => sum + r.tipAmount, 0).toLocaleString()}원</span></div>
+                      <div className="flex justify-between items-center border-t border-white/10 pt-3"><span className="text-slate-400">수수료 차감액 (추정)</span><span className="text-[#EC4899] font-semibold">-{monthlyRecords.reduce((sum, r) => sum + (r.grossAmount * (r.feeRate/100)), 0).toLocaleString()}원</span></div>
+                    </div>
+                  </div>
+                  <div className="glass-card rounded-xl p-5 border-t-2 border-t-[#EC4899]">
+                    <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4 text-[#EC4899]" /> 당월 미수금 회수 현황</h3>
+                    <div className="space-y-3 text-xs">
+                      <div className="flex justify-between items-center"><span className="text-slate-400">입금 완료 (정산 끝)</span><span className="text-emerald-400 font-bold">{monthlyRecords.reduce((sum, r) => sum + (r.isGrossPaid ? r.grossAmount : 0) + (r.isExpensePaid ? (r.fuelAmount + r.extraExpenseAmount) : 0), 0).toLocaleString()}원</span></div>
+                      <div className="flex justify-between items-center"><span className="text-slate-400">미수금 : 순수 운임</span><span className="text-[#EC4899] font-semibold">{monthlyRecords.reduce((sum, r) => sum + (!r.isGrossPaid ? r.grossAmount : 0), 0).toLocaleString()}원</span></div>
+                      <div className="flex justify-between items-center"><span className="text-slate-400">미수금 : 대납(주유/경비)</span><span className="text-[#EC4899] font-semibold">{monthlyRecords.reduce((sum, r) => sum + (!r.isExpensePaid ? r.fuelAmount + r.extraExpenseAmount : 0), 0).toLocaleString()}원</span></div>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
             {analyticsMode === 'year' && (
@@ -1025,6 +809,38 @@ export default function App() {
                 <div className="flex items-center justify-between glass-card p-4 rounded-xl border border-[#8B5CF6]/30">
                   <h2 className="text-sm font-bold text-white flex items-center gap-2"><TrendingUp className="w-5 h-5 text-[#8B5CF6]" /> {analyticsYear}년 종합 수익 통계</h2>
                   <select value={analyticsYear} onChange={(e) => setAnalyticsYear(e.target.value)} className="bg-[#0B1120] text-white border border-[#8B5CF6]/50 rounded-lg px-3 py-1.5 text-xs font-bold focus:border-[#8B5CF6] outline-none cursor-pointer"><option value="2026">2026년</option><option value="2025">2025년</option></select>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="bg-[#0B1120] border border-white/10 p-4 rounded-xl text-center shadow-lg"><div className="text-[10px] text-slate-400 mb-1">연간 총 운행</div><div className="text-lg font-bold text-white">{records.filter(r => (r.date || '').startsWith(analyticsYear)).length}회</div></div>
+                  <div className="bg-[#0B1120] border border-white/10 p-4 rounded-xl text-center shadow-lg"><div className="text-[10px] text-slate-400 mb-1">연간 총 탁송매출</div><div className="text-lg font-bold text-[#8B5CF6]">{records.filter(r => (r.date || '').startsWith(analyticsYear)).reduce((sum, r) => sum + r.grossAmount, 0).toLocaleString()}원</div></div>
+                  <div className="bg-[#0B1120] border border-white/10 p-4 rounded-xl text-center shadow-lg"><div className="text-[10px] text-slate-400 mb-1">연간 순수익</div><div className="text-lg font-bold text-[#38BDF8]">{records.filter(r => (r.date || '').startsWith(analyticsYear)).reduce((sum, r) => sum + r.netAmount, 0).toLocaleString()}원</div></div>
+                  <div className="bg-[#0B1120] border border-white/10 p-4 rounded-xl text-center shadow-lg"><div className="text-[10px] text-slate-400 mb-1">연간 총 지출</div><div className="text-lg font-bold text-[#EC4899]">{expenses.filter(e => (e.date || '').startsWith(analyticsYear)).reduce((sum, e) => sum + e.amount, 0).toLocaleString()}원</div></div>
+                </div>
+                <div className="glass-card rounded-xl p-0 overflow-hidden shadow-lg border border-white/10">
+                  <div className="overflow-x-auto scrollbar-hide">
+                    <table className="w-full text-left text-xs whitespace-nowrap">
+                      <thead className="bg-[#0B1120] text-slate-400 border-b border-white/10">
+                        <tr><th className="p-3 text-center">월별</th><th className="p-3 text-right">운행건수</th><th className="p-3 text-right">탁송 매출</th><th className="p-3 text-right">대납(주유/경비)</th><th className="p-3 text-right text-[#38BDF8]">순수익</th><th className="p-3 text-right text-[#EC4899]">지출</th></tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {Array.from({ length: 12 }, (_, i) => {
+                          const mStr = `${analyticsYear}-${String(i + 1).padStart(2, '0')}`;
+                          const mRecs = records.filter(r => (r.date || '').startsWith(mStr)); const mExps = expenses.filter(e => (e.date || '').startsWith(mStr));
+                          if(mRecs.length === 0 && mExps.length === 0) return null;
+                          return (
+                            <tr key={i} className="hover:bg-white/5 transition-colors">
+                              <td className="p-3 text-center font-bold text-white bg-white/5">{i + 1}월</td>
+                              <td className="p-3 text-right text-slate-300">{mRecs.length}건</td>
+                              <td className="p-3 text-right text-white font-semibold">{mRecs.reduce((sum, r) => sum + r.grossAmount, 0).toLocaleString()}</td>
+                              <td className="p-3 text-right text-slate-400">{mRecs.reduce((sum, r) => sum + r.fuelAmount + r.extraExpenseAmount, 0).toLocaleString()}</td>
+                              <td className="p-3 text-right text-[#38BDF8] font-bold">{mRecs.reduce((sum, r) => sum + r.netAmount, 0).toLocaleString()}</td>
+                              <td className="p-3 text-right text-[#EC4899] font-medium">{mExps.reduce((sum, e) => sum + e.amount, 0).toLocaleString()}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             )}
@@ -1056,6 +872,183 @@ export default function App() {
             </div>
           </div>
         )}
+
+        {activeTab === 'trade_centers' && (
+          <div className="space-y-5 fade-in-text">
+            <div className="glass-card rounded-xl p-5 shadow-lg border border-[#8B5CF6]/30">
+              <h3 className="text-sm font-bold text-white mb-2 flex items-center gap-2"><Building2 className="w-5 h-5 text-[#8B5CF6]" />전국 주요 매매단지 거점 현황 ({filteredTradeCenters.length}곳)</h3>
+              <div className="flex flex-wrap gap-2">{['전체', 'S등급', 'A등급', '수도권', '충청권', '영남권', '호남권'].map(f => ( <button key={f} onClick={() => setTradeFilter(f as any)} className={`px-3 py-1.5 rounded-full text-[11px] font-bold transition-all cursor-pointer ${tradeFilter === f ? 'bg-[#8B5CF6] text-white shadow-[0_0_10px_rgba(139,92,246,0.4)] border-transparent' : 'bg-[#0B1120] text-slate-400 border border-white/10 hover:border-[#8B5CF6]/50'}`}>{f}</button> ))}</div>
+            </div>
+            <div className="flex gap-4 px-2 text-[10px] font-bold"><span className="text-[#F59E0B] flex items-center gap-1"><Crown className="w-3 h-3" /> S등급 (메가 허브)</span><span className="text-[#38BDF8] flex items-center gap-1"><Target className="w-3 h-3" /> A등급 (광역 핵심)</span><span className="text-slate-400 flex items-center gap-1"><MapPin className="w-3 h-3" /> B등급 (주요 알짜)</span></div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-start">
+              {filteredTradeCenters.map((center) => (
+                <div key={center.id} className={`glass-card p-4 rounded-xl border-t-2 flex flex-col gap-3 transition-all hover:bg-white/5 ${center.tier === 'S' ? 'border-t-[#F59E0B] shadow-[0_4px_15px_rgba(245,158,11,0.1)]' : center.tier === 'A' ? 'border-t-[#38BDF8]' : 'border-t-white/20'}`}>
+                  <div>
+                    <div className="flex justify-between items-start mb-2"><div className="flex items-center gap-1.5">{center.tier === 'S' && <span className="px-1.5 py-0.5 bg-[#F59E0B]/20 text-[#F59E0B] text-[10px] font-extrabold rounded flex items-center gap-0.5"><Crown className="w-3 h-3" /> S등급</span>}{center.tier === 'A' && <span className="px-1.5 py-0.5 bg-[#38BDF8]/20 text-[#38BDF8] text-[10px] font-bold rounded flex items-center gap-0.5"><Target className="w-3 h-3" /> A등급</span>}{center.tier === 'B' && <span className="px-1.5 py-0.5 bg-white/10 text-slate-300 text-[10px] font-bold rounded flex items-center gap-0.5">B등급</span>}<span className="text-[10px] font-semibold text-slate-400 border border-slate-600 px-1.5 py-0.5 rounded">{center.region}</span></div></div>
+                    <h4 className="text-sm font-extrabold text-white mb-1.5">{center.name}</h4><p className="text-[11px] text-slate-300 bg-[#0B1120] p-2 rounded-lg border border-white/5 leading-relaxed mb-2.5">{center.desc}</p>
+                    <div className="flex items-start gap-1.5 text-[11px] text-slate-400"><MapPin className="w-3.5 h-3.5 mt-0.5 text-[#EC4899] shrink-0" /><span className="leading-tight">{center.addr}</span></div>
+                  </div>
+                  <div className="flex items-center gap-2 pt-3 border-t border-white/5 mt-auto">
+                    <button onClick={() => window.open(`https://m.map.naver.com/search2/search.naver?query=${encodeURIComponent(center.addr)}`, '_blank')} className="flex-1 py-2 bg-[#03C75A]/10 hover:bg-[#03C75A]/20 text-[#03C75A] border border-[#03C75A]/30 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors"><Navigation className="w-3.5 h-3.5" /> 네이버 지도</button>
+                    <button onClick={() => window.open(`https://map.kakao.com/link/search/${encodeURIComponent(center.addr)}`, '_blank')} className="flex-1 py-2 bg-[#FEE500]/10 hover:bg-[#FEE500]/20 text-[#FEE500] border border-[#FEE500]/30 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors"><Navigation className="w-3.5 h-3.5" /> 카카오 맵</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {filteredTradeCenters.length === 0 && <div className="text-center py-10 text-slate-500 text-xs">해당 조건의 매매단지가 없습니다.</div>}
+          </div>
+        )}
+
+        {activeTab === 'auctions' && (
+          <div className="space-y-6 fade-in-text">
+            <div className="glass-card rounded-xl p-6 shadow-lg border border-[#8B5CF6]/30">
+              <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2"><Target className="w-5 h-5 text-[#8B5CF6]" />탁송 오더 집중 발생 요약 (장거리 계획용)</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="bg-[#0B1120] border border-white/10 p-4 rounded-lg flex items-start gap-3"><Clock className="w-4 h-4 text-[#38BDF8] mt-0.5" /><div><div className="text-xs font-bold text-slate-300">경매 진행 시간</div><div className="text-sm font-extrabold text-white mt-1">오후 1시 ~ 오후 5시</div><div className="text-[10px] text-slate-500 mt-0.5">* 마감시간은 경매장별로 상이합니다.</div></div></div>
+                <div className="bg-[#0B1120] border border-white/10 p-4 rounded-lg flex items-start gap-3"><MapPin className="w-4 h-4 text-[#EC4899] mt-0.5" /><div><div className="text-xs font-bold text-slate-300">오더 집중 발생 시간</div><div className="text-sm font-extrabold text-white mt-1">경매 시작 ~ 오후 6시까지</div><div className="text-[10px] text-slate-500 mt-0.5">* 익일 오전까지도 잔여 오더가 계속 발생합니다.</div></div></div>
+              </div>
+            </div>
+            <div className="flex gap-4 px-2 text-[10px] font-bold"><span className="text-[#F59E0B] flex items-center gap-1"><Crown className="w-3 h-3" /> S등급 (메가 옥션)</span><span className="text-[#38BDF8] flex items-center gap-1"><Target className="w-3 h-3" /> A등급 (광역 옥션)</span><span className="text-slate-400 flex items-center gap-1"><MapPin className="w-3 h-3" /> B등급 (지역/특화 옥션)</span></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-start">
+              {AUCTION_SCHEDULES.map((schedule, idx) => (
+                <div key={idx} className="glass-card p-5 rounded-xl border-t-2 flex flex-col gap-3" style={{ borderTopColor: schedule.hex }}>
+                  <div className="flex items-center gap-2 mb-2"><CalendarDays className="w-5 h-5" style={{ color: schedule.hex }} /><h4 className="font-extrabold text-base text-white">{schedule.day}</h4></div>
+                  <div className="space-y-3">
+                    {schedule.locations.map((loc, i) => (
+                      <div key={i} className={`bg-[#0B1120] border rounded-xl p-3.5 hover:border-white/20 transition-all flex flex-col gap-3 ${loc.tier === 'S' ? 'border-[#F59E0B]/30' : loc.tier === 'A' ? 'border-[#38BDF8]/30' : 'border-white/5'}`}>
+                        <div>
+                          <div className="flex items-center gap-2 mb-1.5">{loc.tier === 'S' && <span className="px-1.5 py-0.5 bg-[#F59E0B]/20 text-[#F59E0B] text-[10px] font-extrabold rounded flex items-center gap-0.5"><Crown className="w-3 h-3" /> S등급</span>}{loc.tier === 'A' && <span className="px-1.5 py-0.5 bg-[#38BDF8]/20 text-[#38BDF8] text-[10px] font-bold rounded flex items-center gap-0.5"><Target className="w-3 h-3" /> A등급</span>}{loc.tier === 'B' && <span className="px-1.5 py-0.5 bg-white/10 text-slate-300 text-[10px] font-bold rounded flex items-center gap-0.5">B등급</span>}<span className="px-2 py-0.5 rounded text-[10px] font-bold bg-white/10 text-slate-300">{loc.tag}</span><span className="text-sm font-bold text-slate-100">{loc.name}</span></div>
+                          <div className="flex items-start gap-1.5 text-[11px] text-slate-400"><MapPin className="w-3 h-3 mt-0.5 text-[#38BDF8] shrink-0" /><span>{loc.addr}</span></div>
+                        </div>
+                        <div className="flex items-center gap-2 pt-2 border-t border-white/5">
+                          <button onClick={() => window.open(`https://m.map.naver.com/search2/search.naver?query=${encodeURIComponent(loc.addr)}`, '_blank')} className="flex-1 py-1.5 bg-[#03C75A]/10 hover:bg-[#03C75A]/20 text-[#03C75A] border border-[#03C75A]/30 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors">네이버 지도</button>
+                          <button onClick={() => window.open(`https://map.kakao.com/link/search/${encodeURIComponent(loc.addr)}`, '_blank')} className="flex-1 py-1.5 bg-[#FEE500]/10 hover:bg-[#FEE500]/20 text-[#FEE500] border border-[#FEE500]/30 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors">카카오 맵</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'admin' && isAdminUser && (
+          <div className="space-y-6 fade-in-text">
+            <div className="mb-2">
+              <h3 className="text-sm font-bold text-[#38BDF8] flex items-center gap-2"><Crown className="w-5 h-5" />플랫폼 관리자 (관제탑)</h3>
+            </div>
+            
+            <div className="flex gap-2 border-b border-white/10 pb-2 overflow-x-auto scrollbar-hide">
+              <button onClick={() => setAdminSubTab('campaign')} className={`px-3 py-1.5 rounded text-xs font-bold cursor-pointer shrink-0 transition-colors ${adminSubTab === 'campaign' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#0B1120] text-slate-400 hover:text-white border border-white/10'}`}>공지/이벤트 문구보관함</button>
+              <button onClick={() => setAdminSubTab('members')} className={`px-3 py-1.5 rounded text-xs font-bold cursor-pointer shrink-0 transition-colors ${adminSubTab === 'members' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#0B1120] text-slate-400 hover:text-white border border-white/10'}`}>회원 접속 현황 및 스카우트</button>
+              <button onClick={() => setAdminSubTab('analytics')} className={`px-3 py-1.5 rounded text-xs font-bold cursor-pointer shrink-0 transition-colors ${adminSubTab === 'analytics' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#0B1120] text-slate-400 hover:text-white border border-white/10'}`}>플랫폼 트래픽 및 매출 통계</button>
+            </div>
+
+            {adminSubTab === 'campaign' && (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="glass-card p-6 rounded-xl space-y-4 h-fit">
+                  <div className="flex items-center justify-between"><h4 className="font-bold text-white text-sm flex items-center gap-1.5"><BookmarkPlus className="w-4 h-4 text-[#8B5CF6]" />{editingNoticeId ? '문구 수정하기' : '새 공지 문구 저장'}</h4>{editingNoticeId && <button onClick={() => { setEditingNoticeId(null); setInputNoticeTitle(''); setInputNoticeContent(''); }} className="text-[11px] text-[#38BDF8] hover:text-white cursor-pointer">신규 작성</button>}</div>
+                  <form onSubmit={handleSaveNoticeTemplate} className="space-y-3">
+                    <input type="text" value={inputNoticeTitle} onChange={(e) => setInputNoticeTitle(e.target.value)} placeholder="제목 (예: 11월 프로모션 안내)" required className="w-full px-3 py-2 rounded-lg text-xs" />
+                    <textarea rows={4} value={inputNoticeContent} onChange={(e) => setInputNoticeContent(e.target.value)} placeholder="앱 최상단 배너에 노출될 내용" required className="w-full px-3 py-2 rounded-lg text-xs" />
+                    <button type="submit" disabled={noticeLoading} className="w-full py-2.5 hp-primary-btn font-bold rounded-lg text-xs cursor-pointer">{noticeLoading ? '처리 중...' : editingNoticeId ? '수정 내용 저장' : '보관함에 저장하기'}</button>
+                  </form>
+                  {activeNotice && <div className="pt-3 border-t border-white/10"><button onClick={handleDeactivateAllNotices} disabled={noticeLoading} className="w-full py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-[#EC4899] text-xs font-semibold rounded-lg cursor-pointer">현재 메인 배너 송출 중단</button></div>}
+                </div>
+                <div className="lg:col-span-2 glass-card p-6 rounded-xl space-y-4">
+                  <div className="flex items-center justify-between"><div><h4 className="font-bold text-white text-sm">공지 문구 라이브러리</h4></div><span className="text-xs font-mono text-[#8B5CF6] font-bold">{noticeList.length}개 보관 중</span></div>
+                  <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
+                    {noticeList.map((n) => (
+                      <div key={n.id} className={`p-4 rounded-xl border transition-all ${n.isActive ? 'bg-[#8B5CF6]/10 border-[#8B5CF6] shadow-[0_0_10px_rgba(139,92,246,0.2)]' : 'bg-[#0B1120] border-white/10'}`}>
+                        <div className="flex items-start justify-between gap-3 mb-2"><div className="flex items-center gap-2">{n.isActive ? <span className="px-2 py-0.5 text-[10px] font-extrabold bg-[#38BDF8] text-[#0B1120] rounded flex items-center gap-1"><Radio className="w-3 h-3 animate-pulse" />송출 중</span> : <span className="px-2 py-0.5 text-[10px] font-bold bg-white/10 text-slate-400 rounded">보관 중</span>}<h5 className="font-bold text-white text-xs">{n.title}</h5></div><span className="text-[10px] text-slate-500 font-mono">{n.updatedAt}</span></div>
+                        <p className="text-xs text-slate-300 leading-relaxed mb-3 bg-[#0B1120] p-3 rounded-lg border border-white/5">{n.content}</p>
+                        <div className="flex items-center justify-end gap-2">
+                          <button onClick={() => { setInputNoticeTitle(n.title); setInputNoticeContent(n.content); setEditingNoticeId(n.id); }} className="px-2.5 py-1.5 bg-white/10 hover:bg-white/20 text-slate-200 text-[11px] rounded font-semibold cursor-pointer flex items-center gap-1"><Edit2 className="w-3 h-3" />불러오기</button>
+                          <button onClick={() => handleDeleteNotice(n.id)} className="p-1 text-slate-500 hover:text-[#EC4899] cursor-pointer"><Trash2 className="w-4 h-4" /></button>
+                          {!n.isActive && <button onClick={() => handleActivateNotice(n)} disabled={noticeLoading} className="px-3 py-1.5 bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-[11px] font-bold rounded cursor-pointer flex items-center gap-1 shadow-md border-0"><Send className="w-3 h-3" />메인 송출</button>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {adminSubTab === 'members' && (
+              <div className="glass-card p-6 rounded-xl space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2">
+                  <input type="text" placeholder="이름 / 전화번호 / 이메일 검색..." value={adminSearchTerm} onChange={(e) => setAdminSearchTerm(e.target.value)} className="px-3 py-2 rounded-lg text-xs w-full sm:max-w-xs" />
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setShowScoutOnly(!showScoutOnly)} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${showScoutOnly ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-[0_0_15px_rgba(245,158,11,0.5)] border-0' : 'bg-[#0B1120] text-slate-400 border border-white/10 hover:border-amber-500/50'}`}><Award className="w-4 h-4" /> 🏆 에이스 기사만 보기</button>
+                  </div>
+                </div>
+                
+                <div className="overflow-x-auto rounded-lg border border-white/10">
+                  <table className="w-full text-left text-xs whitespace-nowrap">
+                    <thead className="bg-[#0B1120] text-slate-400 border-b border-white/10">
+                      <tr><th className="p-3">이름/연락처</th><th className="p-3 text-center">당월 실적 (건수 / 매출)</th><th className="p-3 text-center">최근 접속 / 누적</th><th className="p-3 text-center">권한 변경</th><th className="p-3 text-right">CS 열람 및 개인분석</th></tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {displayedMembers.length === 0 ? <tr><td colSpan={5} className="p-10 text-center text-slate-500">검색 조건에 맞는 기사님이 없습니다.</td></tr> : displayedMembers.map((m) => {
+                        const isAce = (m.monthlyGross || 0) >= 1500000 || (m.recordCount || 0) >= 10;
+                        return (
+                          <tr key={m.id} className={`transition-all ${isAce ? 'bg-amber-500/5 hover:bg-amber-500/10' : 'hover:bg-white/5'}`}>
+                            <td className="p-3"><div className="text-white font-bold flex items-center gap-1.5">{m.name || '미입력'} {isAce && <span className="px-1.5 py-0.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[9px] rounded font-extrabold shadow-sm">🏆 에이스</span>}</div><div className="font-mono text-[#38BDF8] text-[11px] mt-1">{formatPhoneNumber(m.phone) || '번호없음'}</div></td>
+                            <td className="p-3 text-center"><div className="font-bold text-white">{m.recordCount}건</div><div className="text-[#EC4899] font-semibold mt-1">{(m.monthlyGross || 0).toLocaleString()}원</div></td>
+                            <td className="p-3 text-center"><div className="text-[#38BDF8] font-mono text-[11px]">{m.lastLoginAt}</div><div className="text-slate-400 font-bold mt-1">{m.loginCount}회 접속</div></td>
+                            <td className="p-3 text-center"><select value={m.role} onChange={(e) => handleUpdateMemberRole(m.id, e.target.value)} className="bg-[#0B1120] border border-white/20 text-white rounded px-2 py-1.5 text-[11px] cursor-pointer outline-none focus:border-[#8B5CF6]"><option value="user">일반 기사</option><option value="pro_driver">PRO 기사</option><option value="vip_driver">VIP 기사 (스카우트)</option><option value="manager">운영 직원</option><option value="super_admin">최고 관리자</option></select></td>
+                            <td className="p-3 text-right"><button onClick={() => openAdminUserDetail(m)} className="px-2.5 py-1.5 hp-primary-btn hover:bg-white/20 text-white rounded text-[10px] font-bold flex items-center gap-1 ml-auto cursor-pointer"><Search className="w-3 h-3" />상세 리포트</button></td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+            
+            {adminSubTab === 'analytics' && (
+              <div className="space-y-4">
+                <div className="flex justify-end mb-2">
+                  <button onClick={handleExportAdminCSV} className="px-3 py-2 bg-[#0B1120] hover:bg-white/10 border border-white/20 text-slate-300 text-xs font-bold rounded-lg cursor-pointer transition-colors flex items-center gap-1.5"><Download className="w-3.5 h-3.5" />전체 기사 운행내역 CSV 다운로드</button>
+                </div>
+                
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="glass-card p-5 rounded-xl"><span className="text-xs text-slate-400">플랫폼 총 가입 기사</span><div className="text-2xl font-bold text-white mt-1">{adminMemberList.length}명</div></div>
+                  <div className="glass-card p-5 rounded-xl"><span className="text-xs text-slate-400">누적 접속 횟수</span><div className="text-2xl font-bold text-[#8B5CF6] mt-1">{adminMemberList.reduce((acc, m) => acc + (m.loginCount || 0), 0)}회</div></div>
+                  <div className="glass-card p-5 rounded-xl"><span className="text-xs text-slate-400">누적 등록 운행 건수</span><div className="text-2xl font-bold text-[#38BDF8] mt-1">{adminAllRecords.length}건</div></div>
+                  <div className="glass-card p-5 rounded-xl"><span className="text-xs text-slate-400">총 대납 주유비 발생액</span><div className="text-2xl font-bold text-[#EC4899] mt-1">{adminAllRecords.reduce((acc, cur) => acc + cur.fuelAmount, 0).toLocaleString()}원</div></div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-6">
+                  <div className="glass-card p-5 rounded-xl border-t-2 border-t-[#EC4899]">
+                    <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2"><MapPin className="w-4 h-4 text-[#EC4899]" /> 플랫폼 누적 도착지 랭킹 (핫플레이스 Top 5)</h3>
+                    <div className="space-y-2">
+                      {getTopDestinations().map(([dest, count], idx) => (
+                        <div key={dest} className="flex justify-between items-center bg-[#0B1120] p-3 rounded-lg border border-white/5">
+                          <span className="text-xs font-bold text-white"><span className="text-slate-500 mr-2">{idx + 1}위</span> {dest}</span>
+                          <span className="text-[#38BDF8] font-mono text-xs font-bold">{count}건 도착</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="glass-card p-5 rounded-xl border-t-2 border-t-amber-500">
+                    <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2"><Award className="w-4 h-4 text-amber-500" /> 당월 최고 매출 기사 (리더보드 Top 5)</h3>
+                    <div className="space-y-2">
+                      {getTopEarners().map((m, idx) => (
+                        <div key={m.id} className="flex justify-between items-center bg-[#0B1120] p-3 rounded-lg border border-white/5">
+                          <div className="flex items-center gap-2"><span className="text-slate-500 text-xs">{idx + 1}위</span><span className="text-xs font-bold text-white">{m.name || '미상'} 기사님</span></div>
+                          <span className="text-amber-500 font-mono text-xs font-bold">{(m.monthlyGross || 0).toLocaleString()}원</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </main>
 
       {importModalOpen && (
@@ -1064,7 +1057,6 @@ export default function App() {
             <button onClick={() => setImportModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
             <h3 className="text-base font-bold text-[#10B981] mb-2 flex items-center gap-2"><Download className="w-5 h-5" /> 엑셀/CSV 과거 장부 이관 (원터치 환승)</h3>
             <p className="text-xs text-slate-300 mb-5 leading-relaxed">경쟁 앱(대리가계부 등)에서 추출한 엑셀 파일을 올리시면 JunDriver 양식으로 자동 변환되어 들어옵니다.</p>
-
             {importStep === 1 ? (
               <div className="border-2 border-dashed border-white/20 rounded-xl p-10 flex flex-col items-center justify-center bg-white/5 hover:bg-white/10 transition-colors relative cursor-pointer">
                 <input type="file" accept=".xlsx, .xls, .csv" onChange={handleFileUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
@@ -1079,11 +1071,7 @@ export default function App() {
                 </div>
                 <div className="overflow-y-auto bg-[#0B1120] border border-white/10 rounded-lg p-3 space-y-2 flex-1 scrollbar-hide mb-4">
                   {importData.slice(0, 10).map((d, i) => (
-                    <div key={i} className="flex justify-between text-[11px] border-b border-white/5 pb-2">
-                      <span className="text-slate-400">{d.date}</span>
-                      <span className="text-white font-semibold truncate max-w-[150px]">{d.departure} → {d.destination}</span>
-                      <span className="text-[#38BDF8] font-bold">{d.grossAmount.toLocaleString()}원</span>
-                    </div>
+                    <div key={i} className="flex justify-between text-[11px] border-b border-white/5 pb-2"><span className="text-slate-400">{d.date}</span><span className="text-white font-semibold truncate max-w-[150px]">{d.departure} → {d.destination}</span><span className="text-[#38BDF8] font-bold">{d.grossAmount.toLocaleString()}원</span></div>
                   ))}
                 </div>
                 <button onClick={handleBatchImport} disabled={isImporting} className="w-full py-3 bg-gradient-to-r from-[#10B981] to-emerald-600 hover:shadow-[0_0_15px_rgba(16,185,129,0.4)] text-white font-bold rounded-lg text-xs cursor-pointer transition-all border-0">
@@ -1098,18 +1086,11 @@ export default function App() {
       {editingRecord && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="w-full max-w-sm glass-card rounded-2xl p-6 shadow-2xl relative">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-sm font-bold text-white flex items-center gap-1.5"><Edit2 className="w-4 h-4 text-[#8B5CF6]" /> 운행 내역 수정 (달력용)</h3>
-              <button onClick={() => setEditingRecord(null)} className="text-slate-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
-            </div>
+            <div className="flex justify-between items-center mb-4"><h3 className="text-sm font-bold text-white flex items-center gap-1.5"><Edit2 className="w-4 h-4 text-[#8B5CF6]" /> 운행 내역 수정</h3><button onClick={() => setEditingRecord(null)} className="text-slate-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button></div>
             <form onSubmit={handleUpdateRecord} className="space-y-3.5">
               <div><label className="block text-[11px] font-semibold text-[#38BDF8] mb-1">운행 일자 변경</label><input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="w-full px-3 py-2 rounded-lg" required /></div>
-              <div className="grid grid-cols-2 gap-2">
-                <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">출발지</label><input type="text" value={editDeparture} onChange={(e) => setEditDeparture(e.target.value)} className="w-full px-3 py-2 rounded-lg" required /></div>
-                <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">도착지</label><input type="text" value={editDestination} onChange={(e) => setEditDestination(e.target.value)} className="w-full px-3 py-2 rounded-lg" required /></div>
-              </div>
+              <div className="grid grid-cols-2 gap-2"><div><label className="block text-[11px] font-semibold text-slate-300 mb-1">출발지</label><input type="text" value={editDeparture} onChange={(e) => setEditDeparture(e.target.value)} className="w-full px-3 py-2 rounded-lg" required /></div><div><label className="block text-[11px] font-semibold text-slate-300 mb-1">도착지</label><input type="text" value={editDestination} onChange={(e) => setEditDestination(e.target.value)} className="w-full px-3 py-2 rounded-lg" required /></div></div>
               <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">운임(원)</label><input type="text" value={editGross} onChange={(e) => setEditGross(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" required /></div>
-              
               <div className="p-3.5 rounded-xl bg-[#0B1120] border border-white/20 space-y-2">
                 <label className="block text-[11px] font-semibold text-slate-300">대납 주유비</label>
                 <input type="text" value={editFuel} onChange={(e) => setEditFuel(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" />
@@ -1118,10 +1099,38 @@ export default function App() {
                   <button type="button" onClick={() => setEditPaymentMethod('카드')} className={`flex-1 py-1.5 rounded-md border text-[11px] font-bold cursor-pointer transition-colors ${editPaymentMethod === '카드' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-sm' : 'bg-transparent text-slate-400 border-white/20 hover:border-white/40'}`}>카드 결제</button>
                 </div>
               </div>
-
               <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">기사 팁</label><input type="text" value={editTip} onChange={(e) => setEditTip(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" /></div>
               <button type="submit" className="w-full mt-2 py-3 hp-primary-btn font-bold rounded-lg text-xs cursor-pointer">수정 완료</button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {adminSelectedUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="w-full max-w-2xl glass-card rounded-2xl p-6 shadow-2xl relative max-h-[90vh] flex flex-col">
+            <button onClick={() => setAdminSelectedUser(null)} className="absolute top-4 right-4 text-slate-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
+            <h3 className="text-base font-bold text-[#38BDF8] mb-4 flex items-center gap-2"><Search className="w-5 h-5" /> {adminSelectedUser.name || '미상'} 기사님 상세 리포트</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              <div className="bg-[#0B1120] p-3 rounded-lg border border-white/10 text-center"><div className="text-[10px] text-slate-400 mb-1">총 누적 운행</div><div className="font-bold text-white">{adminSelectedUser.recordCount}건</div></div>
+              <div className="bg-[#0B1120] p-3 rounded-lg border border-white/10 text-center"><div className="text-[10px] text-slate-400 mb-1">당월 매출</div><div className="font-bold text-[#8B5CF6]">{(adminSelectedUser.monthlyGross || 0).toLocaleString()}원</div></div>
+              <div className="bg-[#0B1120] p-3 rounded-lg border border-white/10 text-center col-span-2 md:col-span-2 flex flex-col justify-center"><div className="text-[10px] text-slate-400 mb-1">연락처 / 가입일</div><div className="font-mono text-[#38BDF8] text-xs">{formatPhoneNumber(adminSelectedUser.phone) || '번호없음'} <span className="text-slate-500 mx-1">|</span> {adminSelectedUser.createdAt}</div></div>
+            </div>
+            <div className="overflow-y-auto pr-2 space-y-4 flex-1 scrollbar-hide">
+              <div>
+                <h4 className="text-xs font-bold text-white border-b border-white/10 pb-2 mb-2">최근 운행 내역 (최대 10건)</h4>
+                {adminSelectedUserRecords.map((r) => {
+                  const totalClaim = r.grossAmount + r.fuelAmount + r.extraExpenseAmount;
+                  const unpaid = (!r.isGrossPaid ? r.grossAmount : 0) + (!r.isExpensePaid ? (r.fuelAmount + r.extraExpenseAmount) : 0);
+                  return (
+                    <div key={r.id} className="bg-[#0B1120] border border-white/10 p-3 rounded-lg text-xs mb-2">
+                      <div className="flex justify-between text-slate-400 mb-1"><span>{r.date}</span><span className={unpaid > 0 ? 'text-[#EC4899] font-bold' : 'text-emerald-400 font-bold'}>{unpaid > 0 ? `미수금 ${unpaid.toLocaleString()}원` : '전액 정산완료'}</span></div>
+                      <div className="font-bold text-white mb-1.5">{r.departure} → {r.destination}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -1131,7 +1140,11 @@ export default function App() {
           <div className="w-full max-w-sm glass-card rounded-2xl p-6 shadow-2xl relative z-20">
             <button onClick={() => setShowProfileModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 cursor-pointer"><X className="w-5 h-5" /></button>
             <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2"><User className="w-4 h-4 text-[#8B5CF6]" />기사 프로필 및 계정 관리</h3>
-            <button onClick={() => setShowProfileModal(false)} className="w-full mt-4 py-2.5 hp-primary-btn font-bold rounded-lg text-xs cursor-pointer">닫기</button>
+            <div className="bg-[#0B1120] border border-white/10 rounded-xl p-3.5 space-y-2 mb-5">
+              <div className="flex justify-between items-center text-xs"><span className="text-slate-400">기사 성함</span><span className="text-white font-bold">{currentUserProfile?.name || session?.user?.user_metadata?.name || '미상'}</span></div>
+              <div className="flex justify-between items-center text-xs"><span className="text-slate-400">연락처</span><span className="text-[#38BDF8] font-mono font-semibold">{formatPhoneNumber(currentUserProfile?.phone || session?.user?.user_metadata?.phone || '') || '미등록'}</span></div>
+            </div>
+            <button onClick={() => setShowProfileModal(false)} className="w-full py-2.5 hp-primary-btn font-bold rounded-lg text-xs cursor-pointer">닫기</button>
           </div>
         </div>
       )}
