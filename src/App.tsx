@@ -116,7 +116,7 @@ const TRADE_CENTERS = [
   { id: '18', name: '전주 월드컵매매단지', tier: 'B', region: '호남권', addr: '전북 전주시 덕진구 온고을로 860', desc: '전북권 핵심 거점.' }
 ];
 
-// 💡 [절대 수정 금지] 제공받은 탁송 경매일 데이터 영구 박제
+// 💡 9대 메가 경매장 스케줄 (완전체 유지)
 const AUCTION_SCHEDULES = [
   { day: '월요일', hex: '#38BDF8', locations: [
     { name: '안성 롯데렌탈', tier: 'S', addr: '내가천리 12', tag: '롯데' }, 
@@ -187,16 +187,24 @@ export default function App() {
   const [editExtra, setEditExtra] = useState(''); const [editTip, setEditTip] = useState('');
   const [editPaymentMethod, setEditPaymentMethod] = useState<'현금' | '카드'>('현금'); 
 
+  // 💡 [버그 픽스] 청구 팝업 관리 변수 완벽 복구
   const [claimModalOpen, setClaimModalOpen] = useState(false);
   const [selectedClaimRecord, setSelectedClaimRecord] = useState<DrivingRecord | null>(null);
-  const [includeGross, setIncludeGross] = useState(true); const [includeFuel, setIncludeFuel] = useState(true);
-  const [includeExtra, setIncludeExtra] = useState(true); const [claimMessageText, setClaimMessageText] = useState('');
+  const [includeGross, setIncludeGross] = useState(true); 
+  const [includeFuel, setIncludeFuel] = useState(true);
+  const [includeExtra, setIncludeExtra] = useState(true); 
+  const [claimMessageText, setClaimMessageText] = useState('');
   
   const [records, setRecords] = useState<DrivingRecord[]>([]);
   const [selectedRecordIds, setSelectedRecordIds] = useState<string[]>([]);
   const [lastDeletedRecords, setLastDeletedRecords] = useState<DrivingRecord[]>([]);
   const [visibleRecordCount, setVisibleRecordCount] = useState<number>(30);
   const [visibleClaimCount, setVisibleClaimCount] = useState<number>(30);
+
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importData, setImportData] = useState<any[]>([]);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importStep, setImportStep] = useState<1 | 2>(1);
 
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
   const [accounts, setAccounts] = useState<BankAccount[]>(() => {
@@ -462,6 +470,7 @@ export default function App() {
   const handleUpdateMemberRole = async (memberId: string, newRole: string) => { if (currentUserRole !== 'super_admin') return; await supabase.from('profiles').update({ role: newRole }).eq('id', memberId); fetchAdminData(); };
   const handleExportAdminCSV = () => { if (adminAllRecords.length === 0) return; const headers = ['일자','출발지','도착지','운임','수수료율','주유비','결제수단','추가경비','팁','순수익','운임입금','대납입금']; const rows = adminAllRecords.map((r) => [r.date, `"${r.departure}"`, `"${r.destination}"`, r.grossAmount, `${r.feeRate}%`, r.fuelAmount, r.paymentMethod || '현금', r.extraExpenseAmount, r.tipAmount, r.netAmount, r.isGrossPaid ? '완료' : '미수금', r.isExpensePaid ? '완료' : '미수금']); const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n'); const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `JunDriver_운행내역.csv`; link.click(); };
 
+  // 💡 [버그 픽스] 청구 문자 생성 및 토글 로직 완전 복원
   const buildClaimText = (r: DrivingRecord, withGross: boolean, withFuel: boolean, withExtra: boolean) => {
     const pAcc = accounts[0] || { bankName: '은행', accountNumber: '계좌', holder: '예금주' }; const dPhone = formatPhoneNumber(currentUserProfile?.phone || session?.user?.user_metadata?.phone || ADMIN_DEFAULT_PHONE); const dName = currentUserProfile?.name || session?.user?.user_metadata?.name || ADMIN_DEFAULT_NAME;
     let total = 0; let iText = '';
@@ -471,7 +480,15 @@ export default function App() {
     return `[정산 요청]\n* 일자: ${r.date}\n* 구간: ${r.departure} → ${r.destination}\n${iText}-----------------\n* 총 청구금액: ${total.toLocaleString()}원\n* 계좌: ${pAcc.bankName} ${pAcc.accountNumber} (${pAcc.holder})${dPhone ? `\n* 기사: ${dName} (${dPhone})` : ''}\n감사합니다.`;
   };
   const handleToggleInclude = (type: 'gross'|'fuel'|'extra') => { if (!selectedClaimRecord) return; const nG = type === 'gross' ? !includeGross : includeGross; const nF = type === 'fuel' ? !includeFuel : includeFuel; const nE = type === 'extra' ? !includeExtra : includeExtra; setIncludeGross(nG); setIncludeFuel(nF); setIncludeExtra(nE); setClaimMessageText(buildClaimText(selectedClaimRecord, nG, nF, nE)); };
-  const openClaimMessageModal = (r: DrivingRecord) => { setSelectedClaimRecord(r); const iG = !r.isGrossPaid; const iF = !r.isExpensePaid && r.fuelAmount > 0; const iE = !r.isExpensePaid && r.extraExpenseAmount > 0; setIncludeGross(iG); setIncludeFuel(iF); setIncludeExtra(iE); setClaimMessageText(buildClaimText(r, iG, iF, iE)); setClaimModalOpen(true); };
+  
+  const openClaimMessageModal = (r: DrivingRecord) => { 
+    setSelectedClaimRecord(r); 
+    const iG = !r.isGrossPaid; const iF = !r.isExpensePaid && r.fuelAmount > 0; const iE = !r.isExpensePaid && r.extraExpenseAmount > 0; 
+    setIncludeGross(iG); setIncludeFuel(iF); setIncludeExtra(iE); 
+    setClaimMessageText(buildClaimText(r, iG, iF, iE)); 
+    setClaimModalOpen(true); 
+  };
+  
   const openAdminUserDetail = (user: MemberProfile) => { setAdminSelectedUser(user); setAdminSelectedUserRecords(adminAllRecords.filter(r => r.userId === user.id).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,10)); };
 
   const todayKstStr = getTodayKST();
@@ -639,6 +656,7 @@ export default function App() {
               <div className="flex flex-col gap-3 mb-4 border-b border-white/10 pb-4 shrink-0">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-bold text-white flex items-center gap-2"><Calendar className="w-4 h-4 text-[#8B5CF6]" />운행 캘린더 및 정산 관리</h3>
+                  <button onClick={() => { setImportStep(1); setImportData([]); setImportModalOpen(true); }} className="px-3 py-1.5 bg-[#10B981]/10 text-[#10B981] border border-[#10B981]/30 hover:bg-[#10B981]/20 rounded-lg text-[10px] font-bold cursor-pointer transition-all flex items-center gap-1"><Download className="w-3.5 h-3.5" />타사 장부 이관</button>
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-3 bg-white/5 p-2.5 rounded-xl border border-white/10">
                   <div className="flex items-center gap-2">
@@ -705,7 +723,7 @@ export default function App() {
           </div>
         )}
 
-        {/* 💡 청구 관리 탭 (입금 취소 등 완벽 유지) */}
+        {/* 💡 청구 관리 탭 (입금 취소 기능 유지, 문자 생성 팝업 정상 작동) */}
         {activeTab === 'claims' && (
           <div className="glass-card rounded-xl p-6 shadow-lg fade-in-text">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
@@ -1130,8 +1148,29 @@ export default function App() {
         </div>
       )}
 
+      {/* 💡 [복구 완료] 정산 청구 문자 생성 모달 부활 */}
+      {claimModalOpen && selectedClaimRecord && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="w-full max-w-lg glass-card rounded-2xl p-6 shadow-2xl relative">
+            <button onClick={() => setClaimModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 cursor-pointer"><X className="w-5 h-5" /></button>
+            <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2"><MessageSquare className="w-5 h-5 text-[#8B5CF6]" />정산 청구 문자 편집 및 복사</h3>
+            <p className="text-xs text-slate-400 mb-4">미입금된 내역만 자동으로 체크되어 문구가 생성됩니다. 수정한 후 복사하세요.</p>
+            <div className="flex gap-4 mb-4 pb-4 border-b border-white/10">
+              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 cursor-pointer"><input type="checkbox" checked={includeGross} onChange={() => handleToggleInclude('gross')} className="rounded text-[#8B5CF6]" disabled={selectedClaimRecord.isGrossPaid} /> 기본 운임</label>
+              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 cursor-pointer"><input type="checkbox" checked={includeFuel} onChange={() => handleToggleInclude('fuel')} className="rounded text-[#8B5CF6]" disabled={selectedClaimRecord.fuelAmount === 0 || selectedClaimRecord.isExpensePaid} /> 주유비</label>
+              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 cursor-pointer"><input type="checkbox" checked={includeExtra} onChange={() => handleToggleInclude('extra')} className="rounded text-[#8B5CF6]" disabled={selectedClaimRecord.extraExpenseAmount === 0 || selectedClaimRecord.isExpensePaid} /> 추가경비</label>
+            </div>
+            <textarea rows={10} value={claimMessageText} onChange={(e) => setClaimMessageText(e.target.value)} className="w-full p-4 rounded-xl text-xs font-mono mb-4 leading-relaxed bg-[#FFFFFF] text-[#000000] focus:shadow-[0_0_12px_#8B5CF6] focus:border-[#8B5CF6] transition-all outline-none" />
+            <div className="flex gap-2">
+              <button onClick={() => setClaimModalOpen(false)} className="flex-1 py-3 bg-[#0B1120] border border-white/10 hover:bg-white/10 text-white font-semibold rounded-lg text-xs cursor-pointer transition-colors">닫기</button>
+              <button onClick={() => { navigator.clipboard.writeText(claimMessageText); alert('수정된 정산 청구 문자가 복사되었습니다.'); setClaimModalOpen(false); }} className="flex-1 py-3 hp-primary-btn text-white font-bold rounded-lg text-xs cursor-pointer shadow-md flex items-center justify-center gap-1.5"><Copy className="w-3.5 h-3.5" />복사하기</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {adminSelectedUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="w-full max-w-2xl glass-card rounded-2xl p-6 shadow-2xl relative max-h-[90vh] flex flex-col">
             <button onClick={() => setAdminSelectedUser(null)} className="absolute top-4 right-4 text-slate-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
             <h3 className="text-base font-bold text-[#38BDF8] mb-4 flex items-center gap-2"><Search className="w-5 h-5" /> {adminSelectedUser.name || '미상'} 기사님 상세 리포트</h3>
