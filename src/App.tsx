@@ -109,7 +109,7 @@ const TRADE_CENTERS = [
 
 const AUCTION_SCHEDULES = [
   { day: '월요일', hex: '#38BDF8', locations: [{ name: '안성 롯데렌탈', tier: 'S', addr: '경기 안성시 내가천리 12', tag: '롯데' }, { name: '진천 광혜원 오토보이', tier: 'B', addr: '충북 진천군 금천길 37', tag: '오토보이' }] },
-  { day: '화요일', hex: '#EC4899', locations: [{ name: '시화 현대글로비스', tier: 'S', addr: '경기 시흥시 정왕천로 271', tag: '글로비스' }, { name: '오포 현대글로비스', tier: 'S', addr: '경기 광주시 능평리 174-25', tag: '글로비스' }, { name: '세종 K Car', tier: 'A', addr: '세종 부강면 문곡리 산 249', tag: '케이카' }, { name: '천안 SK경매장', tier: 'B', addr: '충남 천안시 구성동', tag: 'SK' }] },
+  { day: '화요일', hex: '#EC4899', locations: [{ name: '시화 현대글로비스', tier: 'S', addr: '경기 시흥시 정왕천로 271', tag: '글로비스' }, { name: '오포 현대글로비스', tier: 'S', addr: '경기 광주시 능평리 174-25', tag: '글로비스' }, { name: '세종 K Car', tier: 'A', addr: '세종 부강면 문곡리 산 249', tag: '케이카' }] },
   { day: '수요일', hex: '#10B981', locations: [{ name: '안성 오토허브', tier: 'S', addr: '경기 안성시 문터길 60', tag: '오토허브' }] },
   { day: '목요일', hex: '#F59E0B', locations: [{ name: '양산 현대글로비스', tier: 'S', addr: '경남 양산시 산막동 572-1', tag: '글로비스' }, { name: '오산 K Car', tier: 'A', addr: '경기 오산시 은계동 7-30', tag: '케이카' }] },
   { day: '금요일', hex: '#8B5CF6', locations: [{ name: '시화 현대글로비스', tier: 'S', addr: '경기 시흥시 정왕동 2122-4', tag: '글로비스' }] }
@@ -186,9 +186,8 @@ export default function App() {
   const [adminSearchTerm, setAdminSearchTerm] = useState('');
   const [showScoutOnly, setShowScoutOnly] = useState(false);
 
+  // 💡 [수정1] 날짜, 출발지, 도착지, 요금 초기값을 하드코딩
   const [newDate, setNewDate] = useState<string>(() => getTodayKST());
-  
-  // 💡 [초기값 수정] 앱 시작 시 기본적으로 수원, 부산, 150,000원이 채워져 있도록 변경
   const [newStartTime, setNewStartTime] = useState(''); const [newEndTime, setNewEndTime] = useState('');
   const [newDeparture, setNewDeparture] = useState('수원'); 
   const [newDestination, setNewDestination] = useState('부산');
@@ -201,6 +200,7 @@ export default function App() {
   const [expCategory, setExpCategory] = useState('대중교통'); const [expAmount, setExpAmount] = useState(''); const [expMemo, setExpMemo] = useState('');
   const [bankName, setBankName] = useState(''); const [accountNumber, setAccountNumber] = useState(''); const [holder, setHolder] = useState('');
 
+  // 💡 [수정2] 목표 수익 초기값에 콤마 포함 (5,000,000)
   const [targetIncome, setTargetIncome] = useState<string>(() => {
     try { const s = localStorage.getItem('jundriver_target'); return s ? JSON.parse(s).income : '5,000,000'; } catch { return '5,000,000'; }
   });
@@ -426,7 +426,7 @@ export default function App() {
     setCustomDate(newDate);
     setDateFilter('day');
     
-    // 💡 [수정] 다시 기본값으로 돌아가도록 셋팅
+    // 등록 완료 후 다시 초기 상태로 리셋
     setNewDeparture('수원'); setNewDestination('부산'); setNewGross('150,000'); setNewFuel(''); setNewExtraExpense(''); setNewTip(''); setNewPaymentMethod('현금');
   };
 
@@ -903,29 +903,29 @@ export default function App() {
               <form onSubmit={handleAddRecord} className="space-y-3.5">
                 <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">운행 일자</label><input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} required className="w-full px-3 py-2 rounded-lg" /></div>
                 
-                {/* 💡 [수정] 수원/부산을 placeholder가 아닌 초기 value로 세팅했으므로 빈칸이 아닙니다 */}
+                {/* 💡 1. [초기값] 수원 / 부산 적용 완료 구역 */}
                 <div className="grid grid-cols-2 gap-2">
                   <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">출발지</label><input type="text" value={newDeparture} onChange={(e) => setNewDeparture(e.target.value)} required className="w-full px-3 py-2 rounded-lg" /></div>
                   <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">도착지</label><input type="text" value={newDestination} onChange={(e) => setNewDestination(e.target.value)} required className="w-full px-3 py-2 rounded-lg" /></div>
                 </div>
                 
-                {/* 💡 [수정] 탁송료 초기값 150,000 적용 */}
+                {/* 💡 2. [초기값/포맷] 150,000 콤마 적용 구역 */}
                 <div className="grid grid-cols-2 gap-2">
                   <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">탁송료(원)</label><input type="text" value={newGross} onChange={(e) => setNewGross(formatNumberWithComma(e.target.value))} required className="w-full px-3 py-2 rounded-lg text-right" /></div>
                   <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">수수료(%)</label><input type="number" value={newFeeRate} onChange={(e) => setNewFeeRate(e.target.value)} className="w-full px-3 py-2 rounded-lg text-right" /></div>
                 </div>
                 <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">기사 팁/추가운임 (선택)</label><input type="text" placeholder="5,000" value={newTip} onChange={(e) => setNewTip(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" /></div>
                 
-                {/* 💡 [수정] 현금/카드 토글 버튼 CSS 수정하여 확실하게 표시되도록 조치 */}
-                <div className="p-3.5 rounded-xl bg-[#0B1120] border border-white/20 space-y-3">
-                  <label className="text-xs font-bold text-[#8B5CF6] flex items-center justify-between gap-1.5">
+                <div className="p-3.5 rounded-xl bg-white/5 border border-white/20">
+                  <label className="text-xs font-bold text-[#8B5CF6] flex items-center justify-between gap-1.5 mb-2">
                     <div className="flex items-center gap-1.5"><Fuel className="w-4 h-4 text-[#8B5CF6]" />대납 주유/충전비 (100% 회수)</div>
                   </label>
-                  <input type="text" placeholder="선결제한 주유 금액" value={newFuel} onChange={(e) => setNewFuel(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" />
+                  <input type="text" placeholder="선결제한 주유 금액" value={newFuel} onChange={(e) => setNewFuel(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right mb-2" />
                   
-                  <div className="flex flex-row items-center justify-between gap-2 pt-1 w-full">
-                    <button type="button" onClick={() => setNewPaymentMethod('현금')} className={`flex-1 py-2 rounded-lg border text-xs font-bold cursor-pointer transition-colors ${newPaymentMethod === '현금' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-[0_0_10px_rgba(139,92,246,0.3)]' : 'bg-transparent text-slate-400 border-white/30 hover:border-white/50'}`}>현금 결제</button>
-                    <button type="button" onClick={() => setNewPaymentMethod('카드')} className={`flex-1 py-2 rounded-lg border text-xs font-bold cursor-pointer transition-colors ${newPaymentMethod === '카드' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-[0_0_10px_rgba(139,92,246,0.3)]' : 'bg-transparent text-slate-400 border-white/30 hover:border-white/50'}`}>카드 결제</button>
+                  {/* 💡 3. [레이아웃 강제 교정] 현금/카드 토글 버튼이 절대 가려지지 않게 수정된 영역 */}
+                  <div className="flex flex-row w-full items-center justify-between gap-2">
+                    <button type="button" onClick={() => setNewPaymentMethod('현금')} className={`w-1/2 py-2 rounded-lg border text-xs font-bold cursor-pointer transition-colors ${newPaymentMethod === '현금' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-[0_0_10px_rgba(139,92,246,0.3)]' : 'bg-[#0B1120] text-slate-400 border-white/20 hover:border-white/40'}`}>현금 결제</button>
+                    <button type="button" onClick={() => setNewPaymentMethod('카드')} className={`w-1/2 py-2 rounded-lg border text-xs font-bold cursor-pointer transition-colors ${newPaymentMethod === '카드' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-[0_0_10px_rgba(139,92,246,0.3)]' : 'bg-[#0B1120] text-slate-400 border-white/20 hover:border-white/40'}`}>카드 결제</button>
                   </div>
                 </div>
 
@@ -1020,7 +1020,6 @@ export default function App() {
                             <div className="flex items-center gap-2">
                               <div className="text-right pr-2 border-r border-white/10 mr-1">
                                 <span className="text-[10px] text-slate-400 block">총 청구액</span>
-                                {/* 💡 [수정] 콤마 철저 적용 */}
                                 <span className="text-sm font-extrabold text-white">{r.totalClaimAmount.toLocaleString()}원</span>
                               </div>
                               <button onClick={() => handleOpenEditModal(r)} title="날짜 및 내역 수정" className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 transition-all cursor-pointer"><Edit2 className="w-3.5 h-3.5" /></button>
