@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { useRegisterSW } from 'virtual:pwa-register/react';
-// 💡 [수정] 앱이 뻗는 원인이었던 상단의 import * as XLSX from 'xlsx'; 코드를 삭제했습니다. (필요할 때만 부르도록 변경)
-
 import {
   Wallet, Calendar, Clock, MapPin, TrendingUp, DollarSign, FileText, User, LogOut,
   KeyRound, X, CheckCircle2, AlertCircle, PlusCircle, CreditCard, Receipt, Trash2,
@@ -37,7 +35,6 @@ const formatNumberWithComma = (val: string | number) => {
 const cleanNumber = (val: string | number): number => {
   if (typeof val === 'number') return val;
   if (!val) return 0;
-  // 💡 [안전장치 추가] 혹시 모를 글자 섞임(NaN) 에러를 방지하기 위해 숫자만 완벽히 걸러냅니다.
   const numStr = String(val).replace(/[^0-9]/g, '');
   return Number(numStr) || 0;
 };
@@ -50,7 +47,6 @@ const formatPhoneNumber = (val: string) => {
   return num;
 };
 
-// 💡 타사 엑셀 파싱 (이제 이 함수는 파일 읽을 때만 사용됩니다)
 const parseImportedRow = (row: any) => {
   const keys = Object.keys(row);
   const dateKey = keys.find(k => k.includes('일') || k.includes('날짜') || k.includes('date'));
@@ -120,7 +116,8 @@ const AUCTION_SCHEDULES = [
 ];
 
 export default function App() {
-  const { needRefresh: [needRefresh], updateServiceWorker } = useRegisterSW({ onRegistered(r) {}, onRegisterError(error) {} });
+  // 💡 [버그픽스] setNeedRefresh 누락 해결
+  const { needRefresh: [needRefresh, setNeedRefresh], updateServiceWorker } = useRegisterSW({ onRegistered(r) {}, onRegisterError(error) {} });
   useEffect(() => { if (needRefresh) updateServiceWorker(true); }, [needRefresh, updateServiceWorker]);
 
   const [session, setSession] = useState<any>(null);
@@ -192,8 +189,6 @@ export default function App() {
 
   const [newDate, setNewDate] = useState<string>(() => getTodayKST());
   const [newStartTime, setNewStartTime] = useState(''); const [newEndTime, setNewEndTime] = useState('');
-  
-  // 💡 [수정됨] 앱 시작 시 기본값으로 '수원', '부산', '150,000' 적용
   const [newDeparture, setNewDeparture] = useState('수원'); 
   const [newDestination, setNewDestination] = useState('부산');
   const [newGross, setNewGross] = useState('150,000'); 
@@ -267,7 +262,7 @@ export default function App() {
     const { data: recordsData } = await supabase.from('driving_records').select('*').eq('user_id', userId).order('date', { ascending: true });
     if (recordsData) {
       setRecords(recordsData.map((r: any) => ({
-        id: r.id, date: r.date, startTime: r.start_time || '-', endTime: r.end_time || '-', departure: r.departure, destination: r.destination,
+        id: r.id, date: r.date || '-', startTime: r.start_time || '-', endTime: r.end_time || '-', departure: r.departure, destination: r.destination,
         grossAmount: Number(r.gross_amount), feeRate: Number(r.fee_rate), fuelAmount: Number(r.fuel_amount), extraExpenseAmount: Number(r.extra_expense_amount),
         tipAmount: Number(r.tip_amount), isGrossPaid: Boolean(r.is_gross_paid), isExpensePaid: Boolean(r.is_expense_paid), netAmount: Number(r.net_amount), totalClaimAmount: Number(r.total_claim_amount),
         paymentMethod: r.payment_method || '현금', 
@@ -275,7 +270,7 @@ export default function App() {
     }
 
     const { data: expensesData } = await supabase.from('expenses').select('*').eq('user_id', userId).order('date', { ascending: true });
-    if (expensesData) setExpenses(expensesData.map((e: any) => ({ id: e.id, date: e.date, category: e.category, amount: Number(e.amount), memo: e.memo || '' })));
+    if (expensesData) setExpenses(expensesData.map((e: any) => ({ id: e.id, date: e.date || '-', category: e.category, amount: Number(e.amount), memo: e.memo || '' })));
     
     if (role === 'super_admin' || role === 'manager') fetchAdminData();
   };
@@ -290,7 +285,7 @@ export default function App() {
       setAdminMemberList(profiles.map((p: any) => {
         const userRecords = allRecs.filter((r: any) => r.user_id === p.id);
         const monthlyGross = userRecords
-          .filter((r: any) => r.date.startsWith(currentMonthStr))
+          .filter((r: any) => (r.date || '').startsWith(currentMonthStr))
           .reduce((sum: number, r: any) => sum + Number(r.gross_amount), 0);
           
         return { 
@@ -304,7 +299,7 @@ export default function App() {
       }));
       
       setAdminAllRecords(allRecs.map((r: any) => ({ 
-        id: r.id, userId: r.user_id, date: r.date, startTime: r.start_time || '-', endTime: r.end_time || '-', departure: r.departure, destination: r.destination, 
+        id: r.id, userId: r.user_id, date: r.date || '-', startTime: r.start_time || '-', endTime: r.end_time || '-', departure: r.departure, destination: r.destination, 
         grossAmount: Number(r.gross_amount), fuelAmount: Number(r.fuel_amount), feeRate: Number(r.fee_rate), extraExpenseAmount: Number(r.extra_expense_amount), tipAmount: Number(r.tip_amount), isGrossPaid: Boolean(r.is_gross_paid), isExpensePaid: Boolean(r.is_expense_paid), netAmount: Number(r.net_amount), totalClaimAmount: Number(r.total_claim_amount),
         paymentMethod: r.payment_method || '현금' 
       })));
@@ -430,18 +425,15 @@ export default function App() {
     setCustomDate(newDate);
     setDateFilter('day');
     
-    // 💡 [수정] 다시 기본값(수원, 부산, 150000)으로 깔끔하게 리셋
     setNewDeparture('수원'); setNewDestination('부산'); setNewGross('150,000'); setNewFuel(''); setNewExtraExpense(''); setNewTip(''); setNewPaymentMethod('현금');
   };
 
-  // 💡 [핵심 수정] 엑셀 파싱 라이브러리로 인해 화면이 하얗게 죽는 현상을 방지하기 위해 파일 업로드 시점에만 라이브러리를 로드(Dynamic Import)합니다.
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     try {
       const XLSX = await import('xlsx');
-      
       const reader = new FileReader();
       reader.onload = (event) => {
         try {
@@ -603,10 +595,10 @@ export default function App() {
     if (amount <= 0 || !fixedDailyMemo.trim()) { alert('고정비 금액과 항목명을 정확히 입력해주세요.'); return; }
     
     const currentMonthPrefix = customDate.substring(0, 7); 
-    const currentMonthRecords = records.filter((r) => r.date.startsWith(currentMonthPrefix));
+    const currentMonthRecords = records.filter((r) => (r.date || '').startsWith(currentMonthPrefix));
     
     const uniqueDrivingDates = Array.from(new Set(currentMonthRecords.map(r => r.date)));
-    const currentMonthExpenses = expenses.filter((e) => e.date.startsWith(currentMonthPrefix));
+    const currentMonthExpenses = expenses.filter((e) => (e.date || '').startsWith(currentMonthPrefix));
     const datesWithExpense = new Set(currentMonthExpenses.filter(e => e.memo === fixedDailyMemo.trim()).map(e => e.date));
 
     const datesToApply = uniqueDrivingDates.filter(d => !datesWithExpense.has(d));
@@ -698,8 +690,8 @@ export default function App() {
 
   const filteredRecords = records.filter((r) => {
     if (dateFilter === 'day') return r.date === customDate;
-    if (dateFilter === 'month') return r.date.startsWith(customDate.substring(0, 7));
-    if (dateFilter === 'year') return r.date.startsWith(customDate.substring(0, 4));
+    if (dateFilter === 'month') return (r.date || '').startsWith(customDate.substring(0, 7));
+    if (dateFilter === 'year') return (r.date || '').startsWith(customDate.substring(0, 4));
     return true;
   });
 
@@ -714,8 +706,8 @@ export default function App() {
   const isAdminUser = currentUserRole === 'super_admin' || currentUserRole === 'manager';
 
   const currentMonthPrefix = customDate.substring(0, 7); 
-  const monthlyRecords = records.filter((r) => r.date.startsWith(currentMonthPrefix));
-  const monthlyExpenses = expenses.filter((e) => e.date.startsWith(currentMonthPrefix));
+  const monthlyRecords = records.filter((r) => (r.date || '').startsWith(currentMonthPrefix));
+  const monthlyExpenses = expenses.filter((e) => (e.date || '').startsWith(currentMonthPrefix));
   const monthlyGross = monthlyRecords.reduce((acc, cur) => acc + cur.grossAmount, 0);
   const monthlyNet = monthlyRecords.reduce((acc, cur) => acc + cur.netAmount, 0);
   const monthlyExpense = monthlyExpenses.reduce((acc, cur) => acc + cur.amount, 0);
@@ -740,8 +732,12 @@ export default function App() {
     return true;
   });
 
+  // 💡 [버그 픽스] 이름, 번호가 null인 회원이 있을 때 검색하면 뻗는 에러 방지 처리 완료
   const displayedMembers = adminMemberList.filter(m => {
-    const matchesSearch = m.name.includes(adminSearchTerm) || m.phone.includes(adminSearchTerm) || m.email.includes(adminSearchTerm);
+    const safeName = m.name || '';
+    const safePhone = m.phone || '';
+    const safeEmail = m.email || '';
+    const matchesSearch = safeName.includes(adminSearchTerm) || safePhone.includes(adminSearchTerm) || safeEmail.includes(adminSearchTerm);
     const isAce = (m.monthlyGross || 0) >= 1500000 || (m.recordCount || 0) >= 10;
     if (showScoutOnly) return matchesSearch && isAce;
     return matchesSearch;
@@ -931,7 +927,7 @@ export default function App() {
                   </label>
                   <input type="text" placeholder="선결제한 주유 금액" value={newFuel} onChange={(e) => setNewFuel(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" />
                   
-                  <div className="flex w-full items-center gap-2 pt-1 mt-1">
+                  <div className="flex flex-row items-center gap-2 pt-1 mt-1">
                     <button type="button" onClick={() => setNewPaymentMethod('현금')} className={`flex-1 py-1.5 rounded-md border text-[11px] font-bold cursor-pointer transition-colors ${newPaymentMethod === '현금' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-sm' : 'bg-transparent text-slate-400 border-white/20 hover:border-white/40'}`}>현금 결제</button>
                     <button type="button" onClick={() => setNewPaymentMethod('카드')} className={`flex-1 py-1.5 rounded-md border text-[11px] font-bold cursor-pointer transition-colors ${newPaymentMethod === '카드' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-sm' : 'bg-transparent text-slate-400 border-white/20 hover:border-white/40'}`}>카드 결제</button>
                   </div>
@@ -1243,10 +1239,10 @@ export default function App() {
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <div className="bg-[#0B1120] border border-white/10 p-4 rounded-xl text-center shadow-lg"><div className="text-[10px] text-slate-400 mb-1">연간 총 운행</div><div className="text-lg font-bold text-white">{records.filter(r => r.date.startsWith(analyticsYear)).length}회</div></div>
-                  <div className="bg-[#0B1120] border border-white/10 p-4 rounded-xl text-center shadow-lg"><div className="text-[10px] text-slate-400 mb-1">연간 총 탁송매출</div><div className="text-lg font-bold text-[#8B5CF6]">{records.filter(r => r.date.startsWith(analyticsYear)).reduce((sum, r) => sum + r.grossAmount, 0).toLocaleString()}원</div></div>
-                  <div className="bg-[#0B1120] border border-white/10 p-4 rounded-xl text-center shadow-lg"><div className="text-[10px] text-slate-400 mb-1">연간 순수익</div><div className="text-lg font-bold text-[#38BDF8]">{records.filter(r => r.date.startsWith(analyticsYear)).reduce((sum, r) => sum + r.netAmount, 0).toLocaleString()}원</div></div>
-                  <div className="bg-[#0B1120] border border-white/10 p-4 rounded-xl text-center shadow-lg"><div className="text-[10px] text-slate-400 mb-1">연간 총 지출</div><div className="text-lg font-bold text-[#EC4899]">{expenses.filter(e => e.date.startsWith(analyticsYear)).reduce((sum, e) => sum + e.amount, 0).toLocaleString()}원</div></div>
+                  <div className="bg-[#0B1120] border border-white/10 p-4 rounded-xl text-center shadow-lg"><div className="text-[10px] text-slate-400 mb-1">연간 총 운행</div><div className="text-lg font-bold text-white">{records.filter(r => (r.date || '').startsWith(analyticsYear)).length}회</div></div>
+                  <div className="bg-[#0B1120] border border-white/10 p-4 rounded-xl text-center shadow-lg"><div className="text-[10px] text-slate-400 mb-1">연간 총 탁송매출</div><div className="text-lg font-bold text-[#8B5CF6]">{records.filter(r => (r.date || '').startsWith(analyticsYear)).reduce((sum, r) => sum + r.grossAmount, 0).toLocaleString()}원</div></div>
+                  <div className="bg-[#0B1120] border border-white/10 p-4 rounded-xl text-center shadow-lg"><div className="text-[10px] text-slate-400 mb-1">연간 순수익</div><div className="text-lg font-bold text-[#38BDF8]">{records.filter(r => (r.date || '').startsWith(analyticsYear)).reduce((sum, r) => sum + r.netAmount, 0).toLocaleString()}원</div></div>
+                  <div className="bg-[#0B1120] border border-white/10 p-4 rounded-xl text-center shadow-lg"><div className="text-[10px] text-slate-400 mb-1">연간 총 지출</div><div className="text-lg font-bold text-[#EC4899]">{expenses.filter(e => (e.date || '').startsWith(analyticsYear)).reduce((sum, e) => sum + e.amount, 0).toLocaleString()}원</div></div>
                 </div>
 
                 <div className="glass-card rounded-xl p-0 overflow-hidden shadow-lg border border-white/10">
@@ -1258,8 +1254,8 @@ export default function App() {
                       <tbody className="divide-y divide-white/5">
                         {Array.from({ length: 12 }, (_, i) => {
                           const mStr = `${analyticsYear}-${String(i + 1).padStart(2, '0')}`;
-                          const mRecs = records.filter(r => r.date.startsWith(mStr));
-                          const mExps = expenses.filter(e => e.date.startsWith(mStr));
+                          const mRecs = records.filter(r => (r.date || '').startsWith(mStr));
+                          const mExps = expenses.filter(e => (e.date || '').startsWith(mStr));
                           if(mRecs.length === 0 && mExps.length === 0) return null;
 
                           return (
@@ -1487,10 +1483,10 @@ export default function App() {
                             <tr key={m.id} className={`transition-all ${isAce ? 'bg-amber-500/5 hover:bg-amber-500/10' : 'hover:bg-white/5'}`}>
                               <td className="p-3">
                                 <div className="text-white font-bold flex items-center gap-1.5">
-                                  {m.name} 
+                                  {m.name || '미입력'} 
                                   {isAce && <span className="px-1.5 py-0.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[9px] rounded font-extrabold shadow-sm">🏆 에이스</span>}
                                 </div>
-                                <div className="font-mono text-[#38BDF8] text-[11px] mt-1">{formatPhoneNumber(m.phone)}</div>
+                                <div className="font-mono text-[#38BDF8] text-[11px] mt-1">{formatPhoneNumber(m.phone) || '번호없음'}</div>
                               </td>
                               <td className="p-3 text-center">
                                 <div className="font-bold text-white">{m.recordCount}건</div>
@@ -1556,7 +1552,7 @@ export default function App() {
                         <div key={m.id} className="flex justify-between items-center bg-[#0B1120] p-3 rounded-lg border border-white/5">
                           <div className="flex items-center gap-2">
                             <span className="text-slate-500 text-xs">{idx + 1}위</span>
-                            <span className="text-xs font-bold text-white">{m.name} 기사님</span>
+                            <span className="text-xs font-bold text-white">{m.name || '미상'} 기사님</span>
                           </div>
                           <span className="text-amber-500 font-mono text-xs font-bold">{(m.monthlyGross || 0).toLocaleString()}원</span>
                         </div>
@@ -1615,12 +1611,12 @@ export default function App() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="w-full max-w-2xl glass-card rounded-2xl p-6 shadow-2xl relative max-h-[90vh] flex flex-col">
             <button onClick={() => setAdminSelectedUser(null)} className="absolute top-4 right-4 text-slate-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
-            <h3 className="text-base font-bold text-[#38BDF8] mb-4 flex items-center gap-2"><Search className="w-5 h-5" /> {adminSelectedUser.name} 기사님 상세 리포트</h3>
+            <h3 className="text-base font-bold text-[#38BDF8] mb-4 flex items-center gap-2"><Search className="w-5 h-5" /> {adminSelectedUser.name || '미상'} 기사님 상세 리포트</h3>
             
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
               <div className="bg-[#0B1120] p-3 rounded-lg border border-white/10 text-center"><div className="text-[10px] text-slate-400 mb-1">총 누적 운행</div><div className="font-bold text-white">{adminSelectedUser.recordCount}건</div></div>
               <div className="bg-[#0B1120] p-3 rounded-lg border border-white/10 text-center"><div className="text-[10px] text-slate-400 mb-1">당월 매출</div><div className="font-bold text-[#8B5CF6]">{(adminSelectedUser.monthlyGross || 0).toLocaleString()}원</div></div>
-              <div className="bg-[#0B1120] p-3 rounded-lg border border-white/10 text-center col-span-2 md:col-span-2 flex flex-col justify-center"><div className="text-[10px] text-slate-400 mb-1">연락처 / 가입일</div><div className="font-mono text-[#38BDF8] text-xs">{formatPhoneNumber(adminSelectedUser.phone)} <span className="text-slate-500 mx-1">|</span> {adminSelectedUser.createdAt}</div></div>
+              <div className="bg-[#0B1120] p-3 rounded-lg border border-white/10 text-center col-span-2 md:col-span-2 flex flex-col justify-center"><div className="text-[10px] text-slate-400 mb-1">연락처 / 가입일</div><div className="font-mono text-[#38BDF8] text-xs">{formatPhoneNumber(adminSelectedUser.phone) || '번호없음'} <span className="text-slate-500 mx-1">|</span> {adminSelectedUser.createdAt}</div></div>
             </div>
 
             <div className="overflow-y-auto pr-2 space-y-4 flex-1 scrollbar-hide">
@@ -1699,12 +1695,12 @@ export default function App() {
               </div>
               <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">운임(원)</label><input type="text" value={editGross} onChange={(e) => setEditGross(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" required /></div>
               
-              <div className="p-3.5 rounded-xl bg-[#0B1120] border border-white/20 space-y-2">
+              <div className="p-3.5 rounded-xl bg-[#0B1120] border border-white/20 space-y-3">
                 <label className="block text-[11px] font-semibold text-slate-300">대납 주유비</label>
                 <input type="text" value={editFuel} onChange={(e) => setEditFuel(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" />
-                <div className="flex flex-row items-center gap-2 pt-1 mt-1">
-                  <button type="button" onClick={() => setEditPaymentMethod('현금')} className={`flex-1 py-1.5 rounded-md border text-[11px] font-bold cursor-pointer transition-colors ${editPaymentMethod === '현금' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-sm' : 'bg-transparent text-slate-400 border-white/20 hover:border-white/40'}`}>현금 결제</button>
-                  <button type="button" onClick={() => setEditPaymentMethod('카드')} className={`flex-1 py-1.5 rounded-md border text-[11px] font-bold cursor-pointer transition-colors ${editPaymentMethod === '카드' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-sm' : 'bg-transparent text-slate-400 border-white/20 hover:border-white/40'}`}>카드 결제</button>
+                <div className="flex flex-row items-center gap-2 pt-1 w-full">
+                  <button type="button" onClick={() => setEditPaymentMethod('현금')} className={`w-1/2 py-2 rounded-lg border text-xs font-bold cursor-pointer transition-colors ${editPaymentMethod === '현금' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-[0_0_10px_rgba(139,92,246,0.3)]' : 'bg-transparent text-slate-400 border-white/30 hover:border-white/50'}`}>현금 결제</button>
+                  <button type="button" onClick={() => setEditPaymentMethod('카드')} className={`w-1/2 py-2 rounded-lg border text-xs font-bold cursor-pointer transition-colors ${editPaymentMethod === '카드' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-[0_0_10px_rgba(139,92,246,0.3)]' : 'bg-transparent text-slate-400 border-white/30 hover:border-white/50'}`}>카드 결제</button>
                 </div>
               </div>
 
