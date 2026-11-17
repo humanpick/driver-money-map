@@ -187,9 +187,14 @@ export default function App() {
   const [showScoutOnly, setShowScoutOnly] = useState(false);
 
   const [newDate, setNewDate] = useState<string>(() => getTodayKST());
+  
+  // 💡 [초기값 수정] 앱 시작 시 기본적으로 수원, 부산, 150,000원이 채워져 있도록 변경
   const [newStartTime, setNewStartTime] = useState(''); const [newEndTime, setNewEndTime] = useState('');
-  const [newDeparture, setNewDeparture] = useState(''); const [newDestination, setNewDestination] = useState('');
-  const [newGross, setNewGross] = useState(''); const [newFeeRate, setNewFeeRate] = useState('20');
+  const [newDeparture, setNewDeparture] = useState('수원'); 
+  const [newDestination, setNewDestination] = useState('부산');
+  const [newGross, setNewGross] = useState('150,000'); 
+  
+  const [newFeeRate, setNewFeeRate] = useState('20');
   const [newFuel, setNewFuel] = useState(''); const [newExtraExpense, setNewExtraExpense] = useState(''); const [newTip, setNewTip] = useState('');
   const [newPaymentMethod, setNewPaymentMethod] = useState<'현금' | '카드'>('현금'); 
   
@@ -202,6 +207,7 @@ export default function App() {
   const [targetDays, setTargetDays] = useState<string>(() => {
     try { const s = localStorage.getItem('jundriver_target'); return s ? JSON.parse(s).days : '25'; } catch { return '25'; }
   });
+
   const [fixedDailyExp, setFixedDailyExp] = useState<string>(() => {
     try { const s = localStorage.getItem('jundriver_fixed_exp'); return s ? JSON.parse(s).amount : '3,200'; } catch { return '3,200'; }
   });
@@ -419,7 +425,9 @@ export default function App() {
     setRecords(updated); 
     setCustomDate(newDate);
     setDateFilter('day');
-    setNewDeparture(''); setNewDestination(''); setNewGross(''); setNewFuel(''); setNewExtraExpense(''); setNewTip(''); setNewPaymentMethod('현금');
+    
+    // 💡 [수정] 다시 기본값으로 돌아가도록 셋팅
+    setNewDeparture('수원'); setNewDestination('부산'); setNewGross('150,000'); setNewFuel(''); setNewExtraExpense(''); setNewTip(''); setNewPaymentMethod('현금');
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -895,28 +903,29 @@ export default function App() {
               <form onSubmit={handleAddRecord} className="space-y-3.5">
                 <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">운행 일자</label><input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} required className="w-full px-3 py-2 rounded-lg" /></div>
                 
-                {/* 💡 [수정] 수원/부산 하드코딩 텍스트 강제 적용 */}
+                {/* 💡 [수정] 수원/부산을 placeholder가 아닌 초기 value로 세팅했으므로 빈칸이 아닙니다 */}
                 <div className="grid grid-cols-2 gap-2">
-                  <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">출발지</label><input type="text" placeholder="수원" value={newDeparture} onChange={(e) => setNewDeparture(e.target.value)} required className="w-full px-3 py-2 rounded-lg" /></div>
-                  <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">도착지</label><input type="text" placeholder="부산" value={newDestination} onChange={(e) => setNewDestination(e.target.value)} required className="w-full px-3 py-2 rounded-lg" /></div>
+                  <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">출발지</label><input type="text" value={newDeparture} onChange={(e) => setNewDeparture(e.target.value)} required className="w-full px-3 py-2 rounded-lg" /></div>
+                  <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">도착지</label><input type="text" value={newDestination} onChange={(e) => setNewDestination(e.target.value)} required className="w-full px-3 py-2 rounded-lg" /></div>
                 </div>
                 
+                {/* 💡 [수정] 탁송료 초기값 150,000 적용 */}
                 <div className="grid grid-cols-2 gap-2">
-                  <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">탁송료(원)</label><input type="text" placeholder="150,000" value={newGross} onChange={(e) => setNewGross(formatNumberWithComma(e.target.value))} required className="w-full px-3 py-2 rounded-lg text-right" /></div>
-                  <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">수수료(%)</label><input type="number" placeholder="20" value={newFeeRate} onChange={(e) => setNewFeeRate(e.target.value)} className="w-full px-3 py-2 rounded-lg text-right" /></div>
+                  <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">탁송료(원)</label><input type="text" value={newGross} onChange={(e) => setNewGross(formatNumberWithComma(e.target.value))} required className="w-full px-3 py-2 rounded-lg text-right" /></div>
+                  <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">수수료(%)</label><input type="number" value={newFeeRate} onChange={(e) => setNewFeeRate(e.target.value)} className="w-full px-3 py-2 rounded-lg text-right" /></div>
                 </div>
                 <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">기사 팁/추가운임 (선택)</label><input type="text" placeholder="5,000" value={newTip} onChange={(e) => setNewTip(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" /></div>
                 
-                <div className="p-3.5 rounded-xl bg-white/5 border border-[#8B5CF6]/30 space-y-2.5">
+                {/* 💡 [수정] 현금/카드 토글 버튼 CSS 수정하여 확실하게 표시되도록 조치 */}
+                <div className="p-3.5 rounded-xl bg-[#0B1120] border border-white/20 space-y-3">
                   <label className="text-xs font-bold text-[#8B5CF6] flex items-center justify-between gap-1.5">
                     <div className="flex items-center gap-1.5"><Fuel className="w-4 h-4 text-[#8B5CF6]" />대납 주유/충전비 (100% 회수)</div>
                   </label>
                   <input type="text" placeholder="선결제한 주유 금액" value={newFuel} onChange={(e) => setNewFuel(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" />
                   
-                  {/* 💡 [수정] 모바일/PC 레이아웃 강제 지정 (flex-row) */}
-                  <div className="flex flex-row items-center gap-2 pt-2">
-                    <button type="button" onClick={() => setNewPaymentMethod('현금')} className={`flex-1 py-2 rounded-lg border text-xs font-bold cursor-pointer transition-colors ${newPaymentMethod === '현금' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-[0_0_10px_rgba(139,92,246,0.3)]' : 'bg-[#0B1120] text-slate-400 border-white/20 hover:border-white/40'}`}>현금 결제</button>
-                    <button type="button" onClick={() => setNewPaymentMethod('카드')} className={`flex-1 py-2 rounded-lg border text-xs font-bold cursor-pointer transition-colors ${newPaymentMethod === '카드' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-[0_0_10px_rgba(139,92,246,0.3)]' : 'bg-[#0B1120] text-slate-400 border-white/20 hover:border-white/40'}`}>카드 결제</button>
+                  <div className="flex flex-row items-center justify-between gap-2 pt-1 w-full">
+                    <button type="button" onClick={() => setNewPaymentMethod('현금')} className={`flex-1 py-2 rounded-lg border text-xs font-bold cursor-pointer transition-colors ${newPaymentMethod === '현금' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-[0_0_10px_rgba(139,92,246,0.3)]' : 'bg-transparent text-slate-400 border-white/30 hover:border-white/50'}`}>현금 결제</button>
+                    <button type="button" onClick={() => setNewPaymentMethod('카드')} className={`flex-1 py-2 rounded-lg border text-xs font-bold cursor-pointer transition-colors ${newPaymentMethod === '카드' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-[0_0_10px_rgba(139,92,246,0.3)]' : 'bg-transparent text-slate-400 border-white/30 hover:border-white/50'}`}>카드 결제</button>
                   </div>
                 </div>
 
@@ -1011,7 +1020,7 @@ export default function App() {
                             <div className="flex items-center gap-2">
                               <div className="text-right pr-2 border-r border-white/10 mr-1">
                                 <span className="text-[10px] text-slate-400 block">총 청구액</span>
-                                {/* 💡 [수정] 천단위 콤마 완벽 적용 */}
+                                {/* 💡 [수정] 콤마 철저 적용 */}
                                 <span className="text-sm font-extrabold text-white">{r.totalClaimAmount.toLocaleString()}원</span>
                               </div>
                               <button onClick={() => handleOpenEditModal(r)} title="날짜 및 내역 수정" className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 transition-all cursor-pointer"><Edit2 className="w-3.5 h-3.5" /></button>
