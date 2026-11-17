@@ -47,7 +47,6 @@ const formatPhoneNumber = (val: string) => {
   return num;
 };
 
-// 💡 엑셀 파싱 로직
 const parseImportedRow = (row: any) => {
   const keys = Object.keys(row);
   const dateKey = keys.find(k => k.includes('일') || k.includes('날짜') || k.includes('date'));
@@ -88,14 +87,13 @@ interface DrivingRecord {
   fuelAmount: number; extraExpenseAmount: number; tipAmount: number; 
   isGrossPaid: boolean; isExpensePaid: boolean;
   netAmount: number; totalClaimAmount: number;
-  paymentMethod?: '현금' | '카드'; // 💡 결제 수단 스키마
+  paymentMethod?: '현금' | '카드';
 }
 interface ExpenseRecord { id: string; date: string; category: string; amount: number; memo: string; }
 interface BankAccount { id: string; bankName: string; accountNumber: string; holder: string; }
 interface MemberProfile { id: string; email: string; name: string; phone: string; role: string; createdAt: string; lastLoginAt?: string; loginCount?: number; recordCount?: number; monthlyGross?: number; }
 interface NoticeItem { id: string; title: string; content: string; isActive: boolean; updatedAt?: string; }
 
-// --- (TRADE_CENTERS 및 AUCTION_SCHEDULES 데이터는 공간 상 생략하지 않고 그대로 유지) ---
 const TRADE_CENTERS = [
   { id: '1', name: '수원 도이치오토월드', tier: 'S', region: '수도권', addr: '경기 수원시 권선구 권선로 308-5', desc: '전국 최대 실내 복합단지.' },
   { id: '2', name: '수원 SK V1 모터스', tier: 'S', region: '수도권', addr: '경기 수원시 권선구 평동로79번길 45', desc: '도이치오토월드 옆.' },
@@ -111,7 +109,7 @@ const TRADE_CENTERS = [
 
 const AUCTION_SCHEDULES = [
   { day: '월요일', hex: '#38BDF8', locations: [{ name: '안성 롯데렌탈', tier: 'S', addr: '경기 안성시 내가천리 12', tag: '롯데' }, { name: '진천 광혜원 오토보이', tier: 'B', addr: '충북 진천군 금천길 37', tag: '오토보이' }] },
-  { day: '화요일', hex: '#EC4899', locations: [{ name: '시화 현대글로비스', tier: 'S', addr: '경기 시흥시 정왕천로 271', tag: '글로비스' }, { name: '오포 현대글로비스', tier: 'S', addr: '경기 광주시 능평리 174-25', tag: '글로비스' }, { name: '세종 K Car', tier: 'A', addr: '세종 부강면 문곡리 산 249', tag: '케이카' }] },
+  { day: '화요일', hex: '#EC4899', locations: [{ name: '시화 현대글로비스', tier: 'S', addr: '경기 시흥시 정왕천로 271', tag: '글로비스' }, { name: '오포 현대글로비스', tier: 'S', addr: '경기 광주시 능평리 174-25', tag: '글로비스' }, { name: '세종 K Car', tier: 'A', addr: '세종 부강면 문곡리 산 249', tag: '케이카' }, { name: '천안 SK경매장', tier: 'B', addr: '충남 천안시 구성동', tag: 'SK' }] },
   { day: '수요일', hex: '#10B981', locations: [{ name: '안성 오토허브', tier: 'S', addr: '경기 안성시 문터길 60', tag: '오토허브' }] },
   { day: '목요일', hex: '#F59E0B', locations: [{ name: '양산 현대글로비스', tier: 'S', addr: '경남 양산시 산막동 572-1', tag: '글로비스' }, { name: '오산 K Car', tier: 'A', addr: '경기 오산시 은계동 7-30', tag: '케이카' }] },
   { day: '금요일', hex: '#8B5CF6', locations: [{ name: '시화 현대글로비스', tier: 'S', addr: '경기 시흥시 정왕동 2122-4', tag: '글로비스' }] }
@@ -204,7 +202,6 @@ export default function App() {
   const [targetDays, setTargetDays] = useState<string>(() => {
     try { const s = localStorage.getItem('jundriver_target'); return s ? JSON.parse(s).days : '25'; } catch { return '25'; }
   });
-
   const [fixedDailyExp, setFixedDailyExp] = useState<string>(() => {
     try { const s = localStorage.getItem('jundriver_fixed_exp'); return s ? JSON.parse(s).amount : '3,200'; } catch { return '3,200'; }
   });
@@ -354,6 +351,42 @@ export default function App() {
   };
 
   const handleLogout = async () => { await supabase.auth.signOut(); setShowProfileModal(false); setActiveTab('records'); };
+
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault(); setPwdLoading(true); setPwdMessage(null);
+    if (newPassword.length < 6) { setPwdMessage({ type: 'error', text: '비밀번호는 최소 6자리 이상이어야 합니다.' }); setPwdLoading(false); return; }
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) setPwdMessage({ type: 'error', text: error.message });
+    else { setPwdMessage({ type: 'success', text: '비밀번호가 성공적으로 변경되었습니다.' }); setNewPassword(''); }
+    setPwdLoading(false);
+  };
+
+  const handleSaveNoticeTemplate = async (e: React.FormEvent) => {
+    e.preventDefault(); if (!inputNoticeTitle.trim() || !inputNoticeContent.trim()) return;
+    setNoticeLoading(true);
+    const targetId = editingNoticeId || `notice_${Date.now()}`;
+    const { error } = await supabase.from('announcements').upsert({ id: targetId, title: inputNoticeTitle.trim(), content: inputNoticeContent.trim(), is_active: editingNoticeId ? (noticeList.find(n => n.id === editingNoticeId)?.isActive || false) : false, updated_at: new Date().toISOString() });
+    if (!error) { alert(editingNoticeId ? '수정되었습니다.' : '저장되었습니다.'); setInputNoticeTitle(''); setInputNoticeContent(''); setEditingNoticeId(null); fetchNotices(); }
+    setNoticeLoading(false);
+  };
+
+  const handleActivateNotice = async (targetNotice: NoticeItem) => {
+    setNoticeLoading(true); await supabase.from('announcements').update({ is_active: false }).neq('id', 'dummy');
+    const { error } = await supabase.from('announcements').update({ is_active: true, updated_at: new Date().toISOString() }).eq('id', targetNotice.id);
+    if (!error) { alert('메인 배너로 활성화되었습니다.'); fetchNotices(); }
+    setNoticeLoading(false);
+  };
+
+  const handleDeactivateAllNotices = async () => {
+    setNoticeLoading(true); const { error } = await supabase.from('announcements').update({ is_active: false }).neq('id', 'dummy');
+    if (!error) { alert('메인 배너 송출이 중단되었습니다.'); fetchNotices(); }
+    setNoticeLoading(false);
+  };
+
+  const handleDeleteNotice = async (id: string) => {
+    if (!window.confirm('삭제하시겠습니까?')) return;
+    await supabase.from('announcements').delete().eq('id', id); fetchNotices();
+  };
 
   const handleAddRecord = async (e: React.FormEvent) => {
     e.preventDefault(); if (!session) return;
@@ -862,13 +895,12 @@ export default function App() {
               <form onSubmit={handleAddRecord} className="space-y-3.5">
                 <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">운행 일자</label><input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} required className="w-full px-3 py-2 rounded-lg" /></div>
                 
-                {/* 💡 [수정] 출발지/도착지 예시 고정 */}
+                {/* 💡 [수정] 수원/부산 하드코딩 텍스트 강제 적용 */}
                 <div className="grid grid-cols-2 gap-2">
                   <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">출발지</label><input type="text" placeholder="수원" value={newDeparture} onChange={(e) => setNewDeparture(e.target.value)} required className="w-full px-3 py-2 rounded-lg" /></div>
                   <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">도착지</label><input type="text" placeholder="부산" value={newDestination} onChange={(e) => setNewDestination(e.target.value)} required className="w-full px-3 py-2 rounded-lg" /></div>
                 </div>
                 
-                {/* 💡 [수정] 탁송료 예시 150,000 고정 */}
                 <div className="grid grid-cols-2 gap-2">
                   <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">탁송료(원)</label><input type="text" placeholder="150,000" value={newGross} onChange={(e) => setNewGross(formatNumberWithComma(e.target.value))} required className="w-full px-3 py-2 rounded-lg text-right" /></div>
                   <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">수수료(%)</label><input type="number" placeholder="20" value={newFeeRate} onChange={(e) => setNewFeeRate(e.target.value)} className="w-full px-3 py-2 rounded-lg text-right" /></div>
@@ -881,10 +913,10 @@ export default function App() {
                   </label>
                   <input type="text" placeholder="선결제한 주유 금액" value={newFuel} onChange={(e) => setNewFuel(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" />
                   
-                  {/* 💡 [수정] 현금/카드 토글 버튼 CSS 개선 (모바일/PC 절대 안 가려짐) */}
-                  <div className="flex w-full items-center gap-2 pt-1 mt-1">
-                    <button type="button" onClick={() => setNewPaymentMethod('현금')} className={`flex-1 py-1.5 rounded-md border text-[11px] font-bold cursor-pointer transition-colors ${newPaymentMethod === '현금' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-sm' : 'bg-[#0B1120] text-slate-400 border-white/20 hover:border-white/40'}`}>현금 결제</button>
-                    <button type="button" onClick={() => setNewPaymentMethod('카드')} className={`flex-1 py-1.5 rounded-md border text-[11px] font-bold cursor-pointer transition-colors ${newPaymentMethod === '카드' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-sm' : 'bg-[#0B1120] text-slate-400 border-white/20 hover:border-white/40'}`}>카드 결제</button>
+                  {/* 💡 [수정] 모바일/PC 레이아웃 강제 지정 (flex-row) */}
+                  <div className="flex flex-row items-center gap-2 pt-2">
+                    <button type="button" onClick={() => setNewPaymentMethod('현금')} className={`flex-1 py-2 rounded-lg border text-xs font-bold cursor-pointer transition-colors ${newPaymentMethod === '현금' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-[0_0_10px_rgba(139,92,246,0.3)]' : 'bg-[#0B1120] text-slate-400 border-white/20 hover:border-white/40'}`}>현금 결제</button>
+                    <button type="button" onClick={() => setNewPaymentMethod('카드')} className={`flex-1 py-2 rounded-lg border text-xs font-bold cursor-pointer transition-colors ${newPaymentMethod === '카드' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-[0_0_10px_rgba(139,92,246,0.3)]' : 'bg-[#0B1120] text-slate-400 border-white/20 hover:border-white/40'}`}>카드 결제</button>
                   </div>
                 </div>
 
@@ -979,7 +1011,7 @@ export default function App() {
                             <div className="flex items-center gap-2">
                               <div className="text-right pr-2 border-r border-white/10 mr-1">
                                 <span className="text-[10px] text-slate-400 block">총 청구액</span>
-                                {/* 💡 [수정] 콤마 철저 적용 */}
+                                {/* 💡 [수정] 천단위 콤마 완벽 적용 */}
                                 <span className="text-sm font-extrabold text-white">{r.totalClaimAmount.toLocaleString()}원</span>
                               </div>
                               <button onClick={() => handleOpenEditModal(r)} title="날짜 및 내역 수정" className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 transition-all cursor-pointer"><Edit2 className="w-3.5 h-3.5" /></button>
