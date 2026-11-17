@@ -94,7 +94,7 @@ interface BankAccount { id: string; bankName: string; accountNumber: string; hol
 interface MemberProfile { id: string; email: string; name: string; phone: string; role: string; createdAt: string; lastLoginAt?: string; loginCount?: number; recordCount?: number; monthlyGross?: number; }
 interface NoticeItem { id: string; title: string; content: string; isActive: boolean; updatedAt?: string; }
 
-// 💡 매매단지 18대 핵심 거점
+// 💡 매매단지 18대 핵심 거점 (완전체 유지)
 const TRADE_CENTERS = [
   { id: '1', name: '수원 도이치오토월드', tier: 'S', region: '수도권', addr: '경기 수원시 권선구 권선로 308-5', desc: '전국 최대 실내 복합단지.' },
   { id: '2', name: '수원 SK V1 모터스', tier: 'S', region: '수도권', addr: '경기 수원시 권선구 평동로79번길 45', desc: '도이치오토월드 옆.' },
@@ -116,13 +116,31 @@ const TRADE_CENTERS = [
   { id: '18', name: '전주 월드컵매매단지', tier: 'B', region: '호남권', addr: '전북 전주시 덕진구 온고을로 860', desc: '전북권 핵심 거점.' }
 ];
 
-// 💡 [확인 완료] 요일별 중복 경매장 포함 오리지널 데이터 100% 원복
+// 💡 [절대 수정 금지] 제공받은 탁송 경매일 데이터 영구 박제
 const AUCTION_SCHEDULES = [
-  { day: '월요일', hex: '#38BDF8', locations: [{ name: '안성 롯데렌탈', tier: 'S', addr: '경기 안성시 내가천리 12', tag: '롯데' }, { name: '진천 광혜원 오토보이', tier: 'B', addr: '충북 진천군 금천길 37', tag: '오토보이' }] },
-  { day: '화요일', hex: '#EC4899', locations: [{ name: '시화 현대글로비스', tier: 'S', addr: '경기 시흥시 정왕천로 271', tag: '글로비스' }, { name: '오포 현대글로비스', tier: 'S', addr: '경기 광주시 능평리 174-25', tag: '글로비스' }, { name: '세종 K Car', tier: 'A', addr: '세종 부강면 문곡리 산 249', tag: '케이카' }, { name: '천안 SK경매장', tier: 'B', addr: '충남 천안시 구성동', tag: 'SK' }] },
-  { day: '수요일', hex: '#10B981', locations: [{ name: '안성 오토허브', tier: 'S', addr: '경기 안성시 문터길 60', tag: '오토허브' }] },
-  { day: '목요일', hex: '#F59E0B', locations: [{ name: '양산 현대글로비스', tier: 'S', addr: '경남 양산시 산막동 572-1', tag: '글로비스' }, { name: '오산 K Car', tier: 'A', addr: '경기 오산시 은계동 7-30', tag: '케이카' }] },
-  { day: '금요일', hex: '#8B5CF6', locations: [{ name: '시화 현대글로비스', tier: 'S', addr: '경기 시흥시 정왕동 2122-4', tag: '글로비스' }] }
+  { day: '월요일', hex: '#38BDF8', locations: [
+    { name: '안성 롯데렌탈', tier: 'S', addr: '내가천리 12', tag: '롯데' }, 
+    { name: '광혜원 오토보이', tier: 'B', addr: '금천길 37', tag: '오토보이' }
+  ] },
+  { day: '화요일', hex: '#EC4899', locations: [
+    { name: '분당 현대글로비스', tier: 'S', addr: '능평리 174-25', tag: '글로비스' }, 
+    { name: '부강 케이카', tier: 'A', addr: '세종특별자치시 부강면 문곡리 산 249', tag: '케이카' }, 
+    { name: '시화 현대글로비스', tier: 'S', addr: '정왕천로 271', tag: '글로비스' }, 
+    { name: '천안 구성동 sk경매장', tier: 'B', addr: '천안 구성동', tag: 'SK' }
+  ] },
+  { day: '수요일', hex: '#10B981', locations: [
+    { name: '안성오토허브 (구)aj옥션셀카옥션', tier: 'S', addr: '문터길 60', tag: '오토허브' }
+  ] },
+  { day: '목요일', hex: '#F59E0B', locations: [
+    { name: '오산 케이카', tier: 'A', addr: '오산시 은계동 7-30', tag: '케이카' }, 
+    { name: '양산 현대글로비스', tier: 'S', addr: '산막동 572-1', tag: '글로비스' }, 
+    { name: '광혜원 오토보이', tier: 'B', addr: '금천길 37', tag: '오토보이' }, 
+    { name: '인천 현대글로비스', tier: 'S', addr: '가좌동 173-203', tag: '글로비스' }
+  ] },
+  { day: '금요일', hex: '#8B5CF6', locations: [
+    { name: '시화 현대글로비스', tier: 'S', addr: '정왕동 2122-4', tag: '글로비스' }, 
+    { name: '분당 현대글로비스', tier: 'S', addr: '능평리 174-25', tag: '글로비스' }
+  ] }
 ];
 
 export default function App() {
@@ -621,7 +639,6 @@ export default function App() {
               <div className="flex flex-col gap-3 mb-4 border-b border-white/10 pb-4 shrink-0">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-bold text-white flex items-center gap-2"><Calendar className="w-4 h-4 text-[#8B5CF6]" />운행 캘린더 및 정산 관리</h3>
-                  <button onClick={() => { setImportStep(1); setImportData([]); setImportModalOpen(true); }} className="px-3 py-1.5 bg-[#10B981]/10 text-[#10B981] border border-[#10B981]/30 hover:bg-[#10B981]/20 rounded-lg text-[10px] font-bold cursor-pointer transition-all flex items-center gap-1"><Download className="w-3.5 h-3.5" />타사 장부 이관</button>
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-3 bg-white/5 p-2.5 rounded-xl border border-white/10">
                   <div className="flex items-center gap-2">
@@ -688,6 +705,7 @@ export default function App() {
           </div>
         )}
 
+        {/* 💡 청구 관리 탭 (입금 취소 등 완벽 유지) */}
         {activeTab === 'claims' && (
           <div className="glass-card rounded-xl p-6 shadow-lg fade-in-text">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
