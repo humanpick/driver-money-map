@@ -116,8 +116,7 @@ const AUCTION_SCHEDULES = [
 ];
 
 export default function App() {
-  // 💡 [버그픽스] setNeedRefresh 누락 해결
-  const { needRefresh: [needRefresh, setNeedRefresh], updateServiceWorker } = useRegisterSW({ onRegistered(r) {}, onRegisterError(error) {} });
+  const { needRefresh: [needRefresh], updateServiceWorker } = useRegisterSW({ onRegistered(r) {}, onRegisterError(error) {} });
   useEffect(() => { if (needRefresh) updateServiceWorker(true); }, [needRefresh, updateServiceWorker]);
 
   const [session, setSession] = useState<any>(null);
@@ -236,7 +235,7 @@ export default function App() {
 
   const fetchUserData = async (userId: string, userEmail: string, userMeta?: any, userCreatedAt?: string) => {
     let role = 'user';
-    const cleanMail = userEmail.toLowerCase();
+    const cleanMail = (userEmail || '').toLowerCase();
     const metaName = userMeta?.name || (cleanMail === ADMIN_DEFAULT_EMAIL ? ADMIN_DEFAULT_NAME : '기사님');
     const metaPhone = userMeta?.phone || (cleanMail === ADMIN_DEFAULT_EMAIL ? ADMIN_DEFAULT_PHONE : '');
 
@@ -289,7 +288,7 @@ export default function App() {
           .reduce((sum: number, r: any) => sum + Number(r.gross_amount), 0);
           
         return { 
-          id: p.id, email: p.email, name: p.name, phone: p.phone, role: p.role || 'user', 
+          id: p.id, email: p.email || '', name: p.name || '미상', phone: p.phone || '', role: p.role || 'user', // 💡 하얀 화면을 유발했던 치명적 에러 방어 구역
           createdAt: p.created_at ? p.created_at.substring(0, 10) : '-', 
           lastLoginAt: p.last_login_at ? p.last_login_at.substring(0, 16).replace('T', ' ') : '기록없음',
           loginCount: p.login_count || 0,
@@ -732,7 +731,7 @@ export default function App() {
     return true;
   });
 
-  // 💡 [버그 픽스] 이름, 번호가 null인 회원이 있을 때 검색하면 뻗는 에러 방지 처리 완료
+  // 💡 [버그 완벽 차단] 이름, 전화번호, 이메일이 null이어도 절대 화면이 뻗지 않도록 (|| '') 빈 문자열로 감싸서 안전하게 검색
   const displayedMembers = adminMemberList.filter(m => {
     const safeName = m.name || '';
     const safePhone = m.phone || '';
@@ -921,15 +920,15 @@ export default function App() {
                 </div>
                 <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">기사 팁/추가운임 (선택)</label><input type="text" placeholder="5,000" value={newTip} onChange={(e) => setNewTip(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" /></div>
                 
-                <div className="p-3.5 rounded-xl bg-white/5 border border-[#8B5CF6]/30 space-y-2.5">
-                  <label className="text-xs font-bold text-[#8B5CF6] flex items-center justify-between gap-1.5">
+                <div className="p-3.5 rounded-xl bg-[#0B1120] border border-white/20">
+                  <label className="text-xs font-bold text-[#8B5CF6] flex items-center justify-between gap-1.5 mb-2">
                     <div className="flex items-center gap-1.5"><Fuel className="w-4 h-4 text-[#8B5CF6]" />대납 주유/충전비 (100% 회수)</div>
                   </label>
-                  <input type="text" placeholder="선결제한 주유 금액" value={newFuel} onChange={(e) => setNewFuel(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" />
+                  <input type="text" placeholder="선결제한 주유 금액" value={newFuel} onChange={(e) => setNewFuel(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right mb-2" />
                   
-                  <div className="flex flex-row items-center gap-2 pt-1 mt-1">
-                    <button type="button" onClick={() => setNewPaymentMethod('현금')} className={`flex-1 py-1.5 rounded-md border text-[11px] font-bold cursor-pointer transition-colors ${newPaymentMethod === '현금' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-sm' : 'bg-transparent text-slate-400 border-white/20 hover:border-white/40'}`}>현금 결제</button>
-                    <button type="button" onClick={() => setNewPaymentMethod('카드')} className={`flex-1 py-1.5 rounded-md border text-[11px] font-bold cursor-pointer transition-colors ${newPaymentMethod === '카드' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-sm' : 'bg-transparent text-slate-400 border-white/20 hover:border-white/40'}`}>카드 결제</button>
+                  <div className="flex flex-row w-full items-center justify-between gap-2">
+                    <button type="button" onClick={() => setNewPaymentMethod('현금')} className={`w-1/2 py-2 rounded-lg border text-xs font-bold cursor-pointer transition-colors ${newPaymentMethod === '현금' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-[0_0_10px_rgba(139,92,246,0.3)]' : 'bg-[#0B1120] text-slate-400 border-white/20 hover:border-white/40'}`}>현금 결제</button>
+                    <button type="button" onClick={() => setNewPaymentMethod('카드')} className={`w-1/2 py-2 rounded-lg border text-xs font-bold cursor-pointer transition-colors ${newPaymentMethod === '카드' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-[0_0_10px_rgba(139,92,246,0.3)]' : 'bg-[#0B1120] text-slate-400 border-white/20 hover:border-white/40'}`}>카드 결제</button>
                   </div>
                 </div>
 
@@ -1695,12 +1694,12 @@ export default function App() {
               </div>
               <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">운임(원)</label><input type="text" value={editGross} onChange={(e) => setEditGross(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" required /></div>
               
-              <div className="p-3.5 rounded-xl bg-[#0B1120] border border-white/20 space-y-3">
+              <div className="p-3.5 rounded-xl bg-[#0B1120] border border-white/20 space-y-2">
                 <label className="block text-[11px] font-semibold text-slate-300">대납 주유비</label>
                 <input type="text" value={editFuel} onChange={(e) => setEditFuel(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" />
-                <div className="flex flex-row items-center gap-2 pt-1 w-full">
-                  <button type="button" onClick={() => setEditPaymentMethod('현금')} className={`w-1/2 py-2 rounded-lg border text-xs font-bold cursor-pointer transition-colors ${editPaymentMethod === '현금' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-[0_0_10px_rgba(139,92,246,0.3)]' : 'bg-transparent text-slate-400 border-white/30 hover:border-white/50'}`}>현금 결제</button>
-                  <button type="button" onClick={() => setEditPaymentMethod('카드')} className={`w-1/2 py-2 rounded-lg border text-xs font-bold cursor-pointer transition-colors ${editPaymentMethod === '카드' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-[0_0_10px_rgba(139,92,246,0.3)]' : 'bg-transparent text-slate-400 border-white/30 hover:border-white/50'}`}>카드 결제</button>
+                <div className="flex flex-row items-center gap-2 pt-1 mt-1">
+                  <button type="button" onClick={() => setEditPaymentMethod('현금')} className={`flex-1 py-1.5 rounded-md border text-[11px] font-bold cursor-pointer transition-colors ${editPaymentMethod === '현금' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-sm' : 'bg-transparent text-slate-400 border-white/20 hover:border-white/40'}`}>현금 결제</button>
+                  <button type="button" onClick={() => setEditPaymentMethod('카드')} className={`flex-1 py-1.5 rounded-md border text-[11px] font-bold cursor-pointer transition-colors ${editPaymentMethod === '카드' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-sm' : 'bg-transparent text-slate-400 border-white/20 hover:border-white/40'}`}>카드 결제</button>
                 </div>
               </div>
 
