@@ -47,7 +47,7 @@ const formatPhoneNumber = (val: string) => {
   return num;
 };
 
-// 💡 타사 엑셀 자동 파싱 로직
+// 타사 엑셀 파싱 로직
 const parseImportedRow = (row: any) => {
   const keys = Object.keys(row);
   const dateKey = keys.find(k => k.includes('일') || k.includes('날짜') || k.includes('date'));
@@ -78,7 +78,7 @@ const parseImportedRow = (row: any) => {
     tipAmount: 0,
     netAmount: net,
     totalClaimAmount: gross,
-    paymentMethod: '현금' // 임포트 시 기본 결제 수단
+    paymentMethod: '현금'
   };
 };
 
@@ -88,7 +88,7 @@ interface DrivingRecord {
   fuelAmount: number; extraExpenseAmount: number; tipAmount: number; 
   isGrossPaid: boolean; isExpensePaid: boolean;
   netAmount: number; totalClaimAmount: number;
-  paymentMethod?: '현금' | '카드'; // 결제 수단 추가
+  paymentMethod?: '현금' | '카드';
 }
 interface ExpenseRecord { id: string; date: string; category: string; amount: number; memo: string; }
 interface BankAccount { id: string; bankName: string; accountNumber: string; holder: string; }
@@ -107,7 +107,7 @@ const TRADE_CENTERS = [
   { id: '9', name: '부산 사직오토랜드', tier: 'A', region: '영남권', addr: '부산 연제구 경기장로 15', desc: '부산 권역 전통 대표 매매단지. 도심 내 장거리 종착 및 신규 출발 요충지.' },
   { id: '10', name: '대전 디오토몰', tier: 'A', region: '충청권', addr: '대전 유성구 복용동로 35', desc: '충청권 핵심 실내 단지. 영호남 이동 시 중간 복귀콜 환적 전초기지.' },
   { id: '11', name: '대전 오토월드', tier: 'A', region: '충청권', addr: '대전 유성구 유성대로 510', desc: '디오토몰 인근 복용동 매매단지 핵심 거점. 풍부한 지방 이동 콜.' },
-  { id: '12', name: '광주 풍암매매단지', tier: 'A', region: '호남권', addr: '광주 서구 매월1로 50', desc: '호남권 최대 중고차 거래 거점. 대규모 단지 및 상사 밀집.' },
+  { id: '12', name: '광주 풍암매매단지', tier: 'A', region: '호남권', addr: '광주 서구 매월1로 50', desc: '호남권 최대 중고 거래 거점. 대규모 단지 및 상사 밀집.' },
   { id: '13', name: '광주 엠플러스 (M-PLUS)', tier: 'A', region: '호남권', addr: '광주 서구 매월1로62번길 24', desc: '풍암지구 내 신축 대형 실내 복합 백화점. 호남권 딜러 출고 집중지.' },
   { id: '14', name: '부천 국민차매매단지', tier: 'B', region: '수도권', addr: '경기 부천시 송내대로 450', desc: '수도권 서부권역 주요 전통 매매단지.' },
   { id: '15', name: '부천 DY카랜드', tier: 'B', region: '수도권', addr: '경기 부천시 신흥로 399번길 50', desc: '경인고속도로 부천IC 인접. 오정동 대형 매매단지.' },
@@ -915,12 +915,16 @@ export default function App() {
               <p className="text-[11px] text-[#38BDF8] font-medium mb-4 ml-6">탁송 운임과 대납 비용을 기록하여 순수익을 계산합니다.</p>
               <form onSubmit={handleAddRecord} className="space-y-3.5">
                 <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">운행 일자</label><input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} required className="w-full px-3 py-2 rounded-lg" /></div>
+                
+                {/* 💡 [플레이스홀더 변경] 기본 예시를 수원, 부산으로 변경 */}
                 <div className="grid grid-cols-2 gap-2">
-                  <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">출발지</label><input type="text" placeholder="경기 광주" value={newDeparture} onChange={(e) => setNewDeparture(e.target.value)} required className="w-full px-3 py-2 rounded-lg" /></div>
-                  <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">도착지</label><input type="text" placeholder="인천 송도" value={newDestination} onChange={(e) => setNewDestination(e.target.value)} required className="w-full px-3 py-2 rounded-lg" /></div>
+                  <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">출발지</label><input type="text" placeholder="수원" value={newDeparture} onChange={(e) => setNewDeparture(e.target.value)} required className="w-full px-3 py-2 rounded-lg" /></div>
+                  <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">도착지</label><input type="text" placeholder="부산" value={newDestination} onChange={(e) => setNewDestination(e.target.value)} required className="w-full px-3 py-2 rounded-lg" /></div>
                 </div>
+                
+                {/* 💡 [플레이스홀더 변경] 기본 탁송료 예시를 150,000으로 변경 */}
                 <div className="grid grid-cols-2 gap-2">
-                  <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">탁송료(원)</label><input type="text" placeholder="85,000" value={newGross} onChange={(e) => setNewGross(formatNumberWithComma(e.target.value))} required className="w-full px-3 py-2 rounded-lg text-right" /></div>
+                  <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">탁송료(원)</label><input type="text" placeholder="150,000" value={newGross} onChange={(e) => setNewGross(formatNumberWithComma(e.target.value))} required className="w-full px-3 py-2 rounded-lg text-right" /></div>
                   <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">수수료(%)</label><input type="number" placeholder="20" value={newFeeRate} onChange={(e) => setNewFeeRate(e.target.value)} className="w-full px-3 py-2 rounded-lg text-right" /></div>
                 </div>
                 <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">기사 팁/추가운임 (선택)</label><input type="text" placeholder="5,000" value={newTip} onChange={(e) => setNewTip(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" /></div>
@@ -931,9 +935,10 @@ export default function App() {
                   </label>
                   <input type="text" placeholder="선결제한 주유 금액" value={newFuel} onChange={(e) => setNewFuel(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" />
                   
-                  <div className="flex items-center gap-2 pt-1">
-                    <button type="button" onClick={() => setNewPaymentMethod('현금')} className={`flex-1 py-1.5 rounded border text-[10px] font-bold cursor-pointer transition-colors ${newPaymentMethod === '현금' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6]' : 'bg-[#0B1120] text-slate-400 border-white/20'}`}>현금 결제</button>
-                    <button type="button" onClick={() => setNewPaymentMethod('카드')} className={`flex-1 py-1.5 rounded border text-[10px] font-bold cursor-pointer transition-colors ${newPaymentMethod === '카드' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6]' : 'bg-[#0B1120] text-slate-400 border-white/20'}`}>카드 결제</button>
+                  {/* 💡 [UI 수정] 현금/카드 토글 버튼 CSS 수정하여 항상 표시되게 함 */}
+                  <div className="flex w-full items-center gap-2 pt-1 mt-1">
+                    <button type="button" onClick={() => setNewPaymentMethod('현금')} className={`flex-1 py-1.5 rounded-md border text-[11px] font-bold cursor-pointer transition-colors ${newPaymentMethod === '현금' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-sm' : 'bg-transparent text-slate-400 border-white/20 hover:border-white/40'}`}>현금 결제</button>
+                    <button type="button" onClick={() => setNewPaymentMethod('카드')} className={`flex-1 py-1.5 rounded-md border text-[11px] font-bold cursor-pointer transition-colors ${newPaymentMethod === '카드' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-sm' : 'bg-transparent text-slate-400 border-white/20 hover:border-white/40'}`}>카드 결제</button>
                   </div>
                 </div>
 
@@ -1028,6 +1033,7 @@ export default function App() {
                             <div className="flex items-center gap-2">
                               <div className="text-right pr-2 border-r border-white/10 mr-1">
                                 <span className="text-[10px] text-slate-400 block">총 청구액</span>
+                                {/* 💡 [금액 포맷] 콤마(,) 100% 적용 */}
                                 <span className="text-sm font-extrabold text-white">{r.totalClaimAmount.toLocaleString()}원</span>
                               </div>
                               <button onClick={() => handleOpenEditModal(r)} title="날짜 및 내역 수정" className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 transition-all cursor-pointer"><Edit2 className="w-3.5 h-3.5" /></button>
@@ -1116,7 +1122,7 @@ export default function App() {
                 <div className="space-y-3">
                   <input type="text" value={fixedDailyMemo} onChange={(e) => setFixedDailyMemo(e.target.value)} placeholder="예: 프로그램 일비 및 보험료" className="w-full px-3 py-2 rounded-lg text-xs" />
                   <div className="relative">
-                    <input type="text" value={fixedDailyExp} onChange={(e) => setFixedDailyExp(formatNumberWithComma(e.target.value))} placeholder="차감 금액 (예: 3200)" className="w-full px-3 py-2 rounded-lg text-xs text-right pr-6" />
+                    <input type="text" value={fixedDailyExp} onChange={(e) => setFixedDailyExp(formatNumberWithComma(e.target.value))} placeholder="차감 금액 (예: 3,200)" className="w-full px-3 py-2 rounded-lg text-xs text-right pr-6" />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">원</span>
                   </div>
                   <button onClick={handleApplyFixedExpenses} className="w-full py-2.5 bg-white/10 hover:bg-[#38BDF8]/20 text-[#38BDF8] border border-[#38BDF8]/30 font-bold rounded-lg text-xs cursor-pointer transition-colors shadow-sm">
@@ -1683,6 +1689,7 @@ export default function App() {
         </div>
       )}
 
+      {/* 💡 [결제수단 호환] 운행 일지 수정 모달 */}
       {editingRecord && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="w-full max-w-sm glass-card rounded-2xl p-6 shadow-2xl relative">
@@ -1701,9 +1708,9 @@ export default function App() {
               <div className="p-3.5 rounded-xl bg-white/5 border border-white/10 space-y-2">
                 <label className="block text-[11px] font-semibold text-slate-300">대납 주유비</label>
                 <input type="text" value={editFuel} onChange={(e) => setEditFuel(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" />
-                <div className="flex items-center gap-2 pt-1">
-                  <button type="button" onClick={() => setEditPaymentMethod('현금')} className={`flex-1 py-1.5 rounded border text-[10px] font-bold cursor-pointer transition-colors ${editPaymentMethod === '현금' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6]' : 'bg-[#0B1120] text-slate-400 border-white/20'}`}>현금 결제</button>
-                  <button type="button" onClick={() => setEditPaymentMethod('카드')} className={`flex-1 py-1.5 rounded border text-[10px] font-bold cursor-pointer transition-colors ${editPaymentMethod === '카드' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6]' : 'bg-[#0B1120] text-slate-400 border-white/20'}`}>카드 결제</button>
+                <div className="flex items-center gap-2 pt-1 mt-1">
+                  <button type="button" onClick={() => setEditPaymentMethod('현금')} className={`flex-1 py-1.5 rounded-md border text-[11px] font-bold cursor-pointer transition-colors ${editPaymentMethod === '현금' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-sm' : 'bg-transparent text-slate-400 border-white/20 hover:border-white/40'}`}>현금 결제</button>
+                  <button type="button" onClick={() => setEditPaymentMethod('카드')} className={`flex-1 py-1.5 rounded-md border text-[11px] font-bold cursor-pointer transition-colors ${editPaymentMethod === '카드' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-sm' : 'bg-transparent text-slate-400 border-white/20 hover:border-white/40'}`}>카드 결제</button>
                 </div>
               </div>
 
