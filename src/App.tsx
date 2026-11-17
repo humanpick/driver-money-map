@@ -88,7 +88,7 @@ interface DrivingRecord {
   fuelAmount: number; extraExpenseAmount: number; tipAmount: number; 
   isGrossPaid: boolean; isExpensePaid: boolean;
   netAmount: number; totalClaimAmount: number;
-  paymentMethod?: '현금' | '카드'; // 💡 [신규] 결제 수단 타입 추가
+  paymentMethod?: '현금' | '카드'; // 결제 수단 추가
 }
 interface ExpenseRecord { id: string; date: string; category: string; amount: number; memo: string; }
 interface BankAccount { id: string; bankName: string; accountNumber: string; holder: string; }
@@ -153,6 +153,7 @@ export default function App() {
   const [customDate, setCustomDate] = useState<string>(() => getTodayKST());
   const [analyticsMode, setAnalyticsMode] = useState<'month' | 'year'>('month');
   const [analyticsYear, setAnalyticsYear] = useState<string>(new Date().getFullYear().toString());
+
   const [tradeFilter, setTradeFilter] = useState<'전체' | 'S등급' | 'A등급' | '수도권' | '충청권' | '영남권' | '호남권'>('전체');
 
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -168,7 +169,7 @@ export default function App() {
   const [editDeparture, setEditDeparture] = useState(''); const [editDestination, setEditDestination] = useState('');
   const [editGross, setEditGross] = useState(''); const [editFuel, setEditFuel] = useState('');
   const [editExtra, setEditExtra] = useState(''); const [editTip, setEditTip] = useState('');
-  const [editPaymentMethod, setEditPaymentMethod] = useState<'현금' | '카드'>('현금'); // 💡 모달 결제 수단
+  const [editPaymentMethod, setEditPaymentMethod] = useState<'현금' | '카드'>('현금'); 
 
   const [claimModalOpen, setClaimModalOpen] = useState(false);
   const [selectedClaimRecord, setSelectedClaimRecord] = useState<DrivingRecord | null>(null);
@@ -208,7 +209,7 @@ export default function App() {
   const [newDeparture, setNewDeparture] = useState(''); const [newDestination, setNewDestination] = useState('');
   const [newGross, setNewGross] = useState(''); const [newFeeRate, setNewFeeRate] = useState('20');
   const [newFuel, setNewFuel] = useState(''); const [newExtraExpense, setNewExtraExpense] = useState(''); const [newTip, setNewTip] = useState('');
-  const [newPaymentMethod, setNewPaymentMethod] = useState<'현금' | '카드'>('현금'); // 💡 [신규] 기본값 현금 적용
+  const [newPaymentMethod, setNewPaymentMethod] = useState<'현금' | '카드'>('현금'); 
   
   const [expCategory, setExpCategory] = useState('대중교통'); const [expAmount, setExpAmount] = useState(''); const [expMemo, setExpMemo] = useState('');
   const [bankName, setBankName] = useState(''); const [accountNumber, setAccountNumber] = useState(''); const [holder, setHolder] = useState('');
@@ -278,7 +279,7 @@ export default function App() {
         id: r.id, date: r.date, startTime: r.start_time || '-', endTime: r.end_time || '-', departure: r.departure, destination: r.destination,
         grossAmount: Number(r.gross_amount), feeRate: Number(r.fee_rate), fuelAmount: Number(r.fuel_amount), extraExpenseAmount: Number(r.extra_expense_amount),
         tipAmount: Number(r.tip_amount), isGrossPaid: Boolean(r.is_gross_paid), isExpensePaid: Boolean(r.is_expense_paid), netAmount: Number(r.net_amount), totalClaimAmount: Number(r.total_claim_amount),
-        paymentMethod: r.payment_method || '현금', // 💡 DB에서 결제수단 호출 (없으면 현금)
+        paymentMethod: r.payment_method || '현금', 
       })));
     }
 
@@ -314,7 +315,7 @@ export default function App() {
       setAdminAllRecords(allRecs.map((r: any) => ({ 
         id: r.id, userId: r.user_id, date: r.date, startTime: r.start_time || '-', endTime: r.end_time || '-', departure: r.departure, destination: r.destination, 
         grossAmount: Number(r.gross_amount), fuelAmount: Number(r.fuel_amount), feeRate: Number(r.fee_rate), extraExpenseAmount: Number(r.extra_expense_amount), tipAmount: Number(r.tip_amount), isGrossPaid: Boolean(r.is_gross_paid), isExpensePaid: Boolean(r.is_expense_paid), netAmount: Number(r.net_amount), totalClaimAmount: Number(r.total_claim_amount),
-        paymentMethod: r.payment_method || '현금',
+        paymentMethod: r.payment_method || '현금' 
       })));
     }
   };
@@ -413,7 +414,6 @@ export default function App() {
     const net = gross - (gross * (feeRate / 100)) + tip; const claimTotal = gross + fuel + extraExp;
     const recordId = 'rec_' + Date.now().toString();
 
-    // 💡 [결제수단 적용] payload에 payment_method 저장
     const payload = { 
       id: recordId, user_id: session.user.id, date: newDate, start_time: newStartTime || '-', end_time: newEndTime || '-', departure: newDeparture, destination: newDestination, 
       gross_amount: gross, fee_rate: feeRate, fuel_amount: fuel, extra_expense_amount: extraExp, tip_amount: tip, 
@@ -421,16 +421,13 @@ export default function App() {
       payment_method: newPaymentMethod 
     };
     
-    // UI에 즉각 반영
     const newRecord: DrivingRecord = { ...payload, startTime: payload.start_time, endTime: payload.end_time, grossAmount: gross, feeRate, fuelAmount: fuel, extraExpenseAmount: extraExp, tipAmount: tip, isGrossPaid: false, isExpensePaid: false, netAmount: Math.round(net), totalClaimAmount: Math.round(claimTotal), paymentMethod: newPaymentMethod };
     
-    // DB 업데이트 시도 (payment_method 컬럼이 없어서 에러가 나면 해당 컬럼 뺀 버전으로 저장 fallback)
     const { error } = await supabase.from('driving_records').insert([payload]);
     
     if (error && error.message.includes('payment_method')) {
-       // Supabase 테이블에 컬럼이 미생성된 경우 에러를 우회하여 기존 포맷으로 저장
        const fallbackPayload = { ...payload };
-       delete fallbackPayload.payment_method;
+       delete (fallbackPayload as any).payment_method;
        await supabase.from('driving_records').insert([fallbackPayload]);
     } else if (error) {
        console.error(error);
@@ -527,7 +524,7 @@ export default function App() {
     setEditDeparture(r.departure); setEditDestination(r.destination);
     setEditGross(formatNumberWithComma(r.grossAmount)); setEditFuel(formatNumberWithComma(r.fuelAmount));
     setEditExtra(formatNumberWithComma(r.extraExpenseAmount)); setEditTip(formatNumberWithComma(r.tipAmount));
-    setEditPaymentMethod(r.paymentMethod || '현금'); // 💡 모달에도 상태 주입
+    setEditPaymentMethod(r.paymentMethod || '현금'); 
   };
 
   const handleUpdateRecord = async (e: React.FormEvent) => {
@@ -544,10 +541,9 @@ export default function App() {
 
     let error = (await supabase.from('driving_records').update(payload).eq('id', editingRecord.id)).error;
     
-    // 컬럼 없을경우 대비 fallback
     if(error && error.message.includes('payment_method')) {
       const fallbackPayload = { ...payload };
-      delete fallbackPayload.payment_method;
+      delete (fallbackPayload as any).payment_method;
       error = (await supabase.from('driving_records').update(fallbackPayload).eq('id', editingRecord.id)).error;
     }
 
@@ -724,11 +720,6 @@ export default function App() {
   const monthlyNet = monthlyRecords.reduce((acc, cur) => acc + cur.netAmount, 0);
   const monthlyExpense = monthlyExpenses.reduce((acc, cur) => acc + cur.amount, 0);
   const monthlyProfit = monthlyNet - monthlyExpense;
-
-  const getElapsedDays = (recordDate: string) => {
-    const today = new Date(todayKstStr); const target = new Date(recordDate);
-    return Math.floor((today.getTime() - target.getTime()) / (1000 * 60 * 60 * 24));
-  };
 
   const targetIncNum = cleanNumber(targetIncome) || 0;
   const targetDaysNum = cleanNumber(targetDays) || 0;
@@ -940,7 +931,6 @@ export default function App() {
                   </label>
                   <input type="text" placeholder="선결제한 주유 금액" value={newFuel} onChange={(e) => setNewFuel(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2 rounded-lg text-right" />
                   
-                  {/* 💡 [결제수단 스위치 UI 추가] */}
                   <div className="flex items-center gap-2 pt-1">
                     <button type="button" onClick={() => setNewPaymentMethod('현금')} className={`flex-1 py-1.5 rounded border text-[10px] font-bold cursor-pointer transition-colors ${newPaymentMethod === '현금' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6]' : 'bg-[#0B1120] text-slate-400 border-white/20'}`}>현금 결제</button>
                     <button type="button" onClick={() => setNewPaymentMethod('카드')} className={`flex-1 py-1.5 rounded border text-[10px] font-bold cursor-pointer transition-colors ${newPaymentMethod === '카드' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6]' : 'bg-[#0B1120] text-slate-400 border-white/20'}`}>카드 결제</button>
@@ -1031,7 +1021,6 @@ export default function App() {
                               <span>탁송료: <strong className="text-white">{r.grossAmount.toLocaleString()}원</strong></span>
                               {r.fuelAmount > 0 && <span className="text-[#8B5CF6] font-semibold flex items-center gap-1"><Fuel className="w-3 h-3" /> 
                                 대납: {expenseTotal.toLocaleString()}원 
-                                {/* 💡 운행 일지 리스트 결제 수단 라벨 */}
                                 <span className="ml-1.5 px-1 py-0.5 bg-white/10 text-slate-300 rounded text-[9px] font-bold">{r.paymentMethod || '현금'}</span>
                               </span>}
                               <span className="text-[#38BDF8] font-semibold">순수입: +{r.netAmount.toLocaleString()}원</span>
@@ -1694,7 +1683,6 @@ export default function App() {
         </div>
       )}
 
-      {/* 💡 [결제수단 호환] 운행 일지 수정 모달 */}
       {editingRecord && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="w-full max-w-sm glass-card rounded-2xl p-6 shadow-2xl relative">
