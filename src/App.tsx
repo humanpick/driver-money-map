@@ -93,8 +93,8 @@ interface ExpenseRecord { id: string; date: string; category: string; amount: nu
 interface BankAccount { id: string; bankName: string; accountNumber: string; holder: string; }
 interface MemberProfile { id: string; email: string; name: string; phone: string; role: string; createdAt: string; lastLoginAt?: string; loginCount?: number; recordCount?: number; monthlyGross?: number; }
 interface NoticeItem { id: string; title: string; content: string; isActive: boolean; updatedAt?: string; }
+interface MonthlyFixed { id: string; memo: string; amount: number; }
 
-// 💡 매매단지 18대 핵심 거점 (완전체 유지)
 const TRADE_CENTERS = [
   { id: '1', name: '수원 도이치오토월드', tier: 'S', region: '수도권', addr: '경기 수원시 권선구 권선로 308-5', desc: '전국 최대 실내 복합단지.' },
   { id: '2', name: '수원 SK V1 모터스', tier: 'S', region: '수도권', addr: '경기 수원시 권선구 평동로79번길 45', desc: '도이치오토월드 옆.' },
@@ -116,7 +116,6 @@ const TRADE_CENTERS = [
   { id: '18', name: '전주 월드컵매매단지', tier: 'B', region: '호남권', addr: '전북 전주시 덕진구 온고을로 860', desc: '전북권 핵심 거점.' }
 ];
 
-// 💡 9대 메가 경매장 스케줄 (완전체 유지)
 const AUCTION_SCHEDULES = [
   { day: '월요일', hex: '#38BDF8', locations: [
     { name: '안성 롯데렌탈', tier: 'S', addr: '내가천리 12', tag: '롯데' }, 
@@ -187,13 +186,10 @@ export default function App() {
   const [editExtra, setEditExtra] = useState(''); const [editTip, setEditTip] = useState('');
   const [editPaymentMethod, setEditPaymentMethod] = useState<'현금' | '카드'>('현금'); 
 
-  // 💡 [버그 픽스] 청구 팝업 관리 변수 완벽 복구
   const [claimModalOpen, setClaimModalOpen] = useState(false);
   const [selectedClaimRecord, setSelectedClaimRecord] = useState<DrivingRecord | null>(null);
-  const [includeGross, setIncludeGross] = useState(true); 
-  const [includeFuel, setIncludeFuel] = useState(true);
-  const [includeExtra, setIncludeExtra] = useState(true); 
-  const [claimMessageText, setClaimMessageText] = useState('');
+  const [includeGross, setIncludeGross] = useState(true); const [includeFuel, setIncludeFuel] = useState(true);
+  const [includeExtra, setIncludeExtra] = useState(true); const [claimMessageText, setClaimMessageText] = useState('');
   
   const [records, setRecords] = useState<DrivingRecord[]>([]);
   const [selectedRecordIds, setSelectedRecordIds] = useState<string[]>([]);
@@ -247,18 +243,18 @@ export default function App() {
     try { const s = localStorage.getItem('jundriver_target_v2'); if (s) { const parsed = JSON.parse(s); return parsed.days ? String(parsed.days) : '25'; } } catch (e) {}
     return '25';
   });
-  const [fixedDailyExp, setFixedDailyExp] = useState<string>(() => {
-    try { const s = localStorage.getItem('jundriver_fixed_exp_v2'); if (s) { const parsed = JSON.parse(s); return parsed.amount !== undefined ? String(parsed.amount) : '3,200'; } } catch (e) {}
-    return '3,200';
+
+  // 💡 [기능 업그레이드] 매월 고정비 리스트 상태 관리
+  const [monthlyFixedItems, setMonthlyFixedItems] = useState<MonthlyFixed[]>(() => {
+    try { const s = localStorage.getItem('jundriver_monthly_fixed_v1'); if (s) { const parsed = JSON.parse(s); if (Array.isArray(parsed)) return parsed; } } catch (e) {}
+    return [];
   });
-  const [fixedDailyMemo, setFixedDailyMemo] = useState<string>(() => {
-    try { const s = localStorage.getItem('jundriver_fixed_exp_v2'); if (s) { const parsed = JSON.parse(s); return parsed.memo ? String(parsed.memo) : '일비 및 보험료'; } } catch (e) {}
-    return '일비 및 보험료';
-  });
+  const [newMonthlyMemo, setNewMonthlyMemo] = useState('');
+  const [newMonthlyAmount, setNewMonthlyAmount] = useState('');
 
   useEffect(() => { localStorage.setItem('jundriver_accounts_v2', JSON.stringify(accounts)); }, [accounts]);
   useEffect(() => { localStorage.setItem('jundriver_target_v2', JSON.stringify({ income: targetIncome, days: targetDays })); }, [targetIncome, targetDays]);
-  useEffect(() => { localStorage.setItem('jundriver_fixed_exp_v2', JSON.stringify({ amount: fixedDailyExp, memo: fixedDailyMemo })); }, [fixedDailyExp, fixedDailyMemo]);
+  useEffect(() => { localStorage.setItem('jundriver_monthly_fixed_v1', JSON.stringify(monthlyFixedItems)); }, [monthlyFixedItems]);
 
   useEffect(() => {
     setSelectedRecordIds([]);
@@ -449,19 +445,25 @@ export default function App() {
   const handleAddExpense = async (e: React.FormEvent) => { e.preventDefault(); const cleanAmt = cleanNumber(expAmount); if (!cleanAmt || !session) return; const expenseId = 'exp_' + Date.now().toString(); const { error } = await supabase.from('expenses').insert([{ id: expenseId, user_id: session.user.id, date: newDate, category: expCategory, amount: cleanAmt, memo: expMemo }]); if (!error) { const updatedExp = [{ id: expenseId, date: newDate, category: expCategory, amount: cleanAmt, memo: expMemo }, ...expenses]; updatedExp.sort((a, b) => a.date.localeCompare(b.date)); setExpenses(updatedExp); setExpAmount(''); setExpMemo(''); } };
   const handleDeleteExpense = async (id: string) => { await supabase.from('expenses').delete().eq('id', id); setExpenses(expenses.filter((e) => e.id !== id)); };
   
-  const handleApplyFixedExpenses = async () => {
-    if (!session) return; const amount = cleanNumber(fixedDailyExp); if (amount <= 0 || !fixedDailyMemo.trim()) { alert('정확히 입력해주세요.'); return; }
-    const cmPrefix = customDate.substring(0, 7); const cmRecords = records.filter(r => (r.date || '').startsWith(cmPrefix));
-    const uniqueDates = Array.from(new Set(cmRecords.map(r => r.date))); const cmExpenses = expenses.filter(e => (e.date || '').startsWith(cmPrefix));
-    const datesWithExp = new Set(cmExpenses.filter(e => e.memo === fixedDailyMemo.trim()).map(e => e.date));
-    const datesToApply = uniqueDates.filter(d => !datesWithExp.has(d));
-    if (datesToApply.length === 0) { alert('이미 모두 반영되어 있습니다.'); return; }
-    if (!window.confirm(`${datesToApply.length}일치 고정비 일괄 등록하시겠습니까?`)) return;
+  // 💡 [기능 연동] 월 고정비 템플릿 장부에 일괄 적용
+  const handleAddMonthlyFixedItem = () => {
+    if (!newMonthlyMemo.trim() || !newMonthlyAmount) return; const amt = cleanNumber(newMonthlyAmount); if (amt <= 0) return;
+    setMonthlyFixedItems([...monthlyFixedItems, { id: Date.now().toString(), memo: newMonthlyMemo.trim(), amount: amt }]);
+    setNewMonthlyMemo(''); setNewMonthlyAmount('');
+  };
+  const handleDeleteMonthlyFixedItem = (id: string) => { setMonthlyFixedItems(monthlyFixedItems.filter(item => item.id !== id)); };
+  
+  const handleApplyMonthlyFixedExpenses = async () => {
+    if (!session) return; 
+    if (monthlyFixedItems.length === 0) { alert('등록된 월 고정비가 없습니다.'); return; }
+    const totalAmt = monthlyFixedItems.reduce((acc, cur) => acc + cur.amount, 0);
+    if (!window.confirm(`총 ${monthlyFixedItems.length}건의 월 고정비(합계 ${totalAmt.toLocaleString()}원)를 장부에 일괄 등록하시겠습니까?\n(등록일자: ${newDate})`)) return;
     try {
-      const newExpenses = datesToApply.map((date, idx) => ({ id: `exp_fixed_${Date.now()}_${idx}`, user_id: session.user.id, date: date, category: '기타', amount: amount, memo: fixedDailyMemo.trim() }));
-      await supabase.from('expenses').insert(newExpenses);
+      const newExpenses = monthlyFixedItems.map((item, idx) => ({ id: `exp_mfixed_${Date.now()}_${idx}`, user_id: session.user.id, date: newDate, category: '고정비', amount: item.amount, memo: item.memo }));
+      const { error } = await supabase.from('expenses').insert(newExpenses);
+      if (error) throw error;
       const updatedExp = [...newExpenses.map(e => ({...e, id: e.id, date: e.date, category: e.category, amount: e.amount, memo: e.memo})), ...expenses];
-      updatedExp.sort((a, b) => a.date.localeCompare(b.date)); setExpenses(updatedExp); alert('자동 등록 완료');
+      updatedExp.sort((a, b) => a.date.localeCompare(b.date)); setExpenses(updatedExp); alert('월 고정비가 장부에 일괄 등록되었습니다.');
     } catch (err: any) { alert('등록 실패: ' + err.message); }
   };
 
@@ -470,7 +472,6 @@ export default function App() {
   const handleUpdateMemberRole = async (memberId: string, newRole: string) => { if (currentUserRole !== 'super_admin') return; await supabase.from('profiles').update({ role: newRole }).eq('id', memberId); fetchAdminData(); };
   const handleExportAdminCSV = () => { if (adminAllRecords.length === 0) return; const headers = ['일자','출발지','도착지','운임','수수료율','주유비','결제수단','추가경비','팁','순수익','운임입금','대납입금']; const rows = adminAllRecords.map((r) => [r.date, `"${r.departure}"`, `"${r.destination}"`, r.grossAmount, `${r.feeRate}%`, r.fuelAmount, r.paymentMethod || '현금', r.extraExpenseAmount, r.tipAmount, r.netAmount, r.isGrossPaid ? '완료' : '미수금', r.isExpensePaid ? '완료' : '미수금']); const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n'); const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `JunDriver_운행내역.csv`; link.click(); };
 
-  // 💡 [버그 픽스] 청구 문자 생성 및 토글 로직 완전 복원
   const buildClaimText = (r: DrivingRecord, withGross: boolean, withFuel: boolean, withExtra: boolean) => {
     const pAcc = accounts[0] || { bankName: '은행', accountNumber: '계좌', holder: '예금주' }; const dPhone = formatPhoneNumber(currentUserProfile?.phone || session?.user?.user_metadata?.phone || ADMIN_DEFAULT_PHONE); const dName = currentUserProfile?.name || session?.user?.user_metadata?.name || ADMIN_DEFAULT_NAME;
     let total = 0; let iText = '';
@@ -723,7 +724,6 @@ export default function App() {
           </div>
         )}
 
-        {/* 💡 청구 관리 탭 (입금 취소 기능 유지, 문자 생성 팝업 정상 작동) */}
         {activeTab === 'claims' && (
           <div className="glass-card rounded-xl p-6 shadow-lg fade-in-text">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
@@ -770,6 +770,7 @@ export default function App() {
           </div>
         )}
 
+        {/* 💡 [신규 탑재] 매월 고정비 리스트 템플릿 장부 */}
         {activeTab === 'expense' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 fade-in-text">
             <div className="space-y-4">
@@ -783,11 +784,30 @@ export default function App() {
                   <button type="submit" className="w-full py-3 hp-primary-btn font-bold rounded-lg text-xs cursor-pointer mt-2">경비 등록하기</button>
                 </form>
               </div>
+              
               <div className="glass-card rounded-xl p-5 shadow-lg border-t-2 border-t-[#38BDF8]">
-                <h3 className="text-sm font-bold text-white mb-2 flex items-center gap-1.5"><Smartphone className="w-4 h-4 text-[#38BDF8]" /> 매일 나가는 고정비 세팅</h3>
-                <div className="space-y-3 mt-4"><input type="text" value={fixedDailyMemo} onChange={(e) => setFixedDailyMemo(e.target.value)} placeholder="예: 프로그램 일비 및 보험료" className="w-full px-3 py-2 rounded-lg text-xs" /><div className="relative"><input type="text" value={fixedDailyExp} onChange={(e) => setFixedDailyExp(formatNumberWithComma(e.target.value))} placeholder="차감 금액 (예: 3,200)" className="w-full px-3 py-2 rounded-lg text-xs text-right pr-6" /><span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">원</span></div><button onClick={handleApplyFixedExpenses} className="w-full py-2.5 bg-white/10 hover:bg-[#38BDF8]/20 text-[#38BDF8] border border-[#38BDF8]/30 font-bold rounded-lg text-xs cursor-pointer transition-colors shadow-sm">이번 달 운행일에 일괄 차감 적용</button></div>
+                <h3 className="text-sm font-bold text-white mb-2 flex items-center gap-1.5"><Smartphone className="w-4 h-4 text-[#38BDF8]" /> 매월 나가는 고정비 관리</h3>
+                <p className="text-[10px] text-slate-400 mb-3 leading-tight">보험료, 통신비, 프로그램비 등 매월 정기적으로 나가는 고정 지출을 템플릿으로 만들어 한 번에 장부에 등록하세요.</p>
+                <div className="flex gap-2 mb-3">
+                   <input type="text" value={newMonthlyMemo} onChange={(e) => setNewMonthlyMemo(e.target.value)} placeholder="예: 건당보험료" className="flex-1 px-2.5 py-2 rounded-lg text-xs" />
+                   <input type="text" value={newMonthlyAmount} onChange={(e) => setNewMonthlyAmount(formatNumberWithComma(e.target.value))} placeholder="금액" className="w-24 px-2.5 py-2 rounded-lg text-xs text-right" />
+                   <button onClick={handleAddMonthlyFixedItem} className="px-3 bg-[#38BDF8] text-[#0B1120] font-bold rounded-lg text-xs hover:bg-[#38BDF8]/80 cursor-pointer">+</button>
+                </div>
+                <div className="space-y-2 mb-4 max-h-[120px] overflow-y-auto pr-1 scrollbar-hide">
+                   {monthlyFixedItems.length === 0 ? <div className="text-[11px] text-slate-500 text-center py-2">등록된 고정비가 없습니다.</div> : monthlyFixedItems.map(item => (
+                     <div key={item.id} className="flex justify-between items-center bg-[#0B1120] px-3 py-2 rounded border border-white/5">
+                       <span className="text-[11px] text-slate-300 truncate max-w-[120px]">{item.memo}</span>
+                       <div className="flex items-center gap-2">
+                         <span className="text-[11px] font-bold text-white">{item.amount.toLocaleString()}원</span>
+                         <button onClick={() => handleDeleteMonthlyFixedItem(item.id)} className="text-slate-500 hover:text-[#EC4899] cursor-pointer"><X className="w-3 h-3" /></button>
+                       </div>
+                     </div>
+                   ))}
+                </div>
+                <button onClick={handleApplyMonthlyFixedExpenses} className="w-full py-2.5 bg-white/10 hover:bg-[#38BDF8]/20 text-[#38BDF8] border border-[#38BDF8]/30 font-bold rounded-lg text-xs cursor-pointer transition-colors shadow-sm">이번 달 장부에 일괄 등록 ({newDate} 기준)</button>
               </div>
             </div>
+            
             <div className="lg:col-span-2 glass-card rounded-xl p-6 shadow-lg h-fit">
               <h3 className="text-sm font-bold text-white mb-4">지출 내역 목록 ({expenses.length}건)</h3>
               <div className="space-y-2.5 max-h-[750px] overflow-y-auto pr-1">
@@ -1148,7 +1168,6 @@ export default function App() {
         </div>
       )}
 
-      {/* 💡 [복구 완료] 정산 청구 문자 생성 모달 부활 */}
       {claimModalOpen && selectedClaimRecord && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="w-full max-w-lg glass-card rounded-2xl p-6 shadow-2xl relative">
