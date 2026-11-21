@@ -17,6 +17,7 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 const ADMIN_DEFAULT_EMAIL = 'beat4989@naver.com';
 const ADMIN_DEFAULT_NAME = '김탁송';
 const ADMIN_DEFAULT_PHONE = '01091417586';
+const KAKAO_CHAT_URL = 'https://open.kakao.com/o/gshehyWi';
 
 const PLATFORMS = [
   { name: '로지', defaultFee: '20' },
@@ -243,7 +244,6 @@ export default function App() {
   const [newMonthlyAmount, setNewMonthlyAmount] = useState('');
   const [newMonthlyPlatform, setNewMonthlyPlatform] = useState('공통');
 
-  // 클라우드 동기화 완료 여부 플래그 (초기 로드 전 덮어쓰기 방지)
   const cloudSettingsLoadedRef = useRef(false);
 
   const syncUserSettingsToCloud = async (userId: string, partial: {
@@ -258,7 +258,6 @@ export default function App() {
   useEffect(() => { localStorage.setItem('jundriver_accounts_v2', JSON.stringify(accounts)); }, [accounts]);
   useEffect(() => { localStorage.setItem('jundriver_monthly_fixed_v1', JSON.stringify(monthlyFixedItems)); }, [monthlyFixedItems]);
 
-  // 목표 수익 & 출근 일수 변경 시 0.6초 디바운스 후 클라우드 자동 저장
   useEffect(() => {
     localStorage.setItem('jundriver_target_v2', JSON.stringify({ income: targetIncome, days: targetDays }));
     if (!session?.user?.id || !cloudSettingsLoadedRef.current) return;
@@ -299,7 +298,6 @@ export default function App() {
         ? 'approved'
         : (profile?.approval_status || userMeta?.approval_status || 'approved');
 
-    // 클라우드 설정 불러오기 (계좌, 목표수익, 월 고정비)
     if (profile) {
       if (Array.isArray(profile.bank_accounts) && profile.bank_accounts.length > 0) {
         setAccounts(profile.bank_accounts);
@@ -844,7 +842,10 @@ export default function App() {
               <button type="submit" disabled={authLoading} className="w-full py-3 hp-primary-btn font-bold text-sm rounded-lg cursor-pointer mt-2">{authLoading ? '처리 중...' : '동의하고 오픈베타 신청'}</button>
             </form>
           )}
-          <div className="mt-5 pt-3 border-t border-white/10 text-center">
+          <div className="mt-5 pt-3 border-t border-white/10 space-y-2.5 text-center">
+            <a href={KAKAO_CHAT_URL} target="_blank" rel="noopener noreferrer" className="w-full py-2.5 bg-[#FEE500] hover:bg-[#FDD835] text-[#191919] font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors">
+              <MessageSquare className="w-3.5 h-3.5" /> 탁송대리비서 소통방 입장하기
+            </a>
             <button type="button" onClick={() => setShowPrivacyModal(true)} className="text-[11px] text-slate-400 hover:text-[#38BDF8] underline cursor-pointer">개인정보 처리방침 보기</button>
           </div>
         </div>
@@ -883,6 +884,9 @@ export default function App() {
             <button onClick={() => session?.user && fetchUserData(session.user.id, session.user.email || '', session.user.user_metadata, session.user.created_at)} className="w-full py-3 hp-primary-btn font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 cursor-pointer">
               <RefreshCw className="w-4 h-4" /> 승인 상태 새로고침
             </button>
+            <a href={KAKAO_CHAT_URL} target="_blank" rel="noopener noreferrer" className="w-full py-3 bg-[#FEE500] hover:bg-[#FDD835] text-[#191919] font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors">
+              <MessageSquare className="w-4 h-4" /> 탁송대리비서 소통방 입장하기
+            </a>
             <button onClick={handleLogout} className="w-full py-2.5 bg-white/5 hover:bg-white/10 text-slate-300 font-semibold text-xs rounded-xl cursor-pointer">로그아웃</button>
           </div>
         </div>
@@ -1825,6 +1829,9 @@ export default function App() {
               <div className="flex justify-between items-center text-xs"><span className="text-slate-400">가입 구분</span><span className="text-slate-200 font-semibold">{currentUserProfile?.joinType === 'referral' ? `추천인(${currentUserProfile.referrer || '-'})` : `단톡방(${currentUserProfile?.kakaoId || '-'})`}</span></div>
             </div>
             <div className="flex flex-col gap-2">
+              <a href={KAKAO_CHAT_URL} target="_blank" rel="noopener noreferrer" className="w-full py-2.5 bg-[#FEE500] hover:bg-[#FDD835] text-[#191919] font-bold rounded-lg text-xs flex items-center justify-center gap-1.5 transition-colors">
+                <MessageSquare className="w-3.5 h-3.5" /> 탁송대리비서 소통방 입장하기
+              </a>
               <button onClick={() => setShowPrivacyModal(true)} className="w-full py-2.5 bg-white/5 hover:bg-white/10 text-slate-300 font-semibold rounded-lg text-xs cursor-pointer">개인정보 처리방침 및 탈퇴 안내</button>
               <button onClick={() => setShowProfileModal(false)} className="w-full py-2.5 hp-primary-btn font-bold rounded-lg text-xs cursor-pointer">닫기</button>
             </div>
