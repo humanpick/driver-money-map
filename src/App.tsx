@@ -14,11 +14,13 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-const APP_VERSION = '1.0.3';
+const APP_VERSION = '1.0.4';
 const ADMIN_DEFAULT_EMAIL = 'beat4989@naver.com';
 const ADMIN_DEFAULT_NAME = '김탁송';
 const ADMIN_DEFAULT_PHONE = '01091417586';
 const KAKAO_CHAT_URL = 'https://open.kakao.com/o/gshehyWi';
+const DRIVEON_CHANNEL_URL = 'http://pf.kakao.com/_lBEfn';
+const DRIVEON_REFERRER_TEXT = '공민준 (010-9141-7586)';
 
 const PLATFORMS = [
   { name: '로지', defaultFee: '20' },
@@ -98,6 +100,7 @@ interface MemberProfile {
   lastLoginAt?: string; loginCount?: number; recordCount?: number; monthlyGross?: number;
   joinType?: 'group' | 'referral'; kakaoId?: string; referrer?: string;
   approvalStatus?: 'pending' | 'approved'; marketingAgreed?: boolean;
+  driveonAppliedAt?: string;
 }
 interface NoticeItem { id: string; title: string; content: string; isActive: boolean; updatedAt?: string; }
 interface MonthlyFixed { id: string; memo: string; amount: number; platform?: string; }
@@ -171,7 +174,6 @@ export default function App() {
           return;
         }
 
-        // 같은 서버 버전에 대해 이미 1번 새로고침을 시도했다면 무한 루프 방지
         const lastAttempted = sessionStorage.getItem('app_reloaded_version');
         if (lastAttempted === serverVersion) return;
 
@@ -288,6 +290,7 @@ export default function App() {
   const [adminSearchTerm, setAdminSearchTerm] = useState('');
   const [showScoutOnly, setShowScoutOnly] = useState(false);
   const [showPendingOnly, setShowPendingOnly] = useState(false);
+  const [showDriveOnOnly, setShowDriveOnOnly] = useState(false);
 
   const [newDate, setNewDate] = useState<string>(() => getTodayKST());
   const [newPlatform, setNewPlatform] = useState<string>('로지');
@@ -330,6 +333,25 @@ export default function App() {
   }) => {
     if (!userId) return;
     await supabase.from('profiles').update(partial).eq('id', userId);
+  };
+
+  // 드라이브온 가입 신청 (추천인 문구 자동복사 + 관제탑 기록 + 카카오채널 이동)
+  const handleDriveOnApply = async () => {
+    const applyMsg = `[탁송대리비서 앱 추천]\n안녕하세요! 탁송/대리 보험 및 드라이브온 소속 가입 상담 요청드립니다.\n• 추천인: ${DRIVEON_REFERRER_TEXT}`;
+    try {
+      await navigator.clipboard.writeText(applyMsg);
+    } catch (e) {}
+
+    if (session?.user?.id) {
+      const nowIso = new Date().toISOString();
+      try {
+        await supabase.from('profiles').update({ driveon_applied_at: nowIso }).eq('id', session.user.id);
+        setCurrentUserProfile(prev => prev ? { ...prev, driveonAppliedAt: nowIso.substring(0, 16).replace('T', ' ') } : prev);
+      } catch (e) {}
+    }
+
+    alert(`추천인(${DRIVEON_REFERRER_TEXT}) 문구가 자동 복사되었습니다!\n열리는 드라이브온 카카오채널 채팅창에 '붙여넣기 → 전송'만 해주세요.`);
+    window.open(DRIVEON_CHANNEL_URL, '_blank', 'noopener,noreferrer');
   };
 
   useEffect(() => { localStorage.setItem('jundriver_accounts_v2', JSON.stringify(accounts)); }, [accounts]);
@@ -414,6 +436,7 @@ export default function App() {
       lastLoginAt: profilePayload.last_login_at, loginCount: profilePayload.login_count,
       joinType: profilePayload.join_type, kakaoId: profilePayload.kakao_id, referrer: profilePayload.referrer,
       approvalStatus: resolvedApproval, marketingAgreed: profilePayload.marketing_agreed,
+      driveonAppliedAt: profile?.driveon_applied_at ? profile.driveon_applied_at.substring(0, 16).replace('T', ' ') : undefined,
     });
 
     if (resolvedApproval === 'pending') return;
@@ -451,6 +474,7 @@ export default function App() {
           loginCount: p.login_count || 0, recordCount: userRecords.length, monthlyGross: monthlyGross,
           joinType: p.join_type || 'group', kakaoId: p.kakao_id || '', referrer: p.referrer || '',
           approvalStatus: p.approval_status || 'approved', marketingAgreed: Boolean(p.marketing_agreed),
+          driveonAppliedAt: p.driveon_applied_at ? p.driveon_applied_at.substring(0, 16).replace('T', ' ') : undefined,
         };
       }));
       setAdminAllRecords(allRecs.map((r: any) => ({
@@ -737,6 +761,7 @@ export default function App() {
   const totalUnpaidAmount = unpaidRecords.reduce((acc, r) => acc + (!r.isGrossPaid ? r.grossAmount : 0) + (!r.isExpensePaid ? (r.fuelAmount + r.extraExpenseAmount) : 0), 0);
   const isAdminUser = currentUserRole === 'super_admin' || currentUserRole === 'manager';
   const pendingCount = adminMemberList.filter(m => m.approvalStatus === 'pending').length;
+  const driveOnCount = adminMemberList.filter(m => Boolean(m.driveonAppliedAt)).length;
 
   const monthlyRecords = records.filter((r) => (r.date || '').startsWith(currentMonthPrefix));
   const monthlyExpenses = expenses.filter((e) => (e.date || '').startsWith(currentMonthPrefix));
@@ -781,6 +806,7 @@ export default function App() {
     const isAce = (m.monthlyGross || 0) >= 1500000 || (m.recordCount || 0) >= 10;
     if (showPendingOnly && m.approvalStatus !== 'pending') return false;
     if (showScoutOnly && !isAce) return false;
+    if (showDriveOnOnly && !m.driveonAppliedAt) return false;
     return matchesSearch;
   });
 
@@ -919,11 +945,14 @@ export default function App() {
               <button type="submit" disabled={authLoading} className="w-full py-3 hp-primary-btn font-bold text-sm rounded-lg cursor-pointer mt-2">{authLoading ? '처리 중...' : '동의하고 오픈베타 신청'}</button>
             </form>
           )}
-          <div className="mt-5 pt-3 border-t border-white/10 space-y-2.5 text-center">
+          <div className="mt-5 pt-3 border-t border-white/10 space-y-2 text-center">
             <a href={KAKAO_CHAT_URL} target="_blank" rel="noopener noreferrer" className="w-full py-2.5 bg-[#FEE500] hover:bg-[#FDD835] text-[#191919] font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors">
               <MessageSquare className="w-3.5 h-3.5" /> 탁송대리비서 소통방 입장하기
             </a>
-            <button type="button" onClick={() => setShowPrivacyModal(true)} className="text-[11px] text-slate-400 hover:text-[#38BDF8] underline cursor-pointer">개인정보 처리방침 보기</button>
+            <button type="button" onClick={handleDriveOnApply} className="w-full py-2.5 bg-[#38BDF8]/15 hover:bg-[#38BDF8]/25 text-[#38BDF8] border border-[#38BDF8]/40 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors">
+              <Sparkles className="w-3.5 h-3.5" /> 탁송의신 입장 · 드라이브온 가입 신청
+            </button>
+            <button type="button" onClick={() => setShowPrivacyModal(true)} className="text-[11px] text-slate-400 hover:text-[#38BDF8] underline cursor-pointer pt-1">개인정보 처리방침 보기</button>
           </div>
         </div>
       </div>
@@ -964,6 +993,9 @@ export default function App() {
             <a href={KAKAO_CHAT_URL} target="_blank" rel="noopener noreferrer" className="w-full py-3 bg-[#FEE500] hover:bg-[#FDD835] text-[#191919] font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors">
               <MessageSquare className="w-4 h-4" /> 탁송대리비서 소통방 입장하기
             </a>
+            <button type="button" onClick={handleDriveOnApply} className="w-full py-3 bg-[#38BDF8]/15 hover:bg-[#38BDF8]/25 text-[#38BDF8] border border-[#38BDF8]/40 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 cursor-pointer transition-colors">
+              <Sparkles className="w-4 h-4" /> 탁송의신 입장 · 드라이브온 가입 신청
+            </button>
             <button onClick={handleLogout} className="w-full py-2.5 bg-white/5 hover:bg-white/10 text-slate-300 font-semibold text-xs rounded-xl cursor-pointer">로그아웃</button>
           </div>
         </div>
@@ -1654,11 +1686,14 @@ export default function App() {
               <div className="glass-card p-5 sm:p-6 rounded-xl space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2">
                   <input type="text" placeholder="이름 / 연락처 / 단톡방 닉네임 / 추천인 검색..." value={adminSearchTerm} onChange={(e) => setAdminSearchTerm(e.target.value)} className="px-3 py-2.5 rounded-lg text-xs w-full sm:max-w-xs" />
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <button onClick={() => setShowPendingOnly(!showPendingOnly)} className={`w-full sm:w-auto px-4 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${showPendingOnly ? 'bg-[#EC4899] text-white shadow-[0_0_15px_rgba(236,72,153,0.5)]' : 'bg-[#0B1120] text-slate-400 border border-white/10 hover:border-[#EC4899]/50'}`}>
+                  <div className="flex flex-wrap gap-2">
+                    <button onClick={() => setShowPendingOnly(!showPendingOnly)} className={`flex-1 sm:flex-none px-3.5 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${showPendingOnly ? 'bg-[#EC4899] text-white shadow-[0_0_15px_rgba(236,72,153,0.5)]' : 'bg-[#0B1120] text-slate-400 border border-white/10 hover:border-[#EC4899]/50'}`}>
                       <ShieldAlert className="w-4 h-4" /> 승인 대기만 ({pendingCount})
                     </button>
-                    <button onClick={() => setShowScoutOnly(!showScoutOnly)} className={`w-full sm:w-auto px-4 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${showScoutOnly ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-[0_0_15px_rgba(245,158,11,0.5)] border-0' : 'bg-[#0B1120] text-slate-400 border border-white/10 hover:border-amber-500/50'}`}>
+                    <button onClick={() => setShowDriveOnOnly(!showDriveOnOnly)} className={`flex-1 sm:flex-none px-3.5 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${showDriveOnOnly ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_15px_rgba(56,189,248,0.5)]' : 'bg-[#0B1120] text-slate-400 border border-white/10 hover:border-[#38BDF8]/50'}`}>
+                      <Sparkles className="w-4 h-4" /> 드라이브온 신청 ({driveOnCount})
+                    </button>
+                    <button onClick={() => setShowScoutOnly(!showScoutOnly)} className={`flex-1 sm:flex-none px-3.5 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${showScoutOnly ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-[0_0_15px_rgba(245,158,11,0.5)] border-0' : 'bg-[#0B1120] text-slate-400 border border-white/10 hover:border-amber-500/50'}`}>
                       <Award className="w-4 h-4" /> 🏆 에이스 기사만
                     </button>
                   </div>
@@ -1675,6 +1710,7 @@ export default function App() {
                             <div className="text-white font-bold flex flex-wrap items-center gap-1.5 text-sm">
                               {m.name || '미입력'}
                               {isPending && <span className="px-1.5 py-0.5 bg-[#EC4899] text-white text-[9px] rounded font-extrabold">승인대기</span>}
+                              {m.driveonAppliedAt && <span className="px-1.5 py-0.5 bg-[#38BDF8]/20 text-[#38BDF8] border border-[#38BDF8]/40 text-[9px] rounded font-extrabold">드라이브온 신청</span>}
                               {isAce && <span className="px-1.5 py-0.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[9px] rounded font-extrabold">🏆 에이스</span>}
                             </div>
                             <div className="font-mono text-[#38BDF8] text-[11px] mt-0.5">{formatPhoneNumber(m.phone) || '번호없음'}</div>
@@ -1688,6 +1724,9 @@ export default function App() {
                           <span className="text-slate-400">{m.joinType === 'referral' ? '지인추천' : '단톡방'}</span>
                           <span className="font-bold text-[#38BDF8]">{m.joinType === 'referral' ? (m.referrer || '-') : (m.kakaoId || '-')}</span>
                         </div>
+                        {m.driveonAppliedAt && (
+                          <div className="text-[10px] text-[#38BDF8] font-mono">드라이브온 신청일시: {m.driveonAppliedAt}</div>
+                        )}
                         <div className="flex flex-col gap-2 pt-1">
                           {isPending ? (
                             <button onClick={() => handleUpdateApprovalStatus(m.id, 'approved')} className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold cursor-pointer">✔ 오픈베타 승인하기</button>
@@ -1711,7 +1750,14 @@ export default function App() {
                         const isPending = m.approvalStatus === 'pending';
                         return (
                           <tr key={m.id} className={`transition-all ${isPending ? 'bg-[#EC4899]/10 hover:bg-[#EC4899]/15' : isAce ? 'bg-amber-500/5 hover:bg-amber-500/10' : 'hover:bg-white/5'}`}>
-                            <td className="p-3"><div className="text-white font-bold flex items-center gap-1.5">{m.name || '미입력'} {isAce && <span className="px-1.5 py-0.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[9px] rounded font-extrabold shadow-sm">🏆 에이스</span>}</div><div className="font-mono text-[#38BDF8] text-[11px] mt-1">{formatPhoneNumber(m.phone) || '번호없음'}</div></td>
+                            <td className="p-3">
+                              <div className="text-white font-bold flex items-center gap-1.5">
+                                {m.name || '미입력'}
+                                {m.driveonAppliedAt && <span className="px-1.5 py-0.5 bg-[#38BDF8]/20 text-[#38BDF8] border border-[#38BDF8]/40 text-[9px] rounded font-extrabold" title={`신청일시: ${m.driveonAppliedAt}`}>드라이브온</span>}
+                                {isAce && <span className="px-1.5 py-0.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[9px] rounded font-extrabold shadow-sm">🏆 에이스</span>}
+                              </div>
+                              <div className="font-mono text-[#38BDF8] text-[11px] mt-1">{formatPhoneNumber(m.phone) || '번호없음'}</div>
+                            </td>
                             <td className="p-3 text-center">
                               <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${m.joinType === 'referral' ? 'bg-[#8B5CF6]/20 text-[#8B5CF6]' : 'bg-[#38BDF8]/20 text-[#38BDF8]'}`}>{m.joinType === 'referral' ? '지인추천' : '단톡방'}</span>
                               <div className="text-white font-semibold mt-1">{m.joinType === 'referral' ? (m.referrer || '-') : (m.kakaoId || '-')}</div>
@@ -1915,7 +1961,10 @@ export default function App() {
               <a href={KAKAO_CHAT_URL} target="_blank" rel="noopener noreferrer" className="w-full py-2.5 bg-[#FEE500] hover:bg-[#FDD835] text-[#191919] font-bold rounded-lg text-xs flex items-center justify-center gap-1.5 transition-colors">
                 <MessageSquare className="w-3.5 h-3.5" /> 탁송대리비서 소통방 입장하기
               </a>
-              <button onClick={() => { sessionStorage.removeItem('app_reloaded_version'); forceClearAndReload(); }} className="w-full py-2.5 bg-[#38BDF8]/15 hover:bg-[#38BDF8]/25 text-[#38BDF8] border border-[#38BDF8]/30 font-bold rounded-lg text-xs flex items-center justify-center gap-1.5 cursor-pointer">
+              <button type="button" onClick={handleDriveOnApply} className="w-full py-2.5 bg-[#38BDF8]/15 hover:bg-[#38BDF8]/25 text-[#38BDF8] border border-[#38BDF8]/40 font-bold rounded-lg text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors">
+                <Sparkles className="w-3.5 h-3.5" /> 탁송의신 입장 · 드라이브온 가입 신청
+              </button>
+              <button onClick={() => { sessionStorage.removeItem('app_reloaded_version'); forceClearAndReload(); }} className="w-full py-2.5 bg-white/10 hover:bg-white/20 text-slate-200 font-bold rounded-lg text-xs flex items-center justify-center gap-1.5 cursor-pointer">
                 <RefreshCw className="w-3.5 h-3.5" /> 최신 버전 강제 새로고침
               </button>
               <button onClick={() => setShowPrivacyModal(true)} className="w-full py-2.5 bg-white/5 hover:bg-white/10 text-slate-300 font-semibold rounded-lg text-xs cursor-pointer">개인정보 처리방침 및 탈퇴 안내</button>
