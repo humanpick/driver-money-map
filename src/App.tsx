@@ -156,16 +156,27 @@ export default function App() {
 
   const forceUpdateChannelRef = useRef<any>(null);
 
-  // [강제 업데이트 1번] version.json 자동 감지 (앱 실행 및 다른 앱에서 복귀 시)
+  // [강제 업데이트 1번 + 무한 새로고침 방지 안전장치] version.json 자동 감지
   useEffect(() => {
     const checkServerVersion = async () => {
       try {
         const res = await fetch(`/version.json?t=${Date.now()}`, { cache: 'no-store' });
         if (!res.ok) return;
         const data = await res.json();
-        if (data?.version && data.version !== APP_VERSION) {
-          await forceClearAndReload();
+        const serverVersion = data?.version;
+        if (!serverVersion) return;
+
+        if (serverVersion === APP_VERSION) {
+          sessionStorage.removeItem('app_reloaded_version');
+          return;
         }
+
+        // 같은 서버 버전에 대해 이미 1번 새로고침을 시도했다면 무한 루프 방지
+        const lastAttempted = sessionStorage.getItem('app_reloaded_version');
+        if (lastAttempted === serverVersion) return;
+
+        sessionStorage.setItem('app_reloaded_version', serverVersion);
+        await forceClearAndReload();
       } catch (e) {}
     };
 
@@ -182,6 +193,7 @@ export default function App() {
     const channel = supabase
       .channel('app-force-update')
       .on('broadcast', { event: 'force-reload' }, () => {
+        sessionStorage.removeItem('app_reloaded_version');
         forceClearAndReload();
       })
       .subscribe();
@@ -1903,7 +1915,7 @@ export default function App() {
               <a href={KAKAO_CHAT_URL} target="_blank" rel="noopener noreferrer" className="w-full py-2.5 bg-[#FEE500] hover:bg-[#FDD835] text-[#191919] font-bold rounded-lg text-xs flex items-center justify-center gap-1.5 transition-colors">
                 <MessageSquare className="w-3.5 h-3.5" /> 탁송대리비서 소통방 입장하기
               </a>
-              <button onClick={forceClearAndReload} className="w-full py-2.5 bg-[#38BDF8]/15 hover:bg-[#38BDF8]/25 text-[#38BDF8] border border-[#38BDF8]/30 font-bold rounded-lg text-xs flex items-center justify-center gap-1.5 cursor-pointer">
+              <button onClick={() => { sessionStorage.removeItem('app_reloaded_version'); forceClearAndReload(); }} className="w-full py-2.5 bg-[#38BDF8]/15 hover:bg-[#38BDF8]/25 text-[#38BDF8] border border-[#38BDF8]/30 font-bold rounded-lg text-xs flex items-center justify-center gap-1.5 cursor-pointer">
                 <RefreshCw className="w-3.5 h-3.5" /> 최신 버전 강제 새로고침
               </button>
               <button onClick={() => setShowPrivacyModal(true)} className="w-full py-2.5 bg-white/5 hover:bg-white/10 text-slate-300 font-semibold rounded-lg text-xs cursor-pointer">개인정보 처리방침 및 탈퇴 안내</button>
