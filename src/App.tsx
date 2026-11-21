@@ -14,7 +14,7 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-const APP_VERSION = '1.0.2';
+const APP_VERSION = '1.0.3';
 const ADMIN_DEFAULT_EMAIL = 'beat4989@naver.com';
 const ADMIN_DEFAULT_NAME = '김탁송';
 const ADMIN_DEFAULT_PHONE = '01091417586';
@@ -23,9 +23,9 @@ const KAKAO_CHAT_URL = 'https://open.kakao.com/o/gshehyWi';
 const PLATFORMS = [
   { name: '로지', defaultFee: '20' },
   { name: '아이콘', defaultFee: '20' },
+  { name: '오픈마일', defaultFee: '20' },
   { name: '카카오T', defaultFee: '20' },
   { name: '티맵', defaultFee: '20' },
-  { name: '오픈마일', defaultFee: '20' },
   { name: '기타어플', defaultFee: '20' },
 ];
 
@@ -899,7 +899,7 @@ export default function App() {
                 </div>
                 <label htmlFor="agreeMktChk" className="flex items-center gap-2 text-xs text-slate-400 font-medium cursor-pointer">
                   <input type="checkbox" id="agreeMktChk" checked={agreeMarketing} onChange={(e) => setAgreeMarketing(e.target.checked)} className="w-4 h-4 rounded text-[#8B5CF6] cursor-pointer" />
-                  <span>[선택] 이벤트 및 혜택 안내 수신 동의</span>
+                  <span>[선택] 정식 버전 출시 후 전용 이벤트 및 혜택 안내 받기 (안 받으면 손해!)</span>
                 </label>
               </div>
 
