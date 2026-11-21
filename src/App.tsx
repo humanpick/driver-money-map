@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { useRegisterSW } from 'virtual:pwa-register/react';
 import {
@@ -243,9 +243,30 @@ export default function App() {
   const [newMonthlyAmount, setNewMonthlyAmount] = useState('');
   const [newMonthlyPlatform, setNewMonthlyPlatform] = useState('공통');
 
+  // 클라우드 동기화 완료 여부 플래그 (초기 로드 전 덮어쓰기 방지)
+  const cloudSettingsLoadedRef = useRef(false);
+
+  const syncUserSettingsToCloud = async (userId: string, partial: {
+    bank_accounts?: BankAccount[];
+    target_settings?: { income: string; days: string };
+    monthly_fixed_items?: MonthlyFixed[];
+  }) => {
+    if (!userId) return;
+    await supabase.from('profiles').update(partial).eq('id', userId);
+  };
+
   useEffect(() => { localStorage.setItem('jundriver_accounts_v2', JSON.stringify(accounts)); }, [accounts]);
-  useEffect(() => { localStorage.setItem('jundriver_target_v2', JSON.stringify({ income: targetIncome, days: targetDays })); }, [targetIncome, targetDays]);
   useEffect(() => { localStorage.setItem('jundriver_monthly_fixed_v1', JSON.stringify(monthlyFixedItems)); }, [monthlyFixedItems]);
+
+  // 목표 수익 & 출근 일수 변경 시 0.6초 디바운스 후 클라우드 자동 저장
+  useEffect(() => {
+    localStorage.setItem('jundriver_target_v2', JSON.stringify({ income: targetIncome, days: targetDays }));
+    if (!session?.user?.id || !cloudSettingsLoadedRef.current) return;
+    const timer = setTimeout(() => {
+      syncUserSettingsToCloud(session.user.id, { target_settings: { income: targetIncome, days: targetDays } });
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [targetIncome, targetDays, session]);
 
   useEffect(() => {
     setSelectedRecordIds([]);
@@ -277,6 +298,21 @@ export default function App() {
       role === 'super_admin' || role === 'manager'
         ? 'approved'
         : (profile?.approval_status || userMeta?.approval_status || 'approved');
+
+    // 클라우드 설정 불러오기 (계좌, 목표수익, 월 고정비)
+    if (profile) {
+      if (Array.isArray(profile.bank_accounts) && profile.bank_accounts.length > 0) {
+        setAccounts(profile.bank_accounts);
+      }
+      if (profile.target_settings && typeof profile.target_settings === 'object') {
+        if (profile.target_settings.income) setTargetIncome(String(profile.target_settings.income));
+        if (profile.target_settings.days) setTargetDays(String(profile.target_settings.days));
+      }
+      if (Array.isArray(profile.monthly_fixed_items)) {
+        setMonthlyFixedItems(profile.monthly_fixed_items);
+      }
+    }
+    cloudSettingsLoadedRef.current = true;
 
     const currentCount = profile?.login_count || 0;
     const nowIso = new Date().toISOString();
@@ -358,7 +394,7 @@ export default function App() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (session?.user) fetchUserData(session.user.id, session.user.email || '', session.user.user_metadata, session.user.created_at);
-      else { setRecords([]); setExpenses([]); setCurrentUserRole('user'); setCurrentUserProfile(null); }
+      else { cloudSettingsLoadedRef.current = false; setRecords([]); setExpenses([]); setCurrentUserRole('user'); setCurrentUserProfile(null); }
     });
     return () => subscription.unsubscribe();
   }, []);
@@ -541,10 +577,16 @@ export default function App() {
   
   const handleAddMonthlyFixedItem = () => {
     if (!newMonthlyMemo.trim() || !newMonthlyAmount) return; const amt = cleanNumber(newMonthlyAmount); if (amt <= 0) return;
-    setMonthlyFixedItems([...monthlyFixedItems, { id: Date.now().toString(), memo: newMonthlyMemo.trim(), amount: amt, platform: newMonthlyPlatform }]);
+    const nextItems = [...monthlyFixedItems, { id: Date.now().toString(), memo: newMonthlyMemo.trim(), amount: amt, platform: newMonthlyPlatform }];
+    setMonthlyFixedItems(nextItems);
+    if (session?.user?.id) syncUserSettingsToCloud(session.user.id, { monthly_fixed_items: nextItems });
     setNewMonthlyMemo(''); setNewMonthlyAmount('');
   };
-  const handleDeleteMonthlyFixedItem = (id: string) => { setMonthlyFixedItems(monthlyFixedItems.filter(item => item.id !== id)); };
+  const handleDeleteMonthlyFixedItem = (id: string) => {
+    const nextItems = monthlyFixedItems.filter(item => item.id !== id);
+    setMonthlyFixedItems(nextItems);
+    if (session?.user?.id) syncUserSettingsToCloud(session.user.id, { monthly_fixed_items: nextItems });
+  };
   
   const handleApplyMonthlyFixedExpenses = async () => {
     if (!session) return;
@@ -564,8 +606,18 @@ export default function App() {
     } catch (err: any) { alert('등록 실패: ' + err.message); }
   };
 
-  const handleAddAccount = (e: React.FormEvent) => { e.preventDefault(); if (!bankName || !accountNumber) return; setAccounts([...accounts, { id: Date.now().toString(), bankName, accountNumber, holder: holder || '김탁송' }]); setBankName(''); setAccountNumber(''); setHolder(''); };
-  const handleDeleteAccount = (id: string) => { setAccounts(accounts.filter(a => a.id !== id)); };
+  const handleAddAccount = (e: React.FormEvent) => {
+    e.preventDefault(); if (!bankName || !accountNumber) return;
+    const nextAccounts = [...accounts, { id: Date.now().toString(), bankName, accountNumber, holder: holder || '김탁송' }];
+    setAccounts(nextAccounts);
+    if (session?.user?.id) syncUserSettingsToCloud(session.user.id, { bank_accounts: nextAccounts });
+    setBankName(''); setAccountNumber(''); setHolder('');
+  };
+  const handleDeleteAccount = (id: string) => {
+    const nextAccounts = accounts.filter(a => a.id !== id);
+    setAccounts(nextAccounts);
+    if (session?.user?.id) syncUserSettingsToCloud(session.user.id, { bank_accounts: nextAccounts });
+  };
   const handleUpdateMemberRole = async (memberId: string, newRole: string) => { if (currentUserRole !== 'super_admin') return; await supabase.from('profiles').update({ role: newRole }).eq('id', memberId); fetchAdminData(); };
   const handleUpdateApprovalStatus = async (memberId: string, nextStatus: 'approved' | 'pending') => {
     if (!isAdminUser) return;
@@ -925,7 +977,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* 자리 교체됨: 기타 부대비용 청구 입력 */}
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-300 mb-1">기타 부대비용 청구 입력 (선택)</label>
                   <input type="text" placeholder="통행료, 주차비 등 청구 금액" value={newExtraExpense} onChange={(e) => setNewExtraExpense(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2.5 rounded-lg text-right" />
@@ -940,13 +991,11 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* 자리 교체됨: 기사 팁/추가운임 */}
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-300 mb-1">기사 팁/추가운임 (선택)</label>
                   <input type="text" placeholder="예: 5,000" value={newTip} onChange={(e) => setNewTip(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2.5 rounded-lg text-right" />
                 </div>
 
-                {/* 신규 추가: 기타 사항 입력란 */}
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-300 mb-1">기타 사항 (이슈/메모)</label>
                   <textarea rows={2} placeholder="콜 관련 특이사항, 차량 이슈, 대기시간 등 기록" value={newMemo} onChange={(e) => setNewMemo(e.target.value)} className="w-full px-3 py-2 rounded-lg text-xs" />
@@ -1185,7 +1234,7 @@ export default function App() {
               </div>
               
               <div className="glass-card rounded-xl p-5 shadow-lg border-t-2 border-t-[#38BDF8]">
-                <h3 className="text-sm font-bold text-white mb-2 flex items-center gap-1.5"><Smartphone className="w-4 h-4 text-[#38BDF8]" /> 매월 나가는 고정비 관리</h3>
+                <h3 className="text-sm font-bold text-white mb-2 flex items-center gap-1.5"><Smartphone className="w-4 h-4 text-[#38BDF8]" /> 매월 나가는 고정비 관리 <span className="text-[10px] font-normal text-[#38BDF8] ml-auto">클라우드 동기화</span></h3>
                 <p className="text-[11px] text-slate-400 mb-3 leading-relaxed">보험료, 통신비, 프로그램비 등 매월 정기적으로 나가는 고정 지출을 프로그램별로 묶어 한 번에 장부에 등록하세요.</p>
                 <div className="space-y-2 mb-3">
                   <select value={newMonthlyPlatform} onChange={(e) => setNewMonthlyPlatform(e.target.value)} className="w-full px-3 py-2 rounded-lg text-xs">
@@ -1282,7 +1331,6 @@ export default function App() {
                   </div>
                 </section>
 
-                {/* 프로그램별 손익 계산서 */}
                 <div className="glass-card rounded-xl p-5 border-t-2 border-t-[#38BDF8]">
                   <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-1.5"><BarChart3 className="w-4 h-4 text-[#38BDF8]" /> 당월 프로그램별 손익 계산서</h3>
                   {platformSummaryList.length === 0 ? (
@@ -1395,7 +1443,7 @@ export default function App() {
         {activeTab === 'wallet' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 fade-in-text">
             <div className="glass-card rounded-xl p-5 sm:p-6 shadow-lg h-fit">
-              <h3 className="text-sm font-bold text-white mb-1 flex items-center gap-2"><CreditCard className="w-4 h-4 text-[#38BDF8]" />정산 및 송금용 계좌 추가</h3>
+              <h3 className="text-sm font-bold text-white mb-1 flex items-center gap-2"><CreditCard className="w-4 h-4 text-[#38BDF8]" />정산 및 송금용 계좌 추가 <span className="text-[10px] font-normal text-[#38BDF8] ml-auto">클라우드 동기화</span></h3>
               <form onSubmit={handleAddAccount} className="space-y-3.5 mt-4">
                 <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">은행명</label><input type="text" placeholder="예: 신한은행" value={bankName} onChange={(e) => setBankName(e.target.value)} required className="w-full px-3 py-2.5 rounded-lg" /></div>
                 <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">계좌번호 (- 제외)</label><input type="text" placeholder="계좌번호 입력" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} required className="w-full px-3 py-2.5 rounded-lg font-mono" /></div>
