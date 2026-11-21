@@ -18,6 +18,17 @@ const ADMIN_DEFAULT_EMAIL = 'beat4989@naver.com';
 const ADMIN_DEFAULT_NAME = '김탁송';
 const ADMIN_DEFAULT_PHONE = '01091417586';
 
+const PLATFORMS = [
+  { name: '로지', defaultFee: '20' },
+  { name: '아이콘', defaultFee: '20' },
+  { name: '카카오T', defaultFee: '20' },
+  { name: '티맵', defaultFee: '20' },
+  { name: '샛별', defaultFee: '20' },
+  { name: '개인/직콜', defaultFee: '0' },
+];
+
+const EXPENSE_PLATFORMS = ['공통', ...PLATFORMS.map(p => p.name)];
+
 const getTodayKST = () => {
   const now = new Date();
   const kstOffset = 9 * 60 * 60 * 1000;
@@ -60,12 +71,18 @@ interface DrivingRecord {
   isGrossPaid: boolean; isExpensePaid: boolean;
   netAmount: number; totalClaimAmount: number;
   paymentMethod?: '현금' | '카드';
+  platform?: string;
 }
-interface ExpenseRecord { id: string; date: string; category: string; amount: number; memo: string; }
+interface ExpenseRecord { id: string; date: string; category: string; amount: number; memo: string; platform?: string; }
 interface BankAccount { id: string; bankName: string; accountNumber: string; holder: string; }
-interface MemberProfile { id: string; email: string; name: string; phone: string; role: string; createdAt: string; lastLoginAt?: string; loginCount?: number; recordCount?: number; monthlyGross?: number; }
+interface MemberProfile {
+  id: string; email: string; name: string; phone: string; role: string; createdAt: string;
+  lastLoginAt?: string; loginCount?: number; recordCount?: number; monthlyGross?: number;
+  joinType?: 'group' | 'referral'; kakaoId?: string; referrer?: string;
+  approvalStatus?: 'pending' | 'approved'; marketingAgreed?: boolean;
+}
 interface NoticeItem { id: string; title: string; content: string; isActive: boolean; updatedAt?: string; }
-interface MonthlyFixed { id: string; memo: string; amount: number; }
+interface MonthlyFixed { id: string; memo: string; amount: number; platform?: string; }
 
 const TRADE_CENTERS = [
   { id: '1', name: '수원 도이치오토월드', tier: 'S', region: '수도권', addr: '경기 수원시 권선구 권선로 308-5', desc: '전국 최대 실내 복합단지.' },
@@ -125,7 +142,12 @@ export default function App() {
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState(''); const [name, setName] = useState(''); const [phone, setPhone] = useState('');
   const [password, setPassword] = useState(''); const [passwordConfirm, setPasswordConfirm] = useState('');
+  const [joinType, setJoinType] = useState<'group' | 'referral'>('group');
+  const [kakaoId, setKakaoId] = useState('');
+  const [referrer, setReferrer] = useState('');
   const [agreePrivacy, setAgreePrivacy] = useState(false);
+  const [agreeMarketing, setAgreeMarketing] = useState(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [authLoading, setAuthLoading] = useState(false); const [authError, setAuthError] = useState(''); const [authSuccess, setAuthSuccess] = useState('');
   const [honeypot, setHoneypot] = useState(''); const [captchaVerified, setCaptchaVerified] = useState(false);
 
@@ -150,6 +172,7 @@ export default function App() {
   const [actionRecordId, setActionRecordId] = useState<string | null>(null);
   
   const [editDate, setEditDate] = useState('');
+  const [editPlatform, setEditPlatform] = useState('로지');
   const [editDeparture, setEditDeparture] = useState(''); const [editDestination, setEditDestination] = useState('');
   const [editGross, setEditGross] = useState(''); const [editFuel, setEditFuel] = useState('');
   const [editExtra, setEditExtra] = useState(''); const [editTip, setEditTip] = useState('');
@@ -183,8 +206,10 @@ export default function App() {
   const [adminAllRecords, setAdminAllRecords] = useState<DrivingRecord[]>([]);
   const [adminSearchTerm, setAdminSearchTerm] = useState('');
   const [showScoutOnly, setShowScoutOnly] = useState(false);
+  const [showPendingOnly, setShowPendingOnly] = useState(false);
 
   const [newDate, setNewDate] = useState<string>(() => getTodayKST());
+  const [newPlatform, setNewPlatform] = useState<string>('로지');
   const [newStartTime, setNewStartTime] = useState(''); const [newEndTime, setNewEndTime] = useState('');
   const [newDeparture, setNewDeparture] = useState('');
   const [newDestination, setNewDestination] = useState('');
@@ -193,7 +218,8 @@ export default function App() {
   const [newFuel, setNewFuel] = useState(''); const [newExtraExpense, setNewExtraExpense] = useState(''); const [newTip, setNewTip] = useState('');
   const [newPaymentMethod, setNewPaymentMethod] = useState<'현금' | '카드'>('현금');
   
-  const [expCategory, setExpCategory] = useState('대중교통'); const [expAmount, setExpAmount] = useState(''); const [expMemo, setExpMemo] = useState('');
+  const [expCategory, setExpCategory] = useState('대중교통'); const [expPlatform, setExpPlatform] = useState('공통');
+  const [expAmount, setExpAmount] = useState(''); const [expMemo, setExpMemo] = useState('');
   const [bankName, setBankName] = useState(''); const [accountNumber, setAccountNumber] = useState(''); const [holder, setHolder] = useState('');
 
   const [targetIncome, setTargetIncome] = useState<string>(() => {
@@ -211,6 +237,7 @@ export default function App() {
   });
   const [newMonthlyMemo, setNewMonthlyMemo] = useState('');
   const [newMonthlyAmount, setNewMonthlyAmount] = useState('');
+  const [newMonthlyPlatform, setNewMonthlyPlatform] = useState('공통');
 
   useEffect(() => { localStorage.setItem('jundriver_accounts_v2', JSON.stringify(accounts)); }, [accounts]);
   useEffect(() => { localStorage.setItem('jundriver_target_v2', JSON.stringify({ income: targetIncome, days: targetDays })); }, [targetIncome, targetDays]);
@@ -242,20 +269,39 @@ export default function App() {
     role = cleanMail === ADMIN_DEFAULT_EMAIL ? 'super_admin' : (profile?.role || 'user');
     setCurrentUserRole(role);
 
+    const resolvedApproval: 'pending' | 'approved' =
+      role === 'super_admin' || role === 'manager'
+        ? 'approved'
+        : (profile?.approval_status || userMeta?.approval_status || 'approved');
+
     const currentCount = profile?.login_count || 0;
     const nowIso = new Date().toISOString();
-    const profilePayload = {
+    const profilePayload: any = {
       id: userId, email: cleanMail, name: profile?.name || metaName, phone: profile?.phone || metaPhone,
       role: role, created_at: profile?.created_at || userCreatedAt || nowIso,
-      last_login_at: nowIso, login_count: currentCount + 1
+      last_login_at: nowIso, login_count: currentCount + 1,
+      join_type: profile?.join_type || userMeta?.join_type || 'group',
+      kakao_id: profile?.kakao_id ?? userMeta?.kakao_id ?? '',
+      referrer: profile?.referrer ?? userMeta?.referrer ?? '',
+      approval_status: resolvedApproval,
+      marketing_agreed: profile?.marketing_agreed ?? Boolean(userMeta?.marketing_agreed),
     };
-    await supabase.from('profiles').upsert(profilePayload);
+
+    const { error: upsertErr } = await supabase.from('profiles').upsert(profilePayload);
+    if (upsertErr && (upsertErr.message.includes('approval_status') || upsertErr.message.includes('join_type'))) {
+      const fb = { id: profilePayload.id, email: profilePayload.email, name: profilePayload.name, phone: profilePayload.phone, role: profilePayload.role, created_at: profilePayload.created_at, last_login_at: profilePayload.last_login_at, login_count: profilePayload.login_count };
+      await supabase.from('profiles').upsert(fb);
+    }
 
     setCurrentUserProfile({
       id: userId, email: cleanMail, name: profilePayload.name, phone: profilePayload.phone, role: profilePayload.role,
       createdAt: (profilePayload.created_at || '').substring(0, 10),
-      lastLoginAt: profilePayload.last_login_at, loginCount: profilePayload.login_count
+      lastLoginAt: profilePayload.last_login_at, loginCount: profilePayload.login_count,
+      joinType: profilePayload.join_type, kakaoId: profilePayload.kakao_id, referrer: profilePayload.referrer,
+      approvalStatus: resolvedApproval, marketingAgreed: profilePayload.marketing_agreed,
     });
+
+    if (resolvedApproval === 'pending') return;
 
     const { data: recordsData } = await supabase.from('driving_records').select('*').eq('user_id', userId).order('date', { ascending: true });
     if (recordsData) {
@@ -264,11 +310,12 @@ export default function App() {
         grossAmount: Number(r.gross_amount), feeRate: Number(r.fee_rate), fuelAmount: Number(r.fuel_amount), extraExpenseAmount: Number(r.extra_expense_amount),
         tipAmount: Number(r.tip_amount), isGrossPaid: Boolean(r.is_gross_paid), isExpensePaid: Boolean(r.is_expense_paid), netAmount: Number(r.net_amount), totalClaimAmount: Number(r.total_claim_amount),
         paymentMethod: r.payment_method || '현금',
+        platform: r.platform || '미지정',
       })));
     }
 
     const { data: expensesData } = await supabase.from('expenses').select('*').eq('user_id', userId).order('date', { ascending: true });
-    if (expensesData) setExpenses(expensesData.map((e: any) => ({ id: e.id, date: e.date || '-', category: e.category, amount: Number(e.amount), memo: e.memo || '' })));
+    if (expensesData) setExpenses(expensesData.map((e: any) => ({ id: e.id, date: e.date || '-', category: e.category, amount: Number(e.amount), memo: e.memo || '', platform: e.platform || '공통' })));
     
     if (role === 'super_admin' || role === 'manager') fetchAdminData();
   };
@@ -285,12 +332,14 @@ export default function App() {
         return {
           id: p.id, email: p.email || '', name: p.name || '미상', phone: p.phone || '', role: p.role || 'user',
           createdAt: p.created_at ? p.created_at.substring(0, 10) : '-', lastLoginAt: p.last_login_at ? p.last_login_at.substring(0, 16).replace('T', ' ') : '기록없음',
-          loginCount: p.login_count || 0, recordCount: userRecords.length, monthlyGross: monthlyGross
+          loginCount: p.login_count || 0, recordCount: userRecords.length, monthlyGross: monthlyGross,
+          joinType: p.join_type || 'group', kakaoId: p.kakao_id || '', referrer: p.referrer || '',
+          approvalStatus: p.approval_status || 'approved', marketingAgreed: Boolean(p.marketing_agreed),
         };
       }));
       setAdminAllRecords(allRecs.map((r: any) => ({
         id: r.id, userId: r.user_id, date: r.date || '-', startTime: r.start_time || '-', endTime: r.end_time || '-', departure: r.departure, destination: r.destination,
-        grossAmount: Number(r.gross_amount), fuelAmount: Number(r.fuel_amount), feeRate: Number(r.fee_rate), extraExpenseAmount: Number(r.extra_expense_amount), tipAmount: Number(r.tip_amount), isGrossPaid: Boolean(r.is_gross_paid), isExpensePaid: Boolean(r.is_expense_paid), netAmount: Number(r.net_amount), totalClaimAmount: Number(r.total_claim_amount), paymentMethod: r.payment_method || '현금'
+        grossAmount: Number(r.gross_amount), fuelAmount: Number(r.fuel_amount), feeRate: Number(r.fee_rate), extraExpenseAmount: Number(r.extra_expense_amount), tipAmount: Number(r.tip_amount), isGrossPaid: Boolean(r.is_gross_paid), isExpensePaid: Boolean(r.is_expense_paid), netAmount: Number(r.net_amount), totalClaimAmount: Number(r.total_claim_amount), paymentMethod: r.payment_method || '현금', platform: r.platform || '미지정'
       })));
     }
   };
@@ -310,20 +359,58 @@ export default function App() {
   }, []);
 
   const handleLogin = async (e: React.FormEvent) => { e.preventDefault(); setAuthLoading(true); setAuthError(''); setAuthSuccess(''); const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password: password.trim() }); if (error) setAuthError('이메일 또는 비밀번호가 일치하지 않습니다.'); setAuthLoading(false); };
+
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault(); setAuthLoading(true); setAuthError(''); setAuthSuccess('');
     if (honeypot.trim() !== '') { setAuthLoading(false); return; }
     if (!captchaVerified) { setAuthError('보안 확인(인간 인증 체크)을 완료해 주세요.'); setAuthLoading(false); return; }
     const trimmedName = name.trim(); const cleanPhone = phone.replace(/[^0-9]/g, ''); const cleanEmail = email.trim().toLowerCase();
+    const trimmedKakao = kakaoId.trim(); const trimmedReferrer = referrer.trim();
+    if (joinType === 'group' && !trimmedKakao) { setAuthError('단톡방 닉네임(아이디)을 입력해 주세요.'); setAuthLoading(false); return; }
+    if (joinType === 'referral' && !trimmedReferrer) { setAuthError('추천인 닉네임 또는 성함을 입력해 주세요.'); setAuthLoading(false); return; }
     if (password.length < 6) { setAuthError('비밀번호는 최소 6자리 이상이어야 합니다.'); setAuthLoading(false); return; }
     if (password !== passwordConfirm) { setAuthError('비밀번호가 일치하지 않습니다.'); setAuthLoading(false); return; }
-    if (!agreePrivacy) { setAuthError('개인정보 수집 및 이용에 동의해 주세요.'); setAuthLoading(false); return; }
+    if (!agreePrivacy) { setAuthError('[필수] 개인정보 수집 및 이용에 동의해 주세요.'); setAuthLoading(false); return; }
     if (!trimmedName || cleanPhone.length < 10) { setAuthError('이름과 휴대폰 번호를 정확히 입력해 주세요.'); setAuthLoading(false); return; }
+
     const nowIso = new Date().toISOString();
-    const { data, error } = await supabase.auth.signUp({ email: cleanEmail, password: password.trim(), options: { data: { name: trimmedName, phone: cleanPhone, privacy_policy_agreed: true, created_at: nowIso } } });
-    if (error) { setAuthError('가입 실패: ' + error.message); } else { if (data.user) { await supabase.from('profiles').upsert([{ id: data.user.id, email: cleanEmail, name: trimmedName, phone: cleanPhone, role: cleanEmail === ADMIN_DEFAULT_EMAIL ? 'super_admin' : 'user', created_at: nowIso, last_login_at: nowIso, login_count: 1 }]); } setAuthSuccess('회원가입이 완료되었습니다. 로그인해 주세요.'); setAuthMode('login'); }
+    const initialApproval = cleanEmail === ADMIN_DEFAULT_EMAIL ? 'approved' : 'pending';
+    const { data, error } = await supabase.auth.signUp({
+      email: cleanEmail,
+      password: password.trim(),
+      options: {
+        data: {
+          name: trimmedName, phone: cleanPhone, privacy_policy_agreed: true,
+          marketing_agreed: agreeMarketing, join_type: joinType,
+          kakao_id: joinType === 'group' ? trimmedKakao : '',
+          referrer: joinType === 'referral' ? trimmedReferrer : '',
+          approval_status: initialApproval, created_at: nowIso
+        }
+      }
+    });
+    if (error) {
+      setAuthError('가입 실패: ' + error.message);
+    } else {
+      if (data.user) {
+        const profileData: any = {
+          id: data.user.id, email: cleanEmail, name: trimmedName, phone: cleanPhone,
+          role: cleanEmail === ADMIN_DEFAULT_EMAIL ? 'super_admin' : 'user',
+          created_at: nowIso, last_login_at: nowIso, login_count: 1,
+          join_type: joinType, kakao_id: joinType === 'group' ? trimmedKakao : '',
+          referrer: joinType === 'referral' ? trimmedReferrer : '',
+          approval_status: initialApproval, marketing_agreed: agreeMarketing
+        };
+        const { error: profErr } = await supabase.from('profiles').upsert([profileData]);
+        if (profErr && (profErr.message.includes('approval_status') || profErr.message.includes('join_type'))) {
+          await supabase.from('profiles').upsert([{ id: data.user.id, email: cleanEmail, name: trimmedName, phone: cleanPhone, role: profileData.role, created_at: nowIso, last_login_at: nowIso, login_count: 1 }]);
+        }
+      }
+      setAuthSuccess('오픈 베타 신청이 접수되었습니다. 로그인하시면 승인 상태를 확인하실 수 있습니다.');
+      setAuthMode('login');
+    }
     setAuthLoading(false);
   };
+
   const handleLogout = async () => { await supabase.auth.signOut(); setShowProfileModal(false); setActiveTab('records'); };
   
   const handleSaveNoticeTemplate = async (e: React.FormEvent) => { e.preventDefault(); if (!inputNoticeTitle.trim() || !inputNoticeContent.trim()) return; setNoticeLoading(true); const targetId = editingNoticeId || `notice_${Date.now()}`; const { error } = await supabase.from('announcements').upsert({ id: targetId, title: inputNoticeTitle.trim(), content: inputNoticeContent.trim(), is_active: editingNoticeId ? (noticeList.find(n => n.id === editingNoticeId)?.isActive || false) : false, updated_at: new Date().toISOString() }); if (!error) { alert(editingNoticeId ? '수정되었습니다.' : '저장되었습니다.'); setInputNoticeTitle(''); setInputNoticeContent(''); setEditingNoticeId(null); fetchNotices(); } setNoticeLoading(false); };
@@ -337,11 +424,16 @@ export default function App() {
     const extraExp = cleanNumber(newExtraExpense); const tip = cleanNumber(newTip);
     const net = gross - (gross * (feeRate / 100)) + tip; const claimTotal = gross + fuel + extraExp;
     const recordId = 'rec_' + Date.now().toString();
-    const payload = { id: recordId, user_id: session.user.id, date: newDate, start_time: newStartTime || '-', end_time: newEndTime || '-', departure: newDeparture, destination: newDestination, gross_amount: gross, fee_rate: feeRate, fuel_amount: fuel, extra_expense_amount: extraExp, tip_amount: tip, is_gross_paid: false, is_expense_paid: false, net_amount: Math.round(net), total_claim_amount: Math.round(claimTotal), payment_method: newPaymentMethod };
-    const newRecord: DrivingRecord = { ...payload, startTime: payload.start_time, endTime: payload.end_time, grossAmount: gross, feeRate, fuelAmount: fuel, extraExpenseAmount: extraExp, tipAmount: tip, isGrossPaid: false, isExpensePaid: false, netAmount: Math.round(net), totalClaimAmount: Math.round(claimTotal), paymentMethod: newPaymentMethod };
+    const payload: any = { id: recordId, user_id: session.user.id, date: newDate, start_time: newStartTime || '-', end_time: newEndTime || '-', departure: newDeparture, destination: newDestination, gross_amount: gross, fee_rate: feeRate, fuel_amount: fuel, extra_expense_amount: extraExp, tip_amount: tip, is_gross_paid: false, is_expense_paid: false, net_amount: Math.round(net), total_claim_amount: Math.round(claimTotal), payment_method: newPaymentMethod, platform: newPlatform };
+    const newRecord: DrivingRecord = { ...payload, startTime: payload.start_time, endTime: payload.end_time, grossAmount: gross, feeRate, fuelAmount: fuel, extraExpenseAmount: extraExp, tipAmount: tip, isGrossPaid: false, isExpensePaid: false, netAmount: Math.round(net), totalClaimAmount: Math.round(claimTotal), paymentMethod: newPaymentMethod, platform: newPlatform };
     
-    const { error } = await supabase.from('driving_records').insert([payload]);
-    if (error && error.message.includes('payment_method')) { const fallbackPayload = { ...payload }; delete (fallbackPayload as any).payment_method; await supabase.from('driving_records').insert([fallbackPayload]); }
+    let { error } = await supabase.from('driving_records').insert([payload]);
+    if (error && (error.message.includes('payment_method') || error.message.includes('platform'))) {
+      const fb = { ...payload };
+      if (error.message.includes('payment_method')) delete fb.payment_method;
+      if (error.message.includes('platform')) delete fb.platform;
+      await supabase.from('driving_records').insert([fb]);
+    }
     
     const updated = [newRecord, ...records]; updated.sort((a, b) => a.date.localeCompare(b.date)); setRecords(updated);
     const [y, m] = newDate.split('-'); setCurrentCalDate(new Date(Number(y), Number(m) - 1, 1));
@@ -359,15 +451,20 @@ export default function App() {
     if (!error) setRecords(records.map((r) => (r.id === id ? { ...r, isExpensePaid: !target.isExpensePaid } : r)));
   };
 
-  const handleOpenEditModal = (r: DrivingRecord) => { setEditingRecord(r); setEditDate(r.date); setEditDeparture(r.departure); setEditDestination(r.destination); setEditGross(formatNumberWithComma(r.grossAmount)); setEditFuel(formatNumberWithComma(r.fuelAmount)); setEditExtra(formatNumberWithComma(r.extraExpenseAmount)); setEditTip(formatNumberWithComma(r.tipAmount)); setEditPaymentMethod(r.paymentMethod || '현금'); };
+  const handleOpenEditModal = (r: DrivingRecord) => { setEditingRecord(r); setEditDate(r.date); setEditPlatform(r.platform || '로지'); setEditDeparture(r.departure); setEditDestination(r.destination); setEditGross(formatNumberWithComma(r.grossAmount)); setEditFuel(formatNumberWithComma(r.fuelAmount)); setEditExtra(formatNumberWithComma(r.extraExpenseAmount)); setEditTip(formatNumberWithComma(r.tipAmount)); setEditPaymentMethod(r.paymentMethod || '현금'); };
   const handleUpdateRecord = async (e: React.FormEvent) => {
     e.preventDefault(); if (!editingRecord || !session) return;
     const gross = cleanNumber(editGross); const feeRate = cleanNumber(editingRecord.feeRate); const fuel = cleanNumber(editFuel); const extraExp = cleanNumber(editExtra); const tip = cleanNumber(editTip);
     const net = gross - (gross * (feeRate / 100)) + tip; const claimTotal = gross + fuel + extraExp;
-    const payload = { date: editDate, departure: editDeparture, destination: editDestination, gross_amount: gross, fuel_amount: fuel, extra_expense_amount: extraExp, tip_amount: tip, net_amount: Math.round(net), total_claim_amount: Math.round(claimTotal), payment_method: editPaymentMethod };
-    let error = (await supabase.from('driving_records').update(payload).eq('id', editingRecord.id)).error;
-    if (error && error.message.includes('payment_method')) { const fb = { ...payload }; delete (fb as any).payment_method; error = (await supabase.from('driving_records').update(fb).eq('id', editingRecord.id)).error; }
-    if (!error) { const updatedList = records.map((r) => r.id === editingRecord.id ? { ...r, date: editDate, departure: editDeparture, destination: editDestination, grossAmount: gross, fuelAmount: fuel, extraExpenseAmount: extraExp, tipAmount: tip, netAmount: Math.round(net), totalClaimAmount: Math.round(claimTotal), paymentMethod: editPaymentMethod } : r); updatedList.sort((a, b) => a.date.localeCompare(b.date)); setRecords(updatedList); setEditingRecord(null); } else { alert('수정 실패'); }
+    const payload: any = { date: editDate, platform: editPlatform, departure: editDeparture, destination: editDestination, gross_amount: gross, fuel_amount: fuel, extra_expense_amount: extraExp, tip_amount: tip, net_amount: Math.round(net), total_claim_amount: Math.round(claimTotal), payment_method: editPaymentMethod };
+    let { error } = await supabase.from('driving_records').update(payload).eq('id', editingRecord.id);
+    if (error && (error.message.includes('payment_method') || error.message.includes('platform'))) {
+      const fb = { ...payload };
+      if (error.message.includes('payment_method')) delete fb.payment_method;
+      if (error.message.includes('platform')) delete fb.platform;
+      error = (await supabase.from('driving_records').update(fb).eq('id', editingRecord.id)).error;
+    }
+    if (!error) { const updatedList = records.map((r) => r.id === editingRecord.id ? { ...r, date: editDate, platform: editPlatform, departure: editDeparture, destination: editDestination, grossAmount: gross, fuelAmount: fuel, extraExpenseAmount: extraExp, tipAmount: tip, netAmount: Math.round(net), totalClaimAmount: Math.round(claimTotal), paymentMethod: editPaymentMethod } : r); updatedList.sort((a, b) => a.date.localeCompare(b.date)); setRecords(updatedList); setEditingRecord(null); } else { alert('수정 실패'); }
   };
 
   const handleDeleteSingleRecord = async (id: string) => {
@@ -392,8 +489,15 @@ export default function App() {
 
   const handleUndoDelete = async () => {
     if (lastDeletedRecords.length === 0 || !session) return;
-    const payloads = lastDeletedRecords.map(r => ({ id: r.id, user_id: session.user.id, date: r.date, start_time: r.startTime, end_time: r.endTime, departure: r.departure, destination: r.destination, gross_amount: r.grossAmount, fee_rate: r.feeRate, fuel_amount: r.fuelAmount, extra_expense_amount: r.extraExpenseAmount, tip_amount: r.tipAmount, is_gross_paid: r.isGrossPaid, is_expense_paid: r.isExpensePaid, net_amount: r.netAmount, total_claim_amount: r.totalClaimAmount, payment_method: r.paymentMethod || '현금' }));
-    const insertWithFallback = async (chunk: any[]) => { let res = await supabase.from('driving_records').insert(chunk); if (res.error && res.error.message.includes('payment_method')) { const fb = chunk.map(p => { const { payment_method, ...rest } = p; return rest; }); res = await supabase.from('driving_records').insert(fb); } return res; };
+    const payloads = lastDeletedRecords.map(r => ({ id: r.id, user_id: session.user.id, date: r.date, start_time: r.startTime, end_time: r.endTime, departure: r.departure, destination: r.destination, gross_amount: r.grossAmount, fee_rate: r.feeRate, fuel_amount: r.fuelAmount, extra_expense_amount: r.extraExpenseAmount, tip_amount: r.tipAmount, is_gross_paid: r.isGrossPaid, is_expense_paid: r.isExpensePaid, net_amount: r.netAmount, total_claim_amount: r.totalClaimAmount, payment_method: r.paymentMethod || '현금', platform: r.platform || '미지정' }));
+    const insertWithFallback = async (chunk: any[]) => {
+      let res = await supabase.from('driving_records').insert(chunk);
+      if (res.error && (res.error.message.includes('payment_method') || res.error.message.includes('platform'))) {
+        const fb = chunk.map(p => { const c = { ...p }; delete c.payment_method; delete c.platform; return c; });
+        res = await supabase.from('driving_records').insert(fb);
+      }
+      return res;
+    };
     try {
       for (let i = 0; i < payloads.length; i += 50) { await insertWithFallback(payloads.slice(i, i + 50)); }
       const updated = [...records, ...lastDeletedRecords]; updated.sort((a, b) => a.date.localeCompare(b.date));
@@ -401,12 +505,26 @@ export default function App() {
     } catch (error: any) { alert('복구 실패: ' + error.message); }
   };
 
-  const handleAddExpense = async (e: React.FormEvent) => { e.preventDefault(); const cleanAmt = cleanNumber(expAmount); if (!cleanAmt || !session) return; const expenseId = 'exp_' + Date.now().toString(); const { error } = await supabase.from('expenses').insert([{ id: expenseId, user_id: session.user.id, date: newDate, category: expCategory, amount: cleanAmt, memo: expMemo }]); if (!error) { const updatedExp = [{ id: expenseId, date: newDate, category: expCategory, amount: cleanAmt, memo: expMemo }, ...expenses]; updatedExp.sort((a, b) => a.date.localeCompare(b.date)); setExpenses(updatedExp); setExpAmount(''); setExpMemo(''); } };
+  const handleAddExpense = async (e: React.FormEvent) => {
+    e.preventDefault(); const cleanAmt = cleanNumber(expAmount); if (!cleanAmt || !session) return;
+    const expenseId = 'exp_' + Date.now().toString();
+    const payload: any = { id: expenseId, user_id: session.user.id, date: newDate, category: expCategory, amount: cleanAmt, memo: expMemo, platform: expPlatform };
+    let { error } = await supabase.from('expenses').insert([payload]);
+    if (error && error.message.includes('platform')) {
+      const fb = { ...payload }; delete fb.platform;
+      error = (await supabase.from('expenses').insert([fb])).error;
+    }
+    if (!error) {
+      const updatedExp = [{ id: expenseId, date: newDate, category: expCategory, amount: cleanAmt, memo: expMemo, platform: expPlatform }, ...expenses];
+      updatedExp.sort((a, b) => a.date.localeCompare(b.date));
+      setExpenses(updatedExp); setExpAmount(''); setExpMemo('');
+    }
+  };
   const handleDeleteExpense = async (id: string) => { await supabase.from('expenses').delete().eq('id', id); setExpenses(expenses.filter((e) => e.id !== id)); };
   
   const handleAddMonthlyFixedItem = () => {
     if (!newMonthlyMemo.trim() || !newMonthlyAmount) return; const amt = cleanNumber(newMonthlyAmount); if (amt <= 0) return;
-    setMonthlyFixedItems([...monthlyFixedItems, { id: Date.now().toString(), memo: newMonthlyMemo.trim(), amount: amt }]);
+    setMonthlyFixedItems([...monthlyFixedItems, { id: Date.now().toString(), memo: newMonthlyMemo.trim(), amount: amt, platform: newMonthlyPlatform }]);
     setNewMonthlyMemo(''); setNewMonthlyAmount('');
   };
   const handleDeleteMonthlyFixedItem = (id: string) => { setMonthlyFixedItems(monthlyFixedItems.filter(item => item.id !== id)); };
@@ -417,10 +535,14 @@ export default function App() {
     const totalAmt = monthlyFixedItems.reduce((acc, cur) => acc + cur.amount, 0);
     if (!window.confirm(`총 ${monthlyFixedItems.length}건의 월 고정비(합계 ${totalAmt.toLocaleString()}원)를 장부에 일괄 등록하시겠습니까?\n(등록일자: ${newDate})`)) return;
     try {
-      const newExpenses = monthlyFixedItems.map((item, idx) => ({ id: `exp_mfixed_${Date.now()}_${idx}`, user_id: session.user.id, date: newDate, category: '고정비', amount: item.amount, memo: item.memo }));
-      const { error } = await supabase.from('expenses').insert(newExpenses);
+      const newExpenses = monthlyFixedItems.map((item, idx) => ({ id: `exp_mfixed_${Date.now()}_${idx}`, user_id: session.user.id, date: newDate, category: '고정비', amount: item.amount, memo: item.memo, platform: item.platform || '공통' }));
+      let { error } = await supabase.from('expenses').insert(newExpenses);
+      if (error && error.message.includes('platform')) {
+        const fb = newExpenses.map(({ platform, ...rest }) => rest);
+        error = (await supabase.from('expenses').insert(fb)).error;
+      }
       if (error) throw error;
-      const updatedExp = [...newExpenses.map(e => ({ ...e, id: e.id, date: e.date, category: e.category, amount: e.amount, memo: e.memo })), ...expenses];
+      const updatedExp = [...newExpenses.map(e => ({ ...e, id: e.id, date: e.date, category: e.category, amount: e.amount, memo: e.memo, platform: e.platform })), ...expenses];
       updatedExp.sort((a, b) => a.date.localeCompare(b.date)); setExpenses(updatedExp); alert('월 고정비가 장부에 일괄 등록되었습니다.');
     } catch (err: any) { alert('등록 실패: ' + err.message); }
   };
@@ -428,7 +550,23 @@ export default function App() {
   const handleAddAccount = (e: React.FormEvent) => { e.preventDefault(); if (!bankName || !accountNumber) return; setAccounts([...accounts, { id: Date.now().toString(), bankName, accountNumber, holder: holder || '김탁송' }]); setBankName(''); setAccountNumber(''); setHolder(''); };
   const handleDeleteAccount = (id: string) => { setAccounts(accounts.filter(a => a.id !== id)); };
   const handleUpdateMemberRole = async (memberId: string, newRole: string) => { if (currentUserRole !== 'super_admin') return; await supabase.from('profiles').update({ role: newRole }).eq('id', memberId); fetchAdminData(); };
-  const handleExportAdminCSV = () => { if (adminAllRecords.length === 0) return; const headers = ['일자', '출발지', '도착지', '운임', '수수료율', '주유비', '결제수단', '추가경비', '팁', '순수익', '운임입금', '대납입금']; const rows = adminAllRecords.map((r) => [r.date, `"${r.departure}"`, `"${r.destination}"`, r.grossAmount, `${r.feeRate}%`, r.fuelAmount, r.paymentMethod || '현금', r.extraExpenseAmount, r.tipAmount, r.netAmount, r.isGrossPaid ? '완료' : '미수금', r.isExpensePaid ? '완료' : '미수금']); const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n'); const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `JunDriver_운행내역.csv`; link.click(); };
+  const handleUpdateApprovalStatus = async (memberId: string, nextStatus: 'approved' | 'pending') => {
+    if (!isAdminUser) return;
+    const { error } = await supabase.from('profiles').update({ approval_status: nextStatus }).eq('id', memberId);
+    if (error) { alert('승인 상태 변경 실패: ' + error.message); return; }
+    fetchAdminData();
+  };
+
+  const handleExportMyCSV = () => {
+    if (records.length === 0) { alert('다운로드할 운행 내역이 없습니다.'); return; }
+    const headers = ['프로그램', '일자', '출발지', '도착지', '운임', '수수료율', '주유비', '결제수단', '추가경비', '팁', '순수익', '운임입금', '대납입금'];
+    const rows = records.map((r) => [r.platform || '미지정', r.date, `"${r.departure}"`, `"${r.destination}"`, r.grossAmount, `${r.feeRate}%`, r.fuelAmount, r.paymentMethod || '현금', r.extraExpenseAmount, r.tipAmount, r.netAmount, r.isGrossPaid ? '완료' : '미수금', r.isExpensePaid ? '완료' : '미수금']);
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `JunDriver_내운행장부_${getTodayKST()}.csv`; link.click();
+  };
+
+  const handleExportAdminCSV = () => { if (adminAllRecords.length === 0) return; const headers = ['프로그램', '일자', '출발지', '도착지', '운임', '수수료율', '주유비', '결제수단', '추가경비', '팁', '순수익', '운임입금', '대납입금']; const rows = adminAllRecords.map((r) => [r.platform || '미지정', r.date, `"${r.departure}"`, `"${r.destination}"`, r.grossAmount, `${r.feeRate}%`, r.fuelAmount, r.paymentMethod || '현금', r.extraExpenseAmount, r.tipAmount, r.netAmount, r.isGrossPaid ? '완료' : '미수금', r.isExpensePaid ? '완료' : '미수금']); const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n'); const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `JunDriver_운행내역.csv`; link.click(); };
 
   const buildClaimText = (r: DrivingRecord, withGross: boolean, withFuel: boolean, withExtra: boolean) => {
     const pAcc = accounts[0] || { bankName: '은행', accountNumber: '계좌', holder: '예금주' }; const dPhone = formatPhoneNumber(currentUserProfile?.phone || session?.user?.user_metadata?.phone || ADMIN_DEFAULT_PHONE); const dName = currentUserProfile?.name || session?.user?.user_metadata?.name || ADMIN_DEFAULT_NAME;
@@ -454,6 +592,7 @@ export default function App() {
   const unpaidRecords = records.filter((r) => !r.isGrossPaid || (!r.isExpensePaid && (r.fuelAmount > 0 || r.extraExpenseAmount > 0)));
   const totalUnpaidAmount = unpaidRecords.reduce((acc, r) => acc + (!r.isGrossPaid ? r.grossAmount : 0) + (!r.isExpensePaid ? (r.fuelAmount + r.extraExpenseAmount) : 0), 0);
   const isAdminUser = currentUserRole === 'super_admin' || currentUserRole === 'manager';
+  const pendingCount = adminMemberList.filter(m => m.approvalStatus === 'pending').length;
 
   const monthlyRecords = records.filter((r) => (r.date || '').startsWith(currentMonthPrefix));
   const monthlyExpenses = expenses.filter((e) => (e.date || '').startsWith(currentMonthPrefix));
@@ -461,6 +600,22 @@ export default function App() {
   const monthlyNet = monthlyRecords.reduce((acc, cur) => acc + cur.netAmount, 0);
   const monthlyExpense = monthlyExpenses.reduce((acc, cur) => acc + cur.amount, 0);
   const monthlyProfit = monthlyNet - monthlyExpense;
+
+  const platformSummaryList = (() => {
+    const names = Array.from(new Set([
+      ...PLATFORMS.map(p => p.name),
+      ...monthlyRecords.map(r => r.platform || '미지정'),
+      ...monthlyExpenses.map(e => e.platform || '공통'),
+    ]));
+    return names.map(pName => {
+      const pRecs = monthlyRecords.filter(r => (r.platform || '미지정') === pName);
+      const pExps = monthlyExpenses.filter(e => (e.platform || '공통') === pName);
+      const gross = pRecs.reduce((s, r) => s + r.grossAmount, 0);
+      const net = pRecs.reduce((s, r) => s + r.netAmount, 0);
+      const exp = pExps.reduce((s, e) => s + e.amount, 0);
+      return { name: pName, count: pRecs.length, gross, net, exp, profit: net - exp };
+    }).filter(item => item.count > 0 || item.exp > 0);
+  })();
 
   const targetIncNum = cleanNumber(targetIncome) || 0;
   const targetDaysNum = cleanNumber(targetDays) || 0;
@@ -477,9 +632,12 @@ export default function App() {
 
   const displayedMembers = adminMemberList.filter(m => {
     const safeName = m.name || ''; const safePhone = m.phone || ''; const safeEmail = m.email || '';
-    const matchesSearch = safeName.includes(adminSearchTerm) || safePhone.includes(adminSearchTerm) || safeEmail.includes(adminSearchTerm);
+    const safeKakao = m.kakaoId || ''; const safeRef = m.referrer || '';
+    const matchesSearch = safeName.includes(adminSearchTerm) || safePhone.includes(adminSearchTerm) || safeEmail.includes(adminSearchTerm) || safeKakao.includes(adminSearchTerm) || safeRef.includes(adminSearchTerm);
     const isAce = (m.monthlyGross || 0) >= 1500000 || (m.recordCount || 0) >= 10;
-    if (showScoutOnly) return matchesSearch && isAce; return matchesSearch;
+    if (showPendingOnly && m.approvalStatus !== 'pending') return false;
+    if (showScoutOnly && !isAce) return false;
+    return matchesSearch;
   });
 
   const getTopDestinations = () => {
@@ -518,18 +676,57 @@ export default function App() {
     ` }} />
   );
 
+  const renderPrivacyModal = () => {
+    if (!showPrivacyModal) return null;
+    return (
+      <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setShowPrivacyModal(false)}>
+        <div className="w-full max-w-lg glass-card rounded-2xl p-6 shadow-2xl relative max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+          <button onClick={() => setShowPrivacyModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
+          <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-[#38BDF8]" />개인정보 수집·이용 동의 및 처리방침</h3>
+          <div className="overflow-y-auto pr-1 space-y-3 text-xs text-slate-300 leading-relaxed flex-1">
+            <div className="bg-[#0B1120] p-3.5 rounded-xl border border-white/10 space-y-1.5">
+              <div className="font-bold text-white">1. 개인정보 수집 및 이용 목적</div>
+              <p>회원 식별, 오픈 베타 참여 승인 확인(단톡방 회원 및 추천인 확인), 운행 일지·정산·경비 장부 서비스 제공 및 고객 문의 응대</p>
+            </div>
+            <div className="bg-[#0B1120] p-3.5 rounded-xl border border-white/10 space-y-1.5">
+              <div className="font-bold text-white">2. 수집하는 개인정보 항목</div>
+              <p>[필수] 이메일, 비밀번호(암호화 저장), 이름, 휴대폰 번호, 가입 구분(단톡방 닉네임 또는 추천인)</p>
+              <p>[선택] 이벤트 및 혜택 안내 수신 동의 여부</p>
+            </div>
+            <div className="bg-[#0B1120] p-3.5 rounded-xl border border-white/10 space-y-1.5">
+              <div className="font-bold text-white">3. 보유 및 이용 기간</div>
+              <p>회원 탈퇴 시 즉시 파기합니다. 단, 관계 법령에 따라 보존이 필요한 경우 해당 법령에서 정한 기간 동안 보관합니다.</p>
+            </div>
+            <div className="bg-[#0B1120] p-3.5 rounded-xl border border-white/10 space-y-1.5">
+              <div className="font-bold text-white">4. 동의 거부 권리 및 불이익</div>
+              <p>이용자는 개인정보 수집·이용에 대한 동의를 거부할 권리가 있습니다. 다만 필수 항목 동의 거부 시 회원가입 및 서비스 이용이 제한됩니다. 선택 항목은 거부하셔도 서비스 이용에 제한이 없습니다.</p>
+            </div>
+            <div className="bg-[#0B1120] p-3.5 rounded-xl border border-white/10 space-y-1.5">
+              <div className="font-bold text-white">5. 개인정보 처리 위탁 및 보호책임자</div>
+              <p>• 클라우드 인프라 위탁: Supabase Inc. (데이터베이스 및 인증), Vercel Inc. (웹 호스팅)</p>
+              <p>• 개인정보 보호책임자 및 탈퇴 문의: {ADMIN_DEFAULT_EMAIL}</p>
+            </div>
+          </div>
+          <button onClick={() => setShowPrivacyModal(false)} className="w-full mt-4 py-3 hp-primary-btn font-bold rounded-lg text-xs cursor-pointer">확인</button>
+        </div>
+      </div>
+    );
+  };
+
   if (!session) {
     return (
       <div className="min-h-screen bg-[#0B1120] text-slate-100 flex items-center justify-center p-4 relative overflow-hidden">
         {injectStyles()}
-        <div className="w-full max-w-[420px] glass-card rounded-2xl p-6 shadow-2xl relative z-10">
+        {renderPrivacyModal()}
+        <div className="w-full max-w-[440px] glass-card rounded-2xl p-6 shadow-2xl relative z-10">
           <div className="flex flex-col items-center mb-6">
             <div className="w-12 h-12 p-2.5 bg-[#0B1120] border border-[#8B5CF6]/30 rounded-xl flex items-center justify-center mb-3 shadow-[0_0_15px_rgba(139,92,246,0.2)]"><Car className="w-6 h-6 text-[#8B5CF6]" /></div>
             <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-1.5">JunDriver <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-[#8B5CF6]/20 text-[#8B5CF6] border border-[#8B5CF6]/30">PRO</span></h1>
+            <p className="text-[11px] text-slate-400 mt-1">단톡방 전용 오픈 베타</p>
           </div>
           <div className="flex bg-[#0B1120] p-1 rounded-xl border border-white/10 mb-5">
             <button onClick={() => { setAuthMode('login'); setAuthError(''); }} className={`flex-1 py-2 text-xs font-bold rounded-lg cursor-pointer transition-all ${authMode === 'login' ? 'hp-primary-btn shadow' : 'text-slate-400'}`}>로그인</button>
-            <button onClick={() => { setAuthMode('signup'); setAuthError(''); setCaptchaVerified(false); }} className={`flex-1 py-2 text-xs font-bold rounded-lg cursor-pointer transition-all ${authMode === 'signup' ? 'hp-primary-btn shadow' : 'text-slate-400'}`}>회원가입</button>
+            <button onClick={() => { setAuthMode('signup'); setAuthError(''); setAuthSuccess(''); setCaptchaVerified(false); }} className={`flex-1 py-2 text-xs font-bold rounded-lg cursor-pointer transition-all ${authMode === 'signup' ? 'hp-primary-btn shadow' : 'text-slate-400'}`}>오픈베타 신청(가입)</button>
           </div>
           {authMode === 'login' ? (
             <form onSubmit={handleLogin} className="space-y-4">
@@ -541,15 +738,85 @@ export default function App() {
             </form>
           ) : (
             <form onSubmit={handleSignUp} className="space-y-3">
+              {/* 가입 구분 선택: 단톡방 회원 vs 지인 추천 */}
+              <div className="p-3 rounded-xl bg-[#0B1120] border border-white/10 space-y-2.5">
+                <div className="text-[11px] font-bold text-[#38BDF8]">오픈 베타 신청 구분</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button type="button" onClick={() => setJoinType('group')} className={`py-2 rounded-lg text-xs font-bold border transition-all cursor-pointer ${joinType === 'group' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6]' : 'bg-white/5 text-slate-400 border-white/10'}`}>단톡방 회원</button>
+                  <button type="button" onClick={() => setJoinType('referral')} className={`py-2 rounded-lg text-xs font-bold border transition-all cursor-pointer ${joinType === 'referral' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6]' : 'bg-white/5 text-slate-400 border-white/10'}`}>지인 추천 (외부)</button>
+                </div>
+                {joinType === 'group' ? (
+                  <input type="text" value={kakaoId} onChange={(e) => setKakaoId(e.target.value)} placeholder="단톡방 닉네임(아이디) 정확히 입력" required className="w-full px-3 py-2 rounded-lg text-xs" />
+                ) : (
+                  <input type="text" value={referrer} onChange={(e) => setReferrer(e.target.value)} placeholder="추천인 단톡방 닉네임 또는 성함 입력" required className="w-full px-3 py-2 rounded-lg text-xs" />
+                )}
+              </div>
+
               <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="이메일" required className="w-full px-3.5 py-2.5 rounded-lg" />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2"><input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="이름 (김탁송)" required className="w-full px-3.5 py-2.5 rounded-lg" /><input type="tel" value={phone} onChange={(e) => setPhone(e.target.value.replace(/[^0-9]/g, ''))} placeholder="휴대폰번호" maxLength={11} required className="w-full px-3.5 py-2.5 rounded-lg" /></div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2"><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="비밀번호(6자리 이상)" required className="w-full px-3.5 py-2.5 rounded-lg" /><input type="password" value={passwordConfirm} onChange={(e) => setPasswordConfirm(e.target.value)} placeholder="비밀번호 재입력" required className="w-full px-3.5 py-2.5 rounded-lg" /></div>
               <div onClick={() => setCaptchaVerified(!captchaVerified)} className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer ${captchaVerified ? 'bg-[#38BDF8]/20 border-[#38BDF8]/50 text-[#38BDF8]' : 'bg-[#0B1120] border-white/10'}`}><div className="flex items-center gap-2.5"><div className={`w-5 h-5 rounded-md border flex items-center justify-center ${captchaVerified ? 'bg-[#38BDF8] border-[#38BDF8] text-white' : 'border-slate-600 bg-slate-800'}`}>{captchaVerified && <Check className="w-3.5 h-3.5" />}</div><span className="text-xs font-semibold">로봇이 아닙니다 (터치)</span></div></div>
-              <div className="pt-2"><div className="p-3 rounded-xl bg-[#0B1120] border border-white/10 space-y-2"><div className="flex items-start gap-2.5"><input type="checkbox" id="agreeChk" checked={agreePrivacy} onChange={(e) => setAgreePrivacy(e.target.checked)} className="mt-0.5 w-4 h-4 rounded text-[#8B5CF6] cursor-pointer" /><label htmlFor="agreeChk" className="text-xs text-slate-200 font-medium cursor-pointer">[필수] 개인정보 수집 및 운행일지 저장 동의</label></div></div></div>
+              
+              {/* 법적 필수 동의 + 선택 마케팅 동의 */}
+              <div className="p-3 rounded-xl bg-[#0B1120] border border-white/10 space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <label htmlFor="agreeChk" className="flex items-center gap-2 text-xs text-slate-200 font-medium cursor-pointer">
+                    <input type="checkbox" id="agreeChk" checked={agreePrivacy} onChange={(e) => setAgreePrivacy(e.target.checked)} className="w-4 h-4 rounded text-[#8B5CF6] cursor-pointer" />
+                    <span>[필수] 개인정보 수집·이용 동의</span>
+                  </label>
+                  <button type="button" onClick={() => setShowPrivacyModal(true)} className="text-[11px] text-[#38BDF8] underline shrink-0 cursor-pointer">전문보기</button>
+                </div>
+                <label htmlFor="agreeMktChk" className="flex items-center gap-2 text-xs text-slate-400 font-medium cursor-pointer">
+                  <input type="checkbox" id="agreeMktChk" checked={agreeMarketing} onChange={(e) => setAgreeMarketing(e.target.checked)} className="w-4 h-4 rounded text-[#8B5CF6] cursor-pointer" />
+                  <span>[선택] 이벤트 및 혜택 안내 수신 동의</span>
+                </label>
+              </div>
+
               {authError && <div className="p-2.5 bg-[#EC4899]/10 border border-[#EC4899]/30 rounded-lg text-[#EC4899] text-xs">{authError}</div>}
-              <button type="submit" disabled={authLoading} className="w-full py-3 hp-primary-btn font-bold text-sm rounded-lg cursor-pointer mt-2">{authLoading ? '처리 중...' : '동의하고 회원가입'}</button>
+              <button type="submit" disabled={authLoading} className="w-full py-3 hp-primary-btn font-bold text-sm rounded-lg cursor-pointer mt-2">{authLoading ? '처리 중...' : '동의하고 오픈베타 신청'}</button>
             </form>
           )}
+          <div className="mt-5 pt-3 border-t border-white/10 text-center">
+            <button type="button" onClick={() => setShowPrivacyModal(true)} className="text-[11px] text-slate-400 hover:text-[#38BDF8] underline cursor-pointer">개인정보 처리방침 보기</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 오픈 베타 승인 대기 화면
+  if (!isAdminUser && currentUserProfile?.approvalStatus === 'pending') {
+    return (
+      <div className="min-h-screen bg-[#0B1120] text-slate-100 flex items-center justify-center p-4">
+        {injectStyles()}
+        {renderPrivacyModal()}
+        <div className="w-full max-w-[420px] glass-card rounded-2xl p-7 text-center space-y-5 shadow-2xl">
+          <div className="w-14 h-14 mx-auto rounded-2xl bg-[#8B5CF6]/20 border border-[#8B5CF6]/40 flex items-center justify-center">
+            <ShieldAlert className="w-7 h-7 text-[#8B5CF6]" />
+          </div>
+          <div>
+            <h2 className="text-lg font-extrabold text-white">오픈 베타 승인 대기 중</h2>
+            <p className="text-xs text-slate-300 mt-2 leading-relaxed">
+              <span className="font-bold text-[#38BDF8]">{currentUserProfile.name}</span> 기사님의 신청이 정상 접수되었습니다.<br />
+              관리자가 단톡방/추천인 확인 후 승인하면 바로 이용하실 수 있습니다.
+            </p>
+          </div>
+          <div className="bg-[#0B1120] border border-white/10 rounded-xl p-4 text-left text-xs space-y-2">
+            <div className="flex justify-between">
+              <span className="text-slate-400">신청 구분</span>
+              <span className="font-bold text-white">{currentUserProfile.joinType === 'referral' ? '지인 추천(외부)' : '단톡방 회원'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-400">{currentUserProfile.joinType === 'referral' ? '추천인' : '단톡방 닉네임'}</span>
+              <span className="font-bold text-[#38BDF8]">{currentUserProfile.joinType === 'referral' ? (currentUserProfile.referrer || '-') : (currentUserProfile.kakaoId || '-')}</span>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <button onClick={() => session?.user && fetchUserData(session.user.id, session.user.email || '', session.user.user_metadata, session.user.created_at)} className="w-full py-3 hp-primary-btn font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 cursor-pointer">
+              <RefreshCw className="w-4 h-4" /> 승인 상태 새로고침
+            </button>
+            <button onClick={handleLogout} className="w-full py-2.5 bg-white/5 hover:bg-white/10 text-slate-300 font-semibold text-xs rounded-xl cursor-pointer">로그아웃</button>
+          </div>
         </div>
       </div>
     );
@@ -558,11 +825,12 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#0B1120] text-slate-100 pb-20 relative">
       {injectStyles()}
+      {renderPrivacyModal()}
       <header className="sticky top-0 z-30 glass-card border-b-0 border-white/5 px-4 lg:px-8 py-3">
         <div className="max-w-[1400px] mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2"><div className="w-8 h-8 bg-gradient-to-br from-[#8B5CF6] to-[#EC4899] rounded-lg flex items-center justify-center shadow-[0_0_10px_#8B5CF6]"><Car className="w-4 h-4 text-white" /></div><span className="font-bold text-base text-white">JunDriver</span><span className="px-1.5 py-0.5 text-[10px] font-extrabold bg-[#8B5CF6]/20 text-[#8B5CF6] rounded border border-[#8B5CF6]/30">PRO</span></div>
           <div className="flex items-center gap-2">
-            {isAdminUser && <button onClick={() => { fetchAdminData(); setActiveTab('admin'); }} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all ${activeTab === 'admin' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#38BDF8]/10 border border-[#38BDF8]/30 text-[#38BDF8] hover:bg-[#38BDF8]/20'}`}><Crown className="w-3.5 h-3.5" /><span className="hidden sm:inline">관제탑</span></button>}
+            {isAdminUser && <button onClick={() => { fetchAdminData(); setActiveTab('admin'); }} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all relative ${activeTab === 'admin' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#38BDF8]/10 border border-[#38BDF8]/30 text-[#38BDF8] hover:bg-[#38BDF8]/20'}`}><Crown className="w-3.5 h-3.5" /><span className="hidden sm:inline">관제탑</span>{pendingCount > 0 && <span className="ml-0.5 px-1.5 py-0.2 rounded-full bg-[#EC4899] text-white text-[9px] font-extrabold">{pendingCount}</span>}</button>}
             <button onClick={() => setShowProfileModal(true)} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg glass-card text-xs text-slate-200 cursor-pointer"><User className="w-3.5 h-3.5 text-[#8B5CF6]" /><span className="block font-bold text-white">{currentUserProfile?.name || '기사'}님</span></button>
             <button onClick={handleLogout} className="p-1.5 rounded-lg glass-card text-slate-400 hover:text-[#EC4899] cursor-pointer"><LogOut className="w-4 h-4" /></button>
           </div>
@@ -592,7 +860,7 @@ export default function App() {
             <button onClick={() => setActiveTab('wallet')} className={`py-2.5 px-2 text-center rounded-xl text-xs font-bold cursor-pointer transition-all ${activeTab === 'wallet' ? 'hp-primary-btn shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'bg-white/5 text-slate-300 hover:text-white'}`}>계좌 관리</button>
             <button onClick={() => setActiveTab('trade_centers')} className={`py-2.5 px-2 text-center rounded-xl text-xs font-bold cursor-pointer transition-all ${activeTab === 'trade_centers' ? 'hp-primary-btn shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'bg-white/5 text-slate-300 hover:text-white'}`}>매매단지</button>
             <button onClick={() => setActiveTab('auctions')} className={`py-2.5 px-2 text-center rounded-xl text-xs font-bold cursor-pointer transition-all ${activeTab === 'auctions' ? 'hp-primary-btn shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'bg-white/5 text-slate-300 hover:text-white'}`}>경매장</button>
-            {isAdminUser && <button onClick={() => setActiveTab('admin')} className={`py-2.5 px-2 text-center rounded-xl text-xs font-bold cursor-pointer transition-all ${activeTab === 'admin' ? 'bg-[#38BDF8] text-[#0B1120] font-extrabold' : 'bg-[#38BDF8]/10 text-[#38BDF8]'}`}>관제탑</button>}
+            {isAdminUser && <button onClick={() => setActiveTab('admin')} className={`py-2.5 px-2 text-center rounded-xl text-xs font-bold cursor-pointer transition-all ${activeTab === 'admin' ? 'bg-[#38BDF8] text-[#0B1120] font-extrabold' : 'bg-[#38BDF8]/10 text-[#38BDF8]'}`}>관제탑 {pendingCount > 0 && `(${pendingCount})`}</button>}
           </div>
         </div>
 
@@ -601,8 +869,24 @@ export default function App() {
             {/* 배차 등록 폼 */}
             <div className="glass-card rounded-xl p-5 sm:p-6 shadow-lg h-fit">
               <h3 className="text-sm font-bold text-white mb-1 flex items-center gap-2"><PlusCircle className="w-4 h-4 text-[#8B5CF6]" />새 운행 배차 등록</h3>
-              <p className="text-[11px] text-[#38BDF8] font-medium mb-4 ml-6">탁송 운임과 대납 비용을 기록하여 순수익을 계산합니다.</p>
+              <p className="text-[11px] text-[#38BDF8] font-medium mb-4 ml-6">프로그램 선택 시 수수료가 자동 세팅됩니다.</p>
               <form onSubmit={handleAddRecord} className="space-y-3.5">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-300 mb-1.5">배차 프로그램 선택</label>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {PLATFORMS.map(p => (
+                      <button
+                        key={p.name}
+                        type="button"
+                        onClick={() => { setNewPlatform(p.name); setNewFeeRate(p.defaultFee); }}
+                        className={`py-2 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${newPlatform === p.name ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-[0_0_10px_rgba(139,92,246,0.4)]' : 'bg-[#0B1120] text-slate-400 border-white/15 hover:border-white/30'}`}
+                      >
+                        {p.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">운행 일자</label><input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} required className="w-full px-3 py-2.5 rounded-lg" /></div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">출발지</label><input type="text" placeholder="예: 수원" value={newDeparture} onChange={(e) => setNewDeparture(e.target.value)} required className="w-full px-3 py-2.5 rounded-lg" /></div>
@@ -627,7 +911,7 @@ export default function App() {
               </form>
             </div>
             
-            {/* 캘린더 영역 (모바일: 세로형 리스트 / PC: 7열 달력) */}
+            {/* 캘린더 영역 */}
             <div className="lg:col-span-2 glass-card rounded-xl p-4 sm:p-5 shadow-lg flex flex-col h-auto md:h-[750px]">
               <div className="flex flex-col gap-3 mb-4 border-b border-white/10 pb-4 shrink-0">
                 <div className="flex items-center justify-between">
@@ -654,7 +938,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* 모바일 전용: 위아래 세로형 캘린더 리스트 */}
+              {/* 모바일 전용: 세로형 캘린더 리스트 */}
               <div className="md:hidden space-y-2.5">
                 {mobileVerticalDays.map((dateStr) => {
                   const dayRecords = records.filter(r => r.date === dateStr);
@@ -703,7 +987,10 @@ export default function App() {
                                     className="w-4 h-4 text-[#8B5CF6] rounded bg-[#0B1120] border-white/20 cursor-pointer shrink-0"
                                   />
                                   <div className="min-w-0">
-                                    <div className="text-xs font-extrabold text-white truncate">{r.departure} ➔ {r.destination}</div>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="px-1.5 py-0.5 rounded bg-[#8B5CF6]/20 text-[#38BDF8] text-[9px] font-bold shrink-0">{r.platform || '미지정'}</span>
+                                      <span className="text-xs font-extrabold text-white truncate">{r.departure} ➔ {r.destination}</span>
+                                    </div>
                                     <div className="text-[11px] text-[#38BDF8] font-bold mt-0.5">순수익 {r.netAmount.toLocaleString()}원</div>
                                   </div>
                                 </div>
@@ -724,7 +1011,7 @@ export default function App() {
                 })}
               </div>
 
-              {/* PC/태블릿 전용: 기존 7열 월간 캘린더 */}
+              {/* PC/태블릿 전용: 7열 월간 캘린더 */}
               <div className="hidden md:flex flex-1 min-h-0 overflow-y-auto scrollbar-hide rounded-xl border border-white/10 bg-[#0B1120] flex-col">
                 <div className="grid grid-cols-7 border-b border-white/10 shrink-0 sticky top-0 bg-[#0B1120] z-10">
                   {['일', '월', '화', '수', '목', '금', '토'].map((day, i) => ( <div key={day} className={`p-2 text-center text-xs font-bold ${i === 0 ? 'text-[#EC4899]' : i === 6 ? 'text-[#38BDF8]' : 'text-slate-400'}`}>{day}</div> ))}
@@ -754,7 +1041,10 @@ export default function App() {
                                       <div className="text-[10px] font-extrabold text-white truncate">{r.departure.substring(0, 2)}➔{r.destination.substring(0, 4)}</div>
                                       {isFullyPaid ? <span className="text-[9px] text-emerald-400 font-bold ml-1 shrink-0">완료</span> : <span className="text-[9px] text-[#EC4899] font-bold ml-1 shrink-0">미수</span>}
                                     </div>
-                                    <div className="text-[9px] text-[#38BDF8] font-bold mt-0.5">{(r.netAmount / 10000).toFixed(1)}만</div>
+                                    <div className="flex items-center justify-between mt-0.5">
+                                      <span className="text-[8px] text-slate-400 truncate">{r.platform || '미지정'}</span>
+                                      <span className="text-[9px] text-[#38BDF8] font-bold">{(r.netAmount / 10000).toFixed(1)}만</span>
+                                    </div>
                                   </div>
                                 </div>
                               </div>
@@ -780,7 +1070,13 @@ export default function App() {
               {unpaidRecords.length === 0 ? <div className="col-span-full text-center py-10 text-slate-500 text-xs">현재 미입금 내역이 없습니다.</div> : unpaidRecords.slice(0, visibleClaimCount).map((r) => (
                 <div key={r.id} className="bg-[#0B1120] border border-white/10 rounded-xl p-5 flex flex-col justify-between hover:border-[#8B5CF6]/50 transition-all">
                   <div>
-                    <div className="flex justify-between items-start mb-2"><span className="px-2 py-0.5 bg-[#EC4899]/20 text-[#EC4899] text-[10px] font-bold rounded">청구 대기</span><span className="text-[10px] text-slate-400 font-mono">{r.date}</span></div>
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="px-2 py-0.5 bg-[#EC4899]/20 text-[#EC4899] text-[10px] font-bold rounded">청구 대기</span>
+                        <span className="px-2 py-0.5 bg-[#8B5CF6]/20 text-[#38BDF8] text-[10px] font-bold rounded">{r.platform || '미지정'}</span>
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-mono">{r.date}</span>
+                    </div>
                     <div className="font-bold text-white text-sm mb-1 flex items-center gap-1.5"><span>{r.departure}</span><ChevronRight className="w-3.5 h-3.5 text-[#8B5CF6]" /><span>{r.destination}</span></div>
                     <div className="text-xs text-slate-400 mt-3 space-y-1">
                       <div className="flex justify-between"><span>탁송운임</span><span className={r.isGrossPaid ? "text-emerald-400 line-through" : "text-white"}>{r.grossAmount.toLocaleString()}원</span></div>
@@ -823,7 +1119,18 @@ export default function App() {
                 <h3 className="text-sm font-bold text-white mb-1 flex items-center gap-2"><PlusCircle className="w-4 h-4 text-[#EC4899]" />일반 경비 지출 등록</h3>
                 <form onSubmit={handleAddExpense} className="space-y-3.5 mt-4">
                   <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">지출 일자</label><input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} required className="w-full px-3 py-2.5 rounded-lg" /></div>
-                  <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">지출 분류</label><select value={expCategory} onChange={(e) => setExpCategory(e.target.value)} className="w-full px-3 py-2.5 rounded-lg"><option value="대중교통">대중교통 (버스/지하철/택시)</option><option value="식대">식대/간식</option><option value="차량공유">차량공유 (쏘카/그린카)</option><option value="기타">기타 경비</option></select></div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">프로그램 귀속</label>
+                      <select value={expPlatform} onChange={(e) => setExpPlatform(e.target.value)} className="w-full px-3 py-2.5 rounded-lg">
+                        {EXPENSE_PLATFORMS.map(p => <option key={p} value={p}>{p}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">지출 분류</label>
+                      <select value={expCategory} onChange={(e) => setExpCategory(e.target.value)} className="w-full px-3 py-2.5 rounded-lg"><option value="대중교통">대중교통 (버스/지하철/택시)</option><option value="식대">식대/간식</option><option value="차량공유">차량공유 (쏘카/그린카)</option><option value="고정비">고정비 (프로그램/보험)</option><option value="기타">기타 경비</option></select>
+                    </div>
+                  </div>
                   <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">지출 금액(원)</label><input type="text" placeholder="금액 입력" value={expAmount} onChange={(e) => setExpAmount(formatNumberWithComma(e.target.value))} required className="w-full px-3 py-2.5 rounded-lg text-right" /></div>
                   <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">상세 메모 (선택)</label><input type="text" placeholder="예: 경기K패스, 광역버스" value={expMemo} onChange={(e) => setExpMemo(e.target.value)} className="w-full px-3 py-2.5 rounded-lg" /></div>
                   <button type="submit" className="w-full py-3.5 hp-primary-btn font-bold rounded-lg text-xs cursor-pointer mt-2">경비 등록하기</button>
@@ -832,16 +1139,24 @@ export default function App() {
               
               <div className="glass-card rounded-xl p-5 shadow-lg border-t-2 border-t-[#38BDF8]">
                 <h3 className="text-sm font-bold text-white mb-2 flex items-center gap-1.5"><Smartphone className="w-4 h-4 text-[#38BDF8]" /> 매월 나가는 고정비 관리</h3>
-                <p className="text-[11px] text-slate-400 mb-3 leading-relaxed">보험료, 통신비, 프로그램비 등 매월 정기적으로 나가는 고정 지출을 템플릿으로 만들어 한 번에 장부에 등록하세요.</p>
-                <div className="flex flex-col sm:flex-row gap-2 mb-3">
-                  <input type="text" value={newMonthlyMemo} onChange={(e) => setNewMonthlyMemo(e.target.value)} placeholder="항목명 (예: 건당보험료)" className="w-full sm:flex-1 px-3 py-2.5 rounded-lg text-xs" />
-                  <input type="text" value={newMonthlyAmount} onChange={(e) => setNewMonthlyAmount(formatNumberWithComma(e.target.value))} placeholder="금액 (원)" className="w-full sm:w-28 px-3 py-2.5 rounded-lg text-xs text-right" />
-                  <button onClick={handleAddMonthlyFixedItem} className="w-full sm:w-auto px-4 py-2.5 bg-[#38BDF8] text-[#0B1120] font-bold rounded-lg text-xs hover:bg-[#38BDF8]/80 cursor-pointer">+ 추가</button>
+                <p className="text-[11px] text-slate-400 mb-3 leading-relaxed">보험료, 통신비, 프로그램비 등 매월 정기적으로 나가는 고정 지출을 프로그램별로 묶어 한 번에 장부에 등록하세요.</p>
+                <div className="space-y-2 mb-3">
+                  <select value={newMonthlyPlatform} onChange={(e) => setNewMonthlyPlatform(e.target.value)} className="w-full px-3 py-2 rounded-lg text-xs">
+                    {EXPENSE_PLATFORMS.map(p => <option key={p} value={p}>귀속: {p}</option>)}
+                  </select>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input type="text" value={newMonthlyMemo} onChange={(e) => setNewMonthlyMemo(e.target.value)} placeholder="항목명 (예: 로지 프로그램비)" className="w-full sm:flex-1 px-3 py-2.5 rounded-lg text-xs" />
+                    <input type="text" value={newMonthlyAmount} onChange={(e) => setNewMonthlyAmount(formatNumberWithComma(e.target.value))} placeholder="금액 (원)" className="w-full sm:w-28 px-3 py-2.5 rounded-lg text-xs text-right" />
+                    <button onClick={handleAddMonthlyFixedItem} className="w-full sm:w-auto px-4 py-2.5 bg-[#38BDF8] text-[#0B1120] font-bold rounded-lg text-xs hover:bg-[#38BDF8]/80 cursor-pointer">+ 추가</button>
+                  </div>
                 </div>
                 <div className="space-y-2 mb-4 max-h-[160px] overflow-y-auto pr-1 scrollbar-hide">
                   {monthlyFixedItems.length === 0 ? <div className="text-[11px] text-slate-500 text-center py-2">등록된 고정비가 없습니다.</div> : monthlyFixedItems.map(item => (
                     <div key={item.id} className="flex justify-between items-center bg-[#0B1120] px-3 py-2.5 rounded border border-white/5">
-                      <span className="text-xs text-slate-300 truncate">{item.memo}</span>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="px-1.5 py-0.5 rounded bg-[#38BDF8]/15 text-[#38BDF8] text-[9px] font-bold shrink-0">{item.platform || '공통'}</span>
+                        <span className="text-xs text-slate-300 truncate">{item.memo}</span>
+                      </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <span className="text-xs font-bold text-white">{item.amount.toLocaleString()}원</span>
                         <button onClick={() => handleDeleteMonthlyFixedItem(item.id)} className="text-slate-500 hover:text-[#EC4899] cursor-pointer"><X className="w-4 h-4" /></button>
@@ -858,7 +1173,14 @@ export default function App() {
               <div className="space-y-2.5 max-h-[750px] overflow-y-auto pr-1">
                 {expenses.length === 0 ? <div className="text-center py-10 text-slate-500 text-xs">등록된 경비 지출이 없습니다.</div> : expenses.map((e) => (
                   <div key={e.id} className="bg-[#0B1120] border border-white/10 p-4 rounded-lg flex items-center justify-between hover:border-white/20 transition-all">
-                    <div><div className="flex items-center gap-2"><span className="px-2 py-0.5 bg-white/10 text-slate-300 rounded text-[10px] font-semibold">{e.category}</span><span className="text-sm text-white font-medium">{e.memo || '-'}</span></div><div className="text-xs text-slate-500 mt-1.5">{e.date}</div></div>
+                    <div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="px-2 py-0.5 bg-[#38BDF8]/15 text-[#38BDF8] rounded text-[10px] font-bold">{e.platform || '공통'}</span>
+                        <span className="px-2 py-0.5 bg-white/10 text-slate-300 rounded text-[10px] font-semibold">{e.category}</span>
+                        <span className="text-sm text-white font-medium">{e.memo || '-'}</span>
+                      </div>
+                      <div className="text-xs text-slate-500 mt-1.5">{e.date}</div>
+                    </div>
                     <div className="flex items-center gap-3"><span className="text-[#EC4899] font-bold text-sm">-{e.amount.toLocaleString()}원</span><button onClick={() => handleDeleteExpense(e.id)} className="text-slate-600 hover:text-[#EC4899] p-1 cursor-pointer"><Trash2 className="w-4 h-4" /></button></div>
                   </div>
                 ))}
@@ -869,10 +1191,16 @@ export default function App() {
 
         {activeTab === 'analytics' && (
           <div className="space-y-6 fade-in-text">
-            <div className="flex flex-col sm:flex-row gap-2 bg-[#0B1120] p-1.5 rounded-xl border border-white/10 w-full sm:w-fit">
-              <button onClick={() => setAnalyticsMode('month')} className={`w-full sm:w-auto px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${analyticsMode === 'month' ? 'bg-[#8B5CF6] text-white shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'text-slate-400 hover:text-white'}`}>월간 상세 요약</button>
-              <button onClick={() => setAnalyticsMode('year')} className={`w-full sm:w-auto px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${analyticsMode === 'year' ? 'bg-[#8B5CF6] text-white shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'text-slate-400 hover:text-white'}`}>연간 종합 통계</button>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex flex-col sm:flex-row gap-2 bg-[#0B1120] p-1.5 rounded-xl border border-white/10 w-full sm:w-fit">
+                <button onClick={() => setAnalyticsMode('month')} className={`w-full sm:w-auto px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${analyticsMode === 'month' ? 'bg-[#8B5CF6] text-white shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'text-slate-400 hover:text-white'}`}>월간 상세 요약</button>
+                <button onClick={() => setAnalyticsMode('year')} className={`w-full sm:w-auto px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${analyticsMode === 'year' ? 'bg-[#8B5CF6] text-white shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'text-slate-400 hover:text-white'}`}>연간 종합 통계</button>
+              </div>
+              <button onClick={handleExportMyCSV} className="w-full sm:w-auto px-4 py-2.5 bg-[#10B981]/15 hover:bg-[#10B981]/25 text-[#10B981] border border-[#10B981]/40 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors">
+                <Download className="w-4 h-4" /> 내 장부 엑셀(CSV) 다운로드
+              </button>
             </div>
+
             {analyticsMode === 'month' && (
               <div className="space-y-4 fade-in-text">
                 <div className="glass-card rounded-2xl p-5 md:p-6 shadow-xl border-2 border-[#8B5CF6]/40 relative overflow-hidden">
@@ -906,6 +1234,33 @@ export default function App() {
                     <div className="bg-white/[0.02] p-3 rounded-xl sm:bg-transparent sm:p-0"><div className="text-[11px] text-slate-400 mb-1">최종 실수령액 (예상)</div><div className="text-xl lg:text-2xl font-extrabold text-[#38BDF8]">{monthlyProfit.toLocaleString()}원</div></div>
                   </div>
                 </section>
+
+                {/* 프로그램별 손익 계산서 */}
+                <div className="glass-card rounded-xl p-5 border-t-2 border-t-[#38BDF8]">
+                  <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-1.5"><BarChart3 className="w-4 h-4 text-[#38BDF8]" /> 당월 프로그램별 손익 계산서</h3>
+                  {platformSummaryList.length === 0 ? (
+                    <div className="text-center py-6 text-slate-500 text-xs">이번 달 등록된 프로그램별 내역이 없습니다.</div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {platformSummaryList.map(item => (
+                        <div key={item.name} className="bg-[#0B1120] border border-white/10 rounded-xl p-4 space-y-2 text-xs">
+                          <div className="flex justify-between items-center border-b border-white/10 pb-2">
+                            <span className="font-extrabold text-white text-sm">{item.name}</span>
+                            <span className="px-2 py-0.5 rounded bg-white/10 text-slate-300 text-[10px] font-bold">{item.count}건</span>
+                          </div>
+                          <div className="flex justify-between"><span className="text-slate-400">탁송 매출</span><span className="text-white font-semibold">{item.gross.toLocaleString()}원</span></div>
+                          <div className="flex justify-between"><span className="text-slate-400">탁송 순수익</span><span className="text-[#38BDF8] font-semibold">{item.net.toLocaleString()}원</span></div>
+                          <div className="flex justify-between"><span className="text-slate-400">프로그램 지출</span><span className="text-[#EC4899] font-semibold">-{item.exp.toLocaleString()}원</span></div>
+                          <div className="flex justify-between border-t border-white/10 pt-2">
+                            <span className="text-slate-300 font-bold">최종 순수익</span>
+                            <span className={`font-extrabold ${item.profit >= 0 ? 'text-emerald-400' : 'text-[#EC4899]'}`}>{item.profit.toLocaleString()}원</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="glass-card rounded-xl p-5 border-t-2 border-t-[#8B5CF6]">
                     <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-1.5"><PieChart className="w-4 h-4 text-[#8B5CF6]" /> 당월 매출 세부 구성</h3>
@@ -1082,7 +1437,7 @@ export default function App() {
             <div className="mb-2"><h3 className="text-sm font-bold text-[#38BDF8] flex items-center gap-2"><Crown className="w-5 h-5" />플랫폼 관리자 (관제탑)</h3></div>
             <div className="flex flex-col sm:flex-row gap-2 border-b border-white/10 pb-3">
               <button onClick={() => setAdminSubTab('campaign')} className={`w-full sm:w-auto px-3 py-2 rounded text-xs font-bold cursor-pointer transition-colors ${adminSubTab === 'campaign' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#0B1120] text-slate-400 hover:text-white border border-white/10'}`}>공지/이벤트 문구보관함</button>
-              <button onClick={() => setAdminSubTab('members')} className={`w-full sm:w-auto px-3 py-2 rounded text-xs font-bold cursor-pointer transition-colors ${adminSubTab === 'members' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#0B1120] text-slate-400 hover:text-white border border-white/10'}`}>회원 접속 현황 및 스카우트</button>
+              <button onClick={() => setAdminSubTab('members')} className={`w-full sm:w-auto px-3 py-2 rounded text-xs font-bold cursor-pointer transition-colors ${adminSubTab === 'members' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#0B1120] text-slate-400 hover:text-white border border-white/10'}`}>회원 접속 현황 및 승인 {pendingCount > 0 && `(${pendingCount})`}</button>
               <button onClick={() => setAdminSubTab('analytics')} className={`w-full sm:w-auto px-3 py-2 rounded text-xs font-bold cursor-pointer transition-colors ${adminSubTab === 'analytics' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#0B1120] text-slate-400 hover:text-white border border-white/10'}`}>플랫폼 트래픽 및 매출 통계</button>
             </div>
 
@@ -1119,19 +1474,31 @@ export default function App() {
             {adminSubTab === 'members' && (
               <div className="glass-card p-5 sm:p-6 rounded-xl space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2">
-                  <input type="text" placeholder="이름 / 전화번호 / 이메일 검색..." value={adminSearchTerm} onChange={(e) => setAdminSearchTerm(e.target.value)} className="px-3 py-2.5 rounded-lg text-xs w-full sm:max-w-xs" />
-                  <button onClick={() => setShowScoutOnly(!showScoutOnly)} className={`w-full sm:w-auto px-4 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${showScoutOnly ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-[0_0_15px_rgba(245,158,11,0.5)] border-0' : 'bg-[#0B1120] text-slate-400 border border-white/10 hover:border-amber-500/50'}`}><Award className="w-4 h-4" /> 🏆 에이스 기사만 보기</button>
+                  <input type="text" placeholder="이름 / 연락처 / 단톡방 닉네임 / 추천인 검색..." value={adminSearchTerm} onChange={(e) => setAdminSearchTerm(e.target.value)} className="px-3 py-2.5 rounded-lg text-xs w-full sm:max-w-xs" />
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <button onClick={() => setShowPendingOnly(!showPendingOnly)} className={`w-full sm:w-auto px-4 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${showPendingOnly ? 'bg-[#EC4899] text-white shadow-[0_0_15px_rgba(236,72,153,0.5)]' : 'bg-[#0B1120] text-slate-400 border border-white/10 hover:border-[#EC4899]/50'}`}>
+                      <ShieldAlert className="w-4 h-4" /> 승인 대기만 ({pendingCount})
+                    </button>
+                    <button onClick={() => setShowScoutOnly(!showScoutOnly)} className={`w-full sm:w-auto px-4 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${showScoutOnly ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-[0_0_15px_rgba(245,158,11,0.5)] border-0' : 'bg-[#0B1120] text-slate-400 border border-white/10 hover:border-amber-500/50'}`}>
+                      <Award className="w-4 h-4" /> 🏆 에이스 기사만
+                    </button>
+                  </div>
                 </div>
 
                 {/* 모바일 전용: 회원 세로 카드 */}
                 <div className="md:hidden space-y-3">
                   {displayedMembers.length === 0 ? <div className="p-10 text-center text-slate-500 text-xs">검색 조건에 맞는 기사님이 없습니다.</div> : displayedMembers.map((m) => {
                     const isAce = (m.monthlyGross || 0) >= 1500000 || (m.recordCount || 0) >= 10;
+                    const isPending = m.approvalStatus === 'pending';
                     return (
-                      <div key={m.id} className={`p-4 rounded-xl border space-y-2.5 text-xs ${isAce ? 'bg-amber-500/5 border-amber-500/30' : 'bg-[#0B1120] border-white/10'}`}>
+                      <div key={m.id} className={`p-4 rounded-xl border space-y-2.5 text-xs ${isPending ? 'bg-[#EC4899]/10 border-[#EC4899]/40' : isAce ? 'bg-amber-500/5 border-amber-500/30' : 'bg-[#0B1120] border-white/10'}`}>
                         <div className="flex justify-between items-start">
                           <div>
-                            <div className="text-white font-bold flex items-center gap-1.5 text-sm">{m.name || '미입력'} {isAce && <span className="px-1.5 py-0.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[9px] rounded font-extrabold">🏆 에이스</span>}</div>
+                            <div className="text-white font-bold flex flex-wrap items-center gap-1.5 text-sm">
+                              {m.name || '미입력'}
+                              {isPending && <span className="px-1.5 py-0.5 bg-[#EC4899] text-white text-[9px] rounded font-extrabold">승인대기</span>}
+                              {isAce && <span className="px-1.5 py-0.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[9px] rounded font-extrabold">🏆 에이스</span>}
+                            </div>
                             <div className="font-mono text-[#38BDF8] text-[11px] mt-0.5">{formatPhoneNumber(m.phone) || '번호없음'}</div>
                           </div>
                           <div className="text-right">
@@ -1139,11 +1506,16 @@ export default function App() {
                             <div className="text-[#EC4899] font-semibold">{(m.monthlyGross || 0).toLocaleString()}원</div>
                           </div>
                         </div>
-                        <div className="flex justify-between text-[11px] text-slate-400 border-t border-white/5 pt-2">
-                          <span>최근: {m.lastLoginAt}</span>
-                          <span>누적 {m.loginCount}회</span>
+                        <div className="bg-black/30 p-2.5 rounded-lg border border-white/5 flex justify-between text-[11px]">
+                          <span className="text-slate-400">{m.joinType === 'referral' ? '지인추천' : '단톡방'}</span>
+                          <span className="font-bold text-[#38BDF8]">{m.joinType === 'referral' ? (m.referrer || '-') : (m.kakaoId || '-')}</span>
                         </div>
                         <div className="flex flex-col gap-2 pt-1">
+                          {isPending ? (
+                            <button onClick={() => handleUpdateApprovalStatus(m.id, 'approved')} className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold cursor-pointer">✔ 오픈베타 승인하기</button>
+                          ) : (
+                            <button onClick={() => handleUpdateApprovalStatus(m.id, 'pending')} className="w-full py-2 bg-white/5 hover:bg-[#EC4899]/20 text-slate-400 hover:text-[#EC4899] rounded-lg text-[11px] font-semibold cursor-pointer">승인 해제(대기 전환)</button>
+                          )}
                           <select value={m.role} onChange={(e) => handleUpdateMemberRole(m.id, e.target.value)} className="w-full bg-[#0B1120] border border-white/20 text-white rounded px-3 py-2 text-xs cursor-pointer"><option value="user">일반 기사</option><option value="pro_driver">PRO 기사</option><option value="vip_driver">VIP 기사 (스카우트)</option><option value="manager">운영 직원</option><option value="super_admin">최고 관리자</option></select>
                           <button onClick={() => openAdminUserDetail(m)} className="w-full py-2.5 hp-primary-btn text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"><Search className="w-3.5 h-3.5" />상세 리포트 보기</button>
                         </div>
@@ -1155,17 +1527,28 @@ export default function App() {
                 {/* PC 전용: 회원 테이블 */}
                 <div className="hidden md:block overflow-x-auto rounded-lg border border-white/10">
                   <table className="w-full text-left text-xs whitespace-nowrap">
-                    <thead className="bg-[#0B1120] text-slate-400 border-b border-white/10"><tr><th className="p-3">이름/연락처</th><th className="p-3 text-center">당월 실적 (건수 / 매출)</th><th className="p-3 text-center">최근 접속 / 누적</th><th className="p-3 text-center">권한 변경</th><th className="p-3 text-right">CS 열람 및 개인분석</th></tr></thead>
+                    <thead className="bg-[#0B1120] text-slate-400 border-b border-white/10"><tr><th className="p-3">이름/연락처</th><th className="p-3 text-center">신청 구분 / 닉네임·추천인</th><th className="p-3 text-center">승인 상태</th><th className="p-3 text-center">당월 실적</th><th className="p-3 text-center">권한 변경</th><th className="p-3 text-right">리포트</th></tr></thead>
                     <tbody className="divide-y divide-white/5">
-                      {displayedMembers.length === 0 ? <tr><td colSpan={5} className="p-10 text-center text-slate-500">검색 조건에 맞는 기사님이 없습니다.</td></tr> : displayedMembers.map((m) => {
+                      {displayedMembers.length === 0 ? <tr><td colSpan={6} className="p-10 text-center text-slate-500">검색 조건에 맞는 기사님이 없습니다.</td></tr> : displayedMembers.map((m) => {
                         const isAce = (m.monthlyGross || 0) >= 1500000 || (m.recordCount || 0) >= 10;
+                        const isPending = m.approvalStatus === 'pending';
                         return (
-                          <tr key={m.id} className={`transition-all ${isAce ? 'bg-amber-500/5 hover:bg-amber-500/10' : 'hover:bg-white/5'}`}>
+                          <tr key={m.id} className={`transition-all ${isPending ? 'bg-[#EC4899]/10 hover:bg-[#EC4899]/15' : isAce ? 'bg-amber-500/5 hover:bg-amber-500/10' : 'hover:bg-white/5'}`}>
                             <td className="p-3"><div className="text-white font-bold flex items-center gap-1.5">{m.name || '미입력'} {isAce && <span className="px-1.5 py-0.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[9px] rounded font-extrabold shadow-sm">🏆 에이스</span>}</div><div className="font-mono text-[#38BDF8] text-[11px] mt-1">{formatPhoneNumber(m.phone) || '번호없음'}</div></td>
+                            <td className="p-3 text-center">
+                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${m.joinType === 'referral' ? 'bg-[#8B5CF6]/20 text-[#8B5CF6]' : 'bg-[#38BDF8]/20 text-[#38BDF8]'}`}>{m.joinType === 'referral' ? '지인추천' : '단톡방'}</span>
+                              <div className="text-white font-semibold mt-1">{m.joinType === 'referral' ? (m.referrer || '-') : (m.kakaoId || '-')}</div>
+                            </td>
+                            <td className="p-3 text-center">
+                              {isPending ? (
+                                <button onClick={() => handleUpdateApprovalStatus(m.id, 'approved')} className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded text-[11px] font-bold cursor-pointer">승인하기</button>
+                              ) : (
+                                <button onClick={() => handleUpdateApprovalStatus(m.id, 'pending')} className="px-2.5 py-1 bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-[#EC4899]/20 hover:text-[#EC4899] hover:border-[#EC4899]/40 rounded text-[10px] font-bold cursor-pointer">승인완료</button>
+                              )}
+                            </td>
                             <td className="p-3 text-center"><div className="font-bold text-white">{m.recordCount}건</div><div className="text-[#EC4899] font-semibold mt-1">{(m.monthlyGross || 0).toLocaleString()}원</div></td>
-                            <td className="p-3 text-center"><div className="text-[#38BDF8] font-mono text-[11px]">{m.lastLoginAt}</div><div className="text-slate-400 font-bold mt-1">{m.loginCount}회 접속</div></td>
                             <td className="p-3 text-center"><select value={m.role} onChange={(e) => handleUpdateMemberRole(m.id, e.target.value)} className="bg-[#0B1120] border border-white/20 text-white rounded px-2 py-1.5 text-[11px] cursor-pointer outline-none focus:border-[#8B5CF6]"><option value="user">일반 기사</option><option value="pro_driver">PRO 기사</option><option value="vip_driver">VIP 기사 (스카우트)</option><option value="manager">운영 직원</option><option value="super_admin">최고 관리자</option></select></td>
-                            <td className="p-3 text-right"><button onClick={() => openAdminUserDetail(m)} className="px-2.5 py-1.5 hp-primary-btn hover:bg-white/20 text-white rounded text-[10px] font-bold flex items-center gap-1 ml-auto cursor-pointer"><Search className="w-3 h-3" />상세 리포트</button></td>
+                            <td className="p-3 text-right"><button onClick={() => openAdminUserDetail(m)} className="px-2.5 py-1.5 hp-primary-btn hover:bg-white/20 text-white rounded text-[10px] font-bold flex items-center gap-1 ml-auto cursor-pointer"><Search className="w-3 h-3" />상세</button></td>
                           </tr>
                         );
                       })}
@@ -1216,7 +1599,10 @@ export default function App() {
             <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-1.5"><Activity className="w-4 h-4 text-[#8B5CF6]" />빠른 정산 처리</h3>
             
             <div className="bg-[#0B1120] p-4 rounded-xl border border-white/10 mb-5">
-              <div className="text-xs text-slate-400 mb-1">{currentActionRecord.date}</div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs text-slate-400">{currentActionRecord.date}</span>
+                <span className="px-2 py-0.5 rounded bg-[#8B5CF6]/20 text-[#38BDF8] text-[10px] font-bold">{currentActionRecord.platform || '미지정'}</span>
+              </div>
               <div className="text-lg font-bold text-white mb-2">{currentActionRecord.departure} ➔ {currentActionRecord.destination}</div>
               <div className="flex justify-between items-center border-t border-white/5 pt-2">
                 <span className="text-xs text-slate-400">총 청구액</span>
@@ -1250,6 +1636,13 @@ export default function App() {
           <div className="w-full max-w-sm glass-card rounded-2xl p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4"><h3 className="text-sm font-bold text-white flex items-center gap-1.5"><Edit2 className="w-4 h-4 text-[#8B5CF6]" /> 운행 내역 수정</h3><button onClick={() => setEditingRecord(null)} className="text-slate-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button></div>
             <form onSubmit={handleUpdateRecord} className="space-y-3.5">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1">배차 프로그램</label>
+                <select value={editPlatform} onChange={(e) => setEditPlatform(e.target.value)} className="w-full px-3 py-2.5 rounded-lg">
+                  {PLATFORMS.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
+                  <option value="미지정">미지정</option>
+                </select>
+              </div>
               <div><label className="block text-[11px] font-semibold text-[#38BDF8] mb-1">운행 일자 변경</label><input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="w-full px-3 py-2.5 rounded-lg" required /></div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2"><div><label className="block text-[11px] font-semibold text-slate-300 mb-1">출발지</label><input type="text" value={editDeparture} onChange={(e) => setEditDeparture(e.target.value)} className="w-full px-3 py-2.5 rounded-lg" required /></div><div><label className="block text-[11px] font-semibold text-slate-300 mb-1">도착지</label><input type="text" value={editDestination} onChange={(e) => setEditDestination(e.target.value)} className="w-full px-3 py-2.5 rounded-lg" required /></div></div>
               <div><label className="block text-[11px] font-semibold text-slate-300 mb-1">운임(원)</label><input type="text" value={editGross} onChange={(e) => setEditGross(formatNumberWithComma(e.target.value))} className="w-full px-3 py-2.5 rounded-lg text-right" required /></div>
@@ -1304,7 +1697,7 @@ export default function App() {
                   const unpaid = (!r.isGrossPaid ? r.grossAmount : 0) + (!r.isExpensePaid ? (r.fuelAmount + r.extraExpenseAmount) : 0);
                   return (
                     <div key={r.id} className="bg-[#0B1120] border border-white/10 p-3 rounded-lg text-xs mb-2">
-                      <div className="flex justify-between text-slate-400 mb-1"><span>{r.date}</span><span className={unpaid > 0 ? 'text-[#EC4899] font-bold' : 'text-emerald-400 font-bold'}>{unpaid > 0 ? `미수금 ${unpaid.toLocaleString()}원` : '전액 정산완료'}</span></div>
+                      <div className="flex justify-between text-slate-400 mb-1"><span>{r.date} ({r.platform || '미지정'})</span><span className={unpaid > 0 ? 'text-[#EC4899] font-bold' : 'text-emerald-400 font-bold'}>{unpaid > 0 ? `미수금 ${unpaid.toLocaleString()}원` : '전액 정산완료'}</span></div>
                       <div className="font-bold text-white mb-1.5">{r.departure} → {r.destination}</div>
                     </div>
                   );
@@ -1321,11 +1714,15 @@ export default function App() {
           <div className="w-full max-w-sm glass-card rounded-2xl p-6 shadow-2xl relative z-20">
             <button onClick={() => setShowProfileModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 cursor-pointer"><X className="w-5 h-5" /></button>
             <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2"><User className="w-4 h-4 text-[#8B5CF6]" />기사 프로필 및 계정 관리</h3>
-            <div className="bg-[#0B1120] border border-white/10 rounded-xl p-3.5 space-y-2 mb-5">
+            <div className="bg-[#0B1120] border border-white/10 rounded-xl p-3.5 space-y-2 mb-4">
               <div className="flex justify-between items-center text-xs"><span className="text-slate-400">기사 성함</span><span className="text-white font-bold">{currentUserProfile?.name || session?.user?.user_metadata?.name || '미상'}</span></div>
               <div className="flex justify-between items-center text-xs"><span className="text-slate-400">연락처</span><span className="text-[#38BDF8] font-mono font-semibold">{formatPhoneNumber(currentUserProfile?.phone || session?.user?.user_metadata?.phone || '') || '미등록'}</span></div>
+              <div className="flex justify-between items-center text-xs"><span className="text-slate-400">가입 구분</span><span className="text-slate-200 font-semibold">{currentUserProfile?.joinType === 'referral' ? `추천인(${currentUserProfile.referrer || '-'})` : `단톡방(${currentUserProfile?.kakaoId || '-'})`}</span></div>
             </div>
-            <button onClick={() => setShowProfileModal(false)} className="w-full py-2.5 hp-primary-btn font-bold rounded-lg text-xs cursor-pointer">닫기</button>
+            <div className="flex flex-col gap-2">
+              <button onClick={() => setShowPrivacyModal(true)} className="w-full py-2.5 bg-white/5 hover:bg-white/10 text-slate-300 font-semibold rounded-lg text-xs cursor-pointer">개인정보 처리방침 및 탈퇴 안내</button>
+              <button onClick={() => setShowProfileModal(false)} className="w-full py-2.5 hp-primary-btn font-bold rounded-lg text-xs cursor-pointer">닫기</button>
+            </div>
           </div>
         </div>
       )}
