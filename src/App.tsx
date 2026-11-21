@@ -14,7 +14,7 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-const APP_VERSION = '1.0.1';
+const APP_VERSION = '1.0.2';
 const ADMIN_DEFAULT_EMAIL = 'beat4989@naver.com';
 const ADMIN_DEFAULT_NAME = '김탁송';
 const ADMIN_DEFAULT_PHONE = '01091417586';
@@ -470,8 +470,8 @@ export default function App() {
     if (!captchaVerified) { setAuthError('보안 확인(인간 인증 체크)을 완료해 주세요.'); setAuthLoading(false); return; }
     const trimmedName = name.trim(); const cleanPhone = phone.replace(/[^0-9]/g, ''); const cleanEmail = email.trim().toLowerCase();
     const trimmedKakao = kakaoId.trim(); const trimmedReferrer = referrer.trim();
-    if (joinType === 'group' && !trimmedKakao) { setAuthError('단톡방 닉네임(아이디)을 입력해 주세요.'); setAuthLoading(false); return; }
-    if (joinType === 'referral' && !trimmedReferrer) { setAuthError('추천인 닉네임 또는 성함을 입력해 주세요.'); setAuthLoading(false); return; }
+    if (joinType === 'group' && !trimmedKakao) { setAuthError('단톡방 닉네임(아이디/생년/지역)을 톡방과 똑같이 입력해 주세요.'); setAuthLoading(false); return; }
+    if (joinType === 'referral' && !trimmedReferrer) { setAuthError('추천인 닉네임(아이디/생년/지역)을 톡방과 똑같이 입력해 주세요.'); setAuthLoading(false); return; }
     if (password.length < 6) { setAuthError('비밀번호는 최소 6자리 이상이어야 합니다.'); setAuthLoading(false); return; }
     if (password !== passwordConfirm) { setAuthError('비밀번호가 일치하지 않습니다.'); setAuthLoading(false); return; }
     if (!agreePrivacy) { setAuthError('[필수] 개인정보 수집 및 이용에 동의해 주세요.'); setAuthLoading(false); return; }
@@ -878,9 +878,9 @@ export default function App() {
                   <button type="button" onClick={() => setJoinType('referral')} className={`py-2 rounded-lg text-xs font-bold border transition-all cursor-pointer ${joinType === 'referral' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6]' : 'bg-white/5 text-slate-400 border-white/10'}`}>지인 추천 (외부)</button>
                 </div>
                 {joinType === 'group' ? (
-                  <input type="text" value={kakaoId} onChange={(e) => setKakaoId(e.target.value)} placeholder="단톡방 닉네임(아이디) 정확히 입력" required className="w-full px-3 py-2 rounded-lg text-xs" />
+                  <input type="text" value={kakaoId} onChange={(e) => setKakaoId(e.target.value)} placeholder="단톡방 닉네임(아이디/생년/지역) 톡방과 똑같이" required className="w-full px-3 py-2 rounded-lg text-xs" />
                 ) : (
-                  <input type="text" value={referrer} onChange={(e) => setReferrer(e.target.value)} placeholder="추천인 단톡방 닉네임 또는 성함 입력" required className="w-full px-3 py-2 rounded-lg text-xs" />
+                  <input type="text" value={referrer} onChange={(e) => setReferrer(e.target.value)} placeholder="추천인 닉네임(아이디/생년/지역) 톡방과 똑같이" required className="w-full px-3 py-2 rounded-lg text-xs" />
                 )}
               </div>
 
