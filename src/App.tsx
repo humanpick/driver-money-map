@@ -14,7 +14,7 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-const APP_VERSION = '1.0.4';
+const APP_VERSION = '1.0.5';
 const ADMIN_DEFAULT_EMAIL = 'beat4989@naver.com';
 const ADMIN_DEFAULT_NAME = '김탁송';
 const ADMIN_DEFAULT_PHONE = '01091417586';
@@ -545,7 +545,7 @@ export default function App() {
           await supabase.from('profiles').upsert([{ id: data.user.id, email: cleanEmail, name: trimmedName, phone: cleanPhone, role: profileData.role, created_at: nowIso, last_login_at: nowIso, login_count: 1 }]);
         }
       }
-      setAuthSuccess('오픈 베타 신청이 접수되었습니다. 로그인하시면 승인 상태를 확인하실 수 있습니다.');
+      setAuthSuccess('회원가입 신청이 접수되었습니다. 로그인하시면 승인 상태를 확인하실 수 있습니다.');
       setAuthMode('login');
     }
     setAuthLoading(false);
@@ -857,7 +857,7 @@ export default function App() {
           <div className="overflow-y-auto pr-1 space-y-3 text-xs text-slate-300 leading-relaxed flex-1">
             <div className="bg-[#0B1120] p-3.5 rounded-xl border border-white/10 space-y-1.5">
               <div className="font-bold text-white">1. 개인정보 수집 및 이용 목적</div>
-              <p>회원 식별, 오픈 베타 참여 승인 확인(단톡방 회원 및 추천인 확인), 운행 일지·정산·경비 장부 서비스 제공 및 고객 문의 응대</p>
+              <p>회원 식별, 회원 가입 승인 확인(단톡방 회원 및 추천인 확인), 운행 일지·정산·경비 장부 서비스 제공 및 고객 문의 응대</p>
             </div>
             <div className="bg-[#0B1120] p-3.5 rounded-xl border border-white/10 space-y-1.5">
               <div className="font-bold text-white">2. 수집하는 개인정보 항목</div>
@@ -893,11 +893,11 @@ export default function App() {
           <div className="flex flex-col items-center mb-6">
             <div className="w-12 h-12 p-2.5 bg-[#0B1120] border border-[#8B5CF6]/30 rounded-xl flex items-center justify-center mb-3 shadow-[0_0_15px_rgba(139,92,246,0.2)]"><Car className="w-6 h-6 text-[#8B5CF6]" /></div>
             <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-1.5">탁송대리비서 <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-[#8B5CF6]/20 text-[#8B5CF6] border border-[#8B5CF6]/30">PRO</span></h1>
-            <p className="text-[11px] text-slate-400 mt-1">단톡방 전용 오픈 베타 (v{APP_VERSION})</p>
+            <p className="text-[11px] text-slate-400 mt-1 font-mono">v{APP_VERSION}</p>
           </div>
           <div className="flex bg-[#0B1120] p-1 rounded-xl border border-white/10 mb-5">
             <button onClick={() => { setAuthMode('login'); setAuthError(''); }} className={`flex-1 py-2 text-xs font-bold rounded-lg cursor-pointer transition-all ${authMode === 'login' ? 'hp-primary-btn shadow' : 'text-slate-400'}`}>로그인</button>
-            <button onClick={() => { setAuthMode('signup'); setAuthError(''); setAuthSuccess(''); setCaptchaVerified(false); }} className={`flex-1 py-2 text-xs font-bold rounded-lg cursor-pointer transition-all ${authMode === 'signup' ? 'hp-primary-btn shadow' : 'text-slate-400'}`}>오픈베타 신청(가입)</button>
+            <button onClick={() => { setAuthMode('signup'); setAuthError(''); setAuthSuccess(''); setCaptchaVerified(false); }} className={`flex-1 py-2 text-xs font-bold rounded-lg cursor-pointer transition-all ${authMode === 'signup' ? 'hp-primary-btn shadow' : 'text-slate-400'}`}>회원가입</button>
           </div>
           {authMode === 'login' ? (
             <form onSubmit={handleLogin} className="space-y-4">
@@ -910,7 +910,7 @@ export default function App() {
           ) : (
             <form onSubmit={handleSignUp} className="space-y-3">
               <div className="p-3 rounded-xl bg-[#0B1120] border border-white/10 space-y-2.5">
-                <div className="text-[11px] font-bold text-[#38BDF8]">오픈 베타 신청 구분</div>
+                <div className="text-[11px] font-bold text-[#38BDF8]">가입 구분</div>
                 <div className="grid grid-cols-2 gap-2">
                   <button type="button" onClick={() => setJoinType('group')} className={`py-2 rounded-lg text-xs font-bold border transition-all cursor-pointer ${joinType === 'group' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6]' : 'bg-white/5 text-slate-400 border-white/10'}`}>단톡방 회원</button>
                   <button type="button" onClick={() => setJoinType('referral')} className={`py-2 rounded-lg text-xs font-bold border transition-all cursor-pointer ${joinType === 'referral' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6]' : 'bg-white/5 text-slate-400 border-white/10'}`}>지인 추천 (외부)</button>
@@ -942,7 +942,7 @@ export default function App() {
               </div>
 
               {authError && <div className="p-2.5 bg-[#EC4899]/10 border border-[#EC4899]/30 rounded-lg text-[#EC4899] text-xs">{authError}</div>}
-              <button type="submit" disabled={authLoading} className="w-full py-3 hp-primary-btn font-bold text-sm rounded-lg cursor-pointer mt-2">{authLoading ? '처리 중...' : '동의하고 오픈베타 신청'}</button>
+              <button type="submit" disabled={authLoading} className="w-full py-3 hp-primary-btn font-bold text-sm rounded-lg cursor-pointer mt-2">{authLoading ? '처리 중...' : '동의하고 회원가입'}</button>
             </form>
           )}
           <div className="mt-5 pt-3 border-t border-white/10 space-y-2 text-center">
@@ -959,7 +959,7 @@ export default function App() {
     );
   }
 
-  // 오픈 베타 승인 대기 화면
+  // 가입 승인 대기 화면
   if (!isAdminUser && currentUserProfile?.approvalStatus === 'pending') {
     return (
       <div className="min-h-screen bg-[#0B1120] text-slate-100 flex items-center justify-center p-4">
@@ -970,7 +970,7 @@ export default function App() {
             <ShieldAlert className="w-7 h-7 text-[#8B5CF6]" />
           </div>
           <div>
-            <h2 className="text-lg font-extrabold text-white">오픈 베타 승인 대기 중</h2>
+            <h2 className="text-lg font-extrabold text-white">가입 승인 대기 중</h2>
             <p className="text-xs text-slate-300 mt-2 leading-relaxed">
               <span className="font-bold text-[#38BDF8]">{currentUserProfile.name}</span> 기사님의 신청이 정상 접수되었습니다.<br />
               관리자가 단톡방/추천인 확인 후 승인하면 바로 이용하실 수 있습니다.
@@ -1729,7 +1729,7 @@ export default function App() {
                         )}
                         <div className="flex flex-col gap-2 pt-1">
                           {isPending ? (
-                            <button onClick={() => handleUpdateApprovalStatus(m.id, 'approved')} className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold cursor-pointer">✔ 오픈베타 승인하기</button>
+                            <button onClick={() => handleUpdateApprovalStatus(m.id, 'approved')} className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold cursor-pointer">✔ 가입 승인하기</button>
                           ) : (
                             <button onClick={() => handleUpdateApprovalStatus(m.id, 'pending')} className="w-full py-2 bg-white/5 hover:bg-[#EC4899]/20 text-slate-400 hover:text-[#EC4899] rounded-lg text-[11px] font-semibold cursor-pointer">승인 해제(대기 전환)</button>
                           )}
