@@ -14,6 +14,7 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+const APP_VERSION = '1.0.1';
 const ADMIN_DEFAULT_EMAIL = 'beat4989@naver.com';
 const ADMIN_DEFAULT_NAME = '김탁송';
 const ADMIN_DEFAULT_PHONE = '01091417586';
@@ -63,6 +64,21 @@ const formatPhoneNumber = (val: string) => {
   if (num.length === 11) return num.replace(/(\d{3})(\d{4})(\d{4})/, '$1-$2-$3');
   else if (num.length === 10) return num.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3');
   return num;
+};
+
+// 구버전 캐시 완전 삭제 후 강제 새로고침
+const forceClearAndReload = async () => {
+  try {
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((key) => caches.delete(key)));
+    }
+    if ('serviceWorker' in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((reg) => reg.unregister()));
+    }
+  } catch (e) {}
+  window.location.reload();
 };
 
 interface DrivingRecord {
@@ -137,6 +153,55 @@ const AUCTION_SCHEDULES = [
 export default function App() {
   const { needRefresh: [needRefresh, setNeedRefresh], updateServiceWorker } = useRegisterSW({ onRegistered(r) {}, onRegisterError(error) {} });
   useEffect(() => { if (needRefresh) updateServiceWorker(true); }, [needRefresh, updateServiceWorker]);
+
+  const forceUpdateChannelRef = useRef<any>(null);
+
+  // [강제 업데이트 1번] version.json 자동 감지 (앱 실행 및 다른 앱에서 복귀 시)
+  useEffect(() => {
+    const checkServerVersion = async () => {
+      try {
+        const res = await fetch(`/version.json?t=${Date.now()}`, { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data?.version && data.version !== APP_VERSION) {
+          await forceClearAndReload();
+        }
+      } catch (e) {}
+    };
+
+    checkServerVersion();
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') checkServerVersion();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
+
+  // [강제 업데이트 2번] 관제탑 실시간 강제 새로고침 신호 수신
+  useEffect(() => {
+    const channel = supabase
+      .channel('app-force-update')
+      .on('broadcast', { event: 'force-reload' }, () => {
+        forceClearAndReload();
+      })
+      .subscribe();
+    forceUpdateChannelRef.current = channel;
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const handleBroadcastForceUpdate = async () => {
+    if (!window.confirm('현재 앱을 사용 중인 모든 기사님의 화면을 강제로 새로고침(최신 버전 적용) 하시겠습니까?')) return;
+    if (forceUpdateChannelRef.current) {
+      await forceUpdateChannelRef.current.send({
+        type: 'broadcast',
+        event: 'force-reload',
+        payload: { version: APP_VERSION, at: Date.now() },
+      });
+      alert('전체 기사님께 강제 업데이트 신호를 전송했습니다.');
+    }
+  };
 
   const [session, setSession] = useState<any>(null);
   const [currentUserRole, setCurrentUserRole] = useState<string>('user');
@@ -790,7 +855,7 @@ export default function App() {
           <div className="flex flex-col items-center mb-6">
             <div className="w-12 h-12 p-2.5 bg-[#0B1120] border border-[#8B5CF6]/30 rounded-xl flex items-center justify-center mb-3 shadow-[0_0_15px_rgba(139,92,246,0.2)]"><Car className="w-6 h-6 text-[#8B5CF6]" /></div>
             <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-1.5">탁송대리비서 <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-[#8B5CF6]/20 text-[#8B5CF6] border border-[#8B5CF6]/30">PRO</span></h1>
-            <p className="text-[11px] text-slate-400 mt-1">단톡방 전용 오픈 베타</p>
+            <p className="text-[11px] text-slate-400 mt-1">단톡방 전용 오픈 베타 (v{APP_VERSION})</p>
           </div>
           <div className="flex bg-[#0B1120] p-1 rounded-xl border border-white/10 mb-5">
             <button onClick={() => { setAuthMode('login'); setAuthError(''); }} className={`flex-1 py-2 text-xs font-bold rounded-lg cursor-pointer transition-all ${authMode === 'login' ? 'hp-primary-btn shadow' : 'text-slate-400'}`}>로그인</button>
@@ -1531,7 +1596,12 @@ export default function App() {
 
         {activeTab === 'admin' && isAdminUser && (
           <div className="space-y-6 fade-in-text">
-            <div className="mb-2"><h3 className="text-sm font-bold text-[#38BDF8] flex items-center gap-2"><Crown className="w-5 h-5" />플랫폼 관리자 (관제탑)</h3></div>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2">
+              <h3 className="text-sm font-bold text-[#38BDF8] flex items-center gap-2"><Crown className="w-5 h-5" />플랫폼 관리자 (관제탑 · v{APP_VERSION})</h3>
+              <button onClick={handleBroadcastForceUpdate} className="w-full sm:w-auto px-4 py-2.5 bg-[#EC4899] hover:bg-[#DB2777] text-white text-xs font-extrabold rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shadow-[0_0_15px_rgba(236,72,153,0.4)] transition-all">
+                <RefreshCw className="w-3.5 h-3.5" /> ⚡ 전체 기사 강제 업데이트
+              </button>
+            </div>
             <div className="flex flex-col sm:flex-row gap-2 border-b border-white/10 pb-3">
               <button onClick={() => setAdminSubTab('campaign')} className={`w-full sm:w-auto px-3 py-2 rounded text-xs font-bold cursor-pointer transition-colors ${adminSubTab === 'campaign' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#0B1120] text-slate-400 hover:text-white border border-white/10'}`}>공지/이벤트 문구보관함</button>
               <button onClick={() => setAdminSubTab('members')} className={`w-full sm:w-auto px-3 py-2 rounded text-xs font-bold cursor-pointer transition-colors ${adminSubTab === 'members' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#0B1120] text-slate-400 hover:text-white border border-white/10'}`}>회원 접속 현황 및 승인 {pendingCount > 0 && `(${pendingCount})`}</button>
@@ -1827,11 +1897,15 @@ export default function App() {
               <div className="flex justify-between items-center text-xs"><span className="text-slate-400">기사 성함</span><span className="text-white font-bold">{currentUserProfile?.name || session?.user?.user_metadata?.name || '미상'}</span></div>
               <div className="flex justify-between items-center text-xs"><span className="text-slate-400">연락처</span><span className="text-[#38BDF8] font-mono font-semibold">{formatPhoneNumber(currentUserProfile?.phone || session?.user?.user_metadata?.phone || '') || '미등록'}</span></div>
               <div className="flex justify-between items-center text-xs"><span className="text-slate-400">가입 구분</span><span className="text-slate-200 font-semibold">{currentUserProfile?.joinType === 'referral' ? `추천인(${currentUserProfile.referrer || '-'})` : `단톡방(${currentUserProfile?.kakaoId || '-'})`}</span></div>
+              <div className="flex justify-between items-center text-xs"><span className="text-slate-400">앱 버전</span><span className="text-emerald-400 font-mono font-bold">v{APP_VERSION}</span></div>
             </div>
             <div className="flex flex-col gap-2">
               <a href={KAKAO_CHAT_URL} target="_blank" rel="noopener noreferrer" className="w-full py-2.5 bg-[#FEE500] hover:bg-[#FDD835] text-[#191919] font-bold rounded-lg text-xs flex items-center justify-center gap-1.5 transition-colors">
                 <MessageSquare className="w-3.5 h-3.5" /> 탁송대리비서 소통방 입장하기
               </a>
+              <button onClick={forceClearAndReload} className="w-full py-2.5 bg-[#38BDF8]/15 hover:bg-[#38BDF8]/25 text-[#38BDF8] border border-[#38BDF8]/30 font-bold rounded-lg text-xs flex items-center justify-center gap-1.5 cursor-pointer">
+                <RefreshCw className="w-3.5 h-3.5" /> 최신 버전 강제 새로고침
+              </button>
               <button onClick={() => setShowPrivacyModal(true)} className="w-full py-2.5 bg-white/5 hover:bg-white/10 text-slate-300 font-semibold rounded-lg text-xs cursor-pointer">개인정보 처리방침 및 탈퇴 안내</button>
               <button onClick={() => setShowProfileModal(false)} className="w-full py-2.5 hp-primary-btn font-bold rounded-lg text-xs cursor-pointer">닫기</button>
             </div>
