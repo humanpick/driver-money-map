@@ -14,7 +14,7 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-const APP_VERSION = '1.0.8';
+const APP_VERSION = '1.0.9';
 const ADMIN_DEFAULT_EMAIL = 'beat4989@naver.com';
 const ADMIN_DEFAULT_NAME = '김탁송';
 const ADMIN_DEFAULT_PHONE = '01091417586';
@@ -697,6 +697,50 @@ export default function App() {
     fetchAdminData();
   };
 
+  const handleExportMembersCSV = (targetType: 'all' | 'group' | 'referral') => {
+    const filtered = adminMemberList.filter((m) => {
+      if (targetType === 'group') return m.joinType !== 'referral';
+      if (targetType === 'referral') return m.joinType === 'referral';
+      return true;
+    });
+    if (filtered.length === 0) {
+      alert('다운로드할 해당 구분의 회원이 없습니다.');
+      return;
+    }
+    const esc = (val: string | number | undefined) => `"${String(val ?? '').replace(/"/g, '""')}"`;
+    const roleLabel = (role: string) => {
+      if (role === 'super_admin') return '최고관리자';
+      if (role === 'manager') return '운영직원';
+      if (role === 'vip_driver') return 'VIP기사';
+      if (role === 'pro_driver') return 'PRO기사';
+      return '일반기사';
+    };
+    const headers = ['가입구분', '단톡방닉네임', '추천인', '이름', '연락처', '이메일', '승인상태', '권한', '마케팅동의', '가입일', '최근접속', '접속횟수', '누적운행건수', '당월매출'];
+    const rows = filtered.map((m) => [
+      m.joinType === 'referral' ? '지인추천' : '단톡방회원',
+      esc(m.kakaoId || ''),
+      esc(m.referrer || ''),
+      esc(m.name || ''),
+      esc(formatPhoneNumber(m.phone) || ''),
+      esc(m.email || ''),
+      m.approvalStatus === 'pending' ? '승인대기' : '승인완료',
+      roleLabel(m.role),
+      m.marketingAgreed ? '동의' : '미동의',
+      m.createdAt || '-',
+      m.lastLoginAt || '-',
+      m.loginCount || 0,
+      m.recordCount || 0,
+      m.monthlyGross || 0,
+    ]);
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    const labelMap = { all: '전체회원', group: '단톡방회원', referral: '지인추천회원' };
+    link.download = `탁송대리비서_${labelMap[targetType]}_${getTodayKST()}.csv`;
+    link.click();
+  };
+
   const handleExportMyCSV = () => {
     if (records.length === 0) { alert('다운로드할 운행 내역이 없습니다.'); return; }
     const headers = ['프로그램', '일자', '출발지', '도착지', '운임', '수수료율', '주유비', '결제수단', '기타부대비용', '팁', '순수익', '운임입금', '대납입금', '기타사항'];
@@ -733,6 +777,8 @@ export default function App() {
   const totalUnpaidAmount = unpaidRecords.reduce((acc, r) => acc + (!r.isGrossPaid ? r.grossAmount : 0) + (!r.isExpensePaid ? (r.fuelAmount + r.extraExpenseAmount) : 0), 0);
   const isAdminUser = currentUserRole === 'super_admin' || currentUserRole === 'manager';
   const pendingCount = adminMemberList.filter(m => m.approvalStatus === 'pending').length;
+  const groupMemberCount = adminMemberList.filter(m => m.joinType !== 'referral').length;
+  const referralMemberCount = adminMemberList.filter(m => m.joinType === 'referral').length;
 
   const monthlyRecords = records.filter((r) => (r.date || '').startsWith(currentMonthPrefix));
   const monthlyExpenses = expenses.filter((e) => (e.date || '').startsWith(currentMonthPrefix));
@@ -1632,7 +1678,7 @@ export default function App() {
 
             {adminSubTab === 'members' && (
               <div className="glass-card p-5 sm:p-6 rounded-xl space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <input type="text" placeholder="이름 / 연락처 / 단톡방 닉네임 검색..." value={adminSearchTerm} onChange={(e) => setAdminSearchTerm(e.target.value)} className="px-3 py-2.5 rounded-lg text-xs w-full sm:max-w-xs" />
                   <div className="flex flex-wrap gap-2">
                     <button onClick={() => setShowPendingOnly(!showPendingOnly)} className={`flex-1 sm:flex-none px-3.5 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${showPendingOnly ? 'bg-[#EC4899] text-white shadow-[0_0_15px_rgba(236,72,153,0.5)]' : 'bg-[#0B1120] text-slate-400 border border-white/10 hover:border-[#EC4899]/50'}`}>
@@ -1642,6 +1688,20 @@ export default function App() {
                       <Award className="w-4 h-4" /> 🏆 에이스 기사만
                     </button>
                   </div>
+                </div>
+
+                {/* 회원 목록 구분별 엑셀(CSV) 다운로드 */}
+                <div className="flex flex-wrap items-center gap-2 p-3 rounded-xl bg-[#0B1120] border border-white/10">
+                  <span className="text-[11px] font-bold text-slate-300 mr-1 flex items-center gap-1"><Download className="w-3.5 h-3.5 text-[#10B981]" /> 회원 엑셀(CSV) 다운로드:</span>
+                  <button onClick={() => handleExportMembersCSV('all')} className="px-3 py-1.5 bg-[#10B981]/15 hover:bg-[#10B981]/25 text-[#10B981] border border-[#10B981]/40 rounded-lg text-[11px] font-bold cursor-pointer transition-colors">
+                    전체 ({adminMemberList.length}명)
+                  </button>
+                  <button onClick={() => handleExportMembersCSV('group')} className="px-3 py-1.5 bg-[#38BDF8]/15 hover:bg-[#38BDF8]/25 text-[#38BDF8] border border-[#38BDF8]/40 rounded-lg text-[11px] font-bold cursor-pointer transition-colors">
+                    단톡방 회원 ({groupMemberCount}명)
+                  </button>
+                  <button onClick={() => handleExportMembersCSV('referral')} className="px-3 py-1.5 bg-[#8B5CF6]/20 hover:bg-[#8B5CF6]/35 text-[#C4B5FD] border border-[#8B5CF6]/40 rounded-lg text-[11px] font-bold cursor-pointer transition-colors">
+                    지인 추천 ({referralMemberCount}명)
+                  </button>
                 </div>
 
                 <div className="md:hidden space-y-3">
@@ -1665,8 +1725,8 @@ export default function App() {
                           </div>
                         </div>
                         <div className="bg-black/30 p-2.5 rounded-lg border border-white/5 flex justify-between text-[11px]">
-                          <span className="text-slate-400">단톡방 닉네임</span>
-                          <span className="font-bold text-[#38BDF8]">{m.kakaoId || m.referrer || '-'}</span>
+                          <span className="text-slate-400">{m.joinType === 'referral' ? '지인추천' : '단톡방 닉네임'}</span>
+                          <span className="font-bold text-[#38BDF8]">{m.joinType === 'referral' ? (m.referrer || '-') : (m.kakaoId || '-')}</span>
                         </div>
                         <div className="flex flex-col gap-2 pt-1">
                           {isPending ? (
@@ -1684,7 +1744,7 @@ export default function App() {
 
                 <div className="hidden md:block overflow-x-auto rounded-lg border border-white/10">
                   <table className="w-full text-left text-xs whitespace-nowrap">
-                    <thead className="bg-[#0B1120] text-slate-400 border-b border-white/10"><tr><th className="p-3">이름/연락처</th><th className="p-3 text-center">단톡방 닉네임</th><th className="p-3 text-center">승인 상태</th><th className="p-3 text-center">당월 실적</th><th className="p-3 text-center">권한 변경</th><th className="p-3 text-right">리포트</th></tr></thead>
+                    <thead className="bg-[#0B1120] text-slate-400 border-b border-white/10"><tr><th className="p-3">이름/연락처</th><th className="p-3 text-center">단톡방 닉네임 / 추천인</th><th className="p-3 text-center">승인 상태</th><th className="p-3 text-center">당월 실적</th><th className="p-3 text-center">권한 변경</th><th className="p-3 text-right">리포트</th></tr></thead>
                     <tbody className="divide-y divide-white/5">
                       {displayedMembers.length === 0 ? <tr><td colSpan={6} className="p-10 text-center text-slate-500">검색 조건에 맞는 기사님이 없습니다.</td></tr> : displayedMembers.map((m) => {
                         const isAce = (m.monthlyGross || 0) >= 1500000 || (m.recordCount || 0) >= 10;
@@ -1699,7 +1759,8 @@ export default function App() {
                               <div className="font-mono text-[#38BDF8] text-[11px] mt-1">{formatPhoneNumber(m.phone) || '번호없음'}</div>
                             </td>
                             <td className="p-3 text-center">
-                              <div className="text-white font-semibold">{m.kakaoId || m.referrer || '-'}</div>
+                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${m.joinType === 'referral' ? 'bg-[#8B5CF6]/20 text-[#8B5CF6]' : 'bg-[#38BDF8]/20 text-[#38BDF8]'}`}>{m.joinType === 'referral' ? '지인추천' : '단톡방'}</span>
+                              <div className="text-white font-semibold mt-1">{m.joinType === 'referral' ? (m.referrer || '-') : (m.kakaoId || '-')}</div>
                             </td>
                             <td className="p-3 text-center">
                               {isPending ? (
