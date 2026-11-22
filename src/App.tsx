@@ -14,7 +14,7 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-const APP_VERSION = '1.0.10';
+const APP_VERSION = '1.0.11';
 const ADMIN_DEFAULT_EMAIL = 'beat4989@naver.com';
 const ADMIN_DEFAULT_NAME = '김탁송';
 const ADMIN_DEFAULT_PHONE = '01091417586';
@@ -36,6 +36,12 @@ const getTodayKST = () => {
   const kstOffset = 9 * 60 * 60 * 1000;
   const kstDate = new Date(now.getTime() + kstOffset);
   return kstDate.toISOString().split('T')[0];
+};
+
+const getPrevMonthPrefix = (monthPrefix: string) => {
+  const [y, m] = monthPrefix.split('-').map(Number);
+  const d = new Date(y, m - 2, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 };
 
 const getDayOfWeekKor = (dateStr: string) => {
@@ -90,12 +96,15 @@ interface DrivingRecord {
   paymentMethod?: '현금' | '카드';
   platform?: string;
   memo?: string;
+  claimSentAt?: string;
+  paidAt?: string;
 }
 interface ExpenseRecord { id: string; date: string; category: string; amount: number; memo: string; platform?: string; }
 interface BankAccount { id: string; bankName: string; accountNumber: string; holder: string; }
 interface MemberProfile {
   id: string; email: string; name: string; phone: string; role: string; createdAt: string;
   lastLoginAt?: string; loginCount?: number; recordCount?: number; monthlyGross?: number;
+  lastMonthGross?: number; recoveredAmount?: number; recoveredCount?: number;
   joinType?: 'group' | 'referral'; kakaoId?: string; referrer?: string;
   approvalStatus?: 'pending' | 'approved'; marketingAgreed?: boolean;
 }
@@ -149,6 +158,11 @@ const AUCTION_SCHEDULES = [
     { name: '분당 현대글로비스', tier: 'S', addr: '능평리 174-25', tag: '글로비스' }
   ] }
 ];
+
+const calcRecoveredForRecord = (r: { claimSentAt?: string; isGrossPaid: boolean; isExpensePaid: boolean; grossAmount: number; fuelAmount: number; extraExpenseAmount: number }) => {
+  if (!r.claimSentAt) return 0;
+  return (r.isGrossPaid ? r.grossAmount : 0) + (r.isExpensePaid ? (r.fuelAmount + r.extraExpenseAmount) : 0);
+};
 
 export default function App() {
   const { needRefresh: [needRefresh, setNeedRefresh], updateServiceWorker } = useRegisterSW({ onRegistered(r) {}, onRegisterError(error) {} });
@@ -226,6 +240,8 @@ export default function App() {
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [authLoading, setAuthLoading] = useState(false); const [authError, setAuthError] = useState(''); const [authSuccess, setAuthSuccess] = useState('');
   const [honeypot, setHoneypot] = useState(''); const [captchaVerified, setCaptchaVerified] = useState(false);
+
+  const [celebrationAlert, setCelebrationAlert] = useState<{ type: 'recovery' | 'growth'; title: string; message: string } | null>(null);
 
   const [activeTab, setActiveTab] = useState<'records' | 'claims' | 'expense' | 'analytics' | 'wallet' | 'trade_centers' | 'auctions' | 'admin'>('records');
   const [adminSubTab, setAdminSubTab] = useState<'campaign' | 'members' | 'analytics'>('members');
@@ -424,6 +440,8 @@ export default function App() {
         paymentMethod: r.payment_method || '현금',
         platform: r.platform || '미지정',
         memo: r.memo || '',
+        claimSentAt: r.claim_sent_at || undefined,
+        paidAt: r.paid_at || undefined,
       })));
     }
 
@@ -437,23 +455,31 @@ export default function App() {
     const { data: profiles } = await supabase.from('profiles').select('*').order('last_login_at', { ascending: false });
     const { data: allRecs } = await supabase.from('driving_records').select('*').limit(20000);
     const currentMonthStr = getTodayKST().substring(0, 7);
+    const lastMonthStr = getPrevMonthPrefix(currentMonthStr);
     
     if (profiles && allRecs) {
+      const formattedRecs: DrivingRecord[] = allRecs.map((r: any) => ({
+        id: r.id, userId: r.user_id, date: r.date || '-', startTime: r.start_time || '-', endTime: r.end_time || '-', departure: r.departure, destination: r.destination,
+        grossAmount: Number(r.gross_amount), fuelAmount: Number(r.fuel_amount), feeRate: Number(r.fee_rate), extraExpenseAmount: Number(r.extra_expense_amount), tipAmount: Number(r.tip_amount), isGrossPaid: Boolean(r.is_gross_paid), isExpensePaid: Boolean(r.is_expense_paid), netAmount: Number(r.net_amount), totalClaimAmount: Number(r.total_claim_amount), paymentMethod: r.payment_method || '현금', platform: r.platform || '미지정', memo: r.memo || '',
+        claimSentAt: r.claim_sent_at || undefined, paidAt: r.paid_at || undefined,
+      }));
+      setAdminAllRecords(formattedRecs);
+
       setAdminMemberList(profiles.map((p: any) => {
-        const userRecords = allRecs.filter((r: any) => r.user_id === p.id);
-        const monthlyGross = userRecords.filter((r: any) => (r.date || '').startsWith(currentMonthStr)).reduce((sum: number, r: any) => sum + Number(r.gross_amount), 0);
+        const userRecords = formattedRecs.filter((r) => r.userId === p.id);
+        const monthlyGross = userRecords.filter((r) => (r.date || '').startsWith(currentMonthStr)).reduce((sum, r) => sum + r.grossAmount, 0);
+        const lastMonthGross = userRecords.filter((r) => (r.date || '').startsWith(lastMonthStr)).reduce((sum, r) => sum + r.grossAmount, 0);
+        const recoveredRecs = userRecords.filter((r) => calcRecoveredForRecord(r) > 0);
+        const recoveredAmount = recoveredRecs.reduce((sum, r) => sum + calcRecoveredForRecord(r), 0);
         return {
           id: p.id, email: p.email || '', name: p.name || '미상', phone: p.phone || '', role: p.role || 'user',
           createdAt: p.created_at ? p.created_at.substring(0, 10) : '-', lastLoginAt: p.last_login_at ? p.last_login_at.substring(0, 16).replace('T', ' ') : '기록없음',
-          loginCount: p.login_count || 0, recordCount: userRecords.length, monthlyGross: monthlyGross,
+          loginCount: p.login_count || 0, recordCount: userRecords.length, monthlyGross, lastMonthGross,
+          recoveredAmount, recoveredCount: recoveredRecs.length,
           joinType: p.join_type || 'group', kakaoId: p.kakao_id || '', referrer: p.referrer || '',
           approvalStatus: p.approval_status || 'approved', marketingAgreed: Boolean(p.marketing_agreed),
         };
       }));
-      setAdminAllRecords(allRecs.map((r: any) => ({
-        id: r.id, userId: r.user_id, date: r.date || '-', startTime: r.start_time || '-', endTime: r.end_time || '-', departure: r.departure, destination: r.destination,
-        grossAmount: Number(r.gross_amount), fuelAmount: Number(r.fuel_amount), feeRate: Number(r.fee_rate), extraExpenseAmount: Number(r.extra_expense_amount), tipAmount: Number(r.tip_amount), isGrossPaid: Boolean(r.is_gross_paid), isExpensePaid: Boolean(r.is_expense_paid), netAmount: Number(r.net_amount), totalClaimAmount: Number(r.total_claim_amount), paymentMethod: r.payment_method || '현금', platform: r.platform || '미지정', memo: r.memo || ''
-      })));
     }
   };
 
@@ -560,6 +586,19 @@ export default function App() {
       await supabase.from('driving_records').insert([fb]);
     }
     
+    // 수익 마일스톤(100만 원 단위 돌파) 축하 알림 체크
+    const recMonth = newDate.substring(0, 7);
+    const prevMonthNet = records.filter(r => r.date.startsWith(recMonth)).reduce((s, r) => s + r.netAmount, 0);
+    const nextMonthNet = prevMonthNet + Math.round(net);
+    if (Math.floor(prevMonthNet / 1000000) < Math.floor(nextMonthNet / 1000000)) {
+      const milestone = Math.floor(nextMonthNet / 1000000) * 100;
+      setCelebrationAlert({
+        type: 'growth',
+        title: `🔥 ${recMonth.split('-')[1]}월 탁송 순수익 ${milestone.toLocaleString()}만 원 돌파!`,
+        message: `현재 누적 순수익 ${nextMonthNet.toLocaleString()}원 달성! 안전운행으로 목표까지 화이팅하세요!`,
+      });
+    }
+
     const updated = [newRecord, ...records]; updated.sort((a, b) => a.date.localeCompare(b.date)); setRecords(updated);
     const [y, m] = newDate.split('-'); setCurrentCalDate(new Date(Number(y), Number(m) - 1, 1));
     setNewDeparture(''); setNewDestination(''); setNewGross(''); setNewFuel(''); setNewExtraExpense(''); setNewTip(''); setNewMemo(''); setNewPaymentMethod('현금');
@@ -567,13 +606,60 @@ export default function App() {
 
   const toggleGrossPaid = async (id: string) => {
     const target = records.find((r) => r.id === id); if (!target) return;
-    const { error } = await supabase.from('driving_records').update({ is_gross_paid: !target.isGrossPaid }).eq('id', id);
-    if (!error) setRecords(records.map((r) => (r.id === id ? { ...r, isGrossPaid: !target.isGrossPaid } : r)));
+    const nextPaid = !target.isGrossPaid;
+    const nowIso = new Date().toISOString();
+    let { error } = await supabase.from('driving_records').update({ is_gross_paid: nextPaid, ...(nextPaid ? { paid_at: nowIso } : {}) }).eq('id', id);
+    if (error && error.message.includes('paid_at')) {
+      error = (await supabase.from('driving_records').update({ is_gross_paid: nextPaid }).eq('id', id)).error;
+    }
+    if (!error) {
+      const nextRecords = records.map((r) => (r.id === id ? { ...r, isGrossPaid: nextPaid, paidAt: nextPaid ? nowIso : r.paidAt } : r));
+      setRecords(nextRecords);
+      if (nextPaid && target.claimSentAt && target.grossAmount > 0) {
+        const totalRecovered = nextRecords.reduce((sum, r) => sum + calcRecoveredForRecord(r), 0);
+        setCelebrationAlert({
+          type: 'recovery',
+          title: `🎉 탁송 운임 ${target.grossAmount.toLocaleString()}원 회수 완료!`,
+          message: `지금까지 탁송대리비서 정산 문자로 총 ${totalRecovered.toLocaleString()}원의 미수금을 지켜냈습니다.`,
+        });
+      }
+    }
   };
+
   const toggleExpensePaid = async (id: string) => {
     const target = records.find((r) => r.id === id); if (!target) return;
-    const { error } = await supabase.from('driving_records').update({ is_expense_paid: !target.isExpensePaid }).eq('id', id);
-    if (!error) setRecords(records.map((r) => (r.id === id ? { ...r, isExpensePaid: !target.isExpensePaid } : r)));
+    const nextPaid = !target.isExpensePaid;
+    const nowIso = new Date().toISOString();
+    let { error } = await supabase.from('driving_records').update({ is_expense_paid: nextPaid, ...(nextPaid ? { paid_at: nowIso } : {}) }).eq('id', id);
+    if (error && error.message.includes('paid_at')) {
+      error = (await supabase.from('driving_records').update({ is_expense_paid: nextPaid }).eq('id', id)).error;
+    }
+    if (!error) {
+      const nextRecords = records.map((r) => (r.id === id ? { ...r, isExpensePaid: nextPaid, paidAt: nextPaid ? nowIso : r.paidAt } : r));
+      setRecords(nextRecords);
+      const expAmt = target.fuelAmount + target.extraExpenseAmount;
+      if (nextPaid && target.claimSentAt && expAmt > 0) {
+        const totalRecovered = nextRecords.reduce((sum, r) => sum + calcRecoveredForRecord(r), 0);
+        setCelebrationAlert({
+          type: 'recovery',
+          title: `🎉 대납 경비 ${expAmt.toLocaleString()}원 회수 완료!`,
+          message: `지금까지 탁송대리비서 정산 문자로 총 ${totalRecovered.toLocaleString()}원의 미수금을 지켜냈습니다.`,
+        });
+      }
+    }
+  };
+
+  const handleCopyClaimMessage = async () => {
+    navigator.clipboard.writeText(claimMessageText);
+    if (selectedClaimRecord) {
+      const nowIso = new Date().toISOString();
+      const { error } = await supabase.from('driving_records').update({ claim_sent_at: nowIso }).eq('id', selectedClaimRecord.id);
+      if (!error) {
+        setRecords(prev => prev.map(r => r.id === selectedClaimRecord.id ? { ...r, claimSentAt: nowIso } : r));
+      }
+    }
+    alert('정산 청구 문자가 복사되었습니다.\n입금이 완료되면 [입금 확인]을 눌러 회수 실적을 기록해 보세요!');
+    setClaimModalOpen(false);
   };
 
   const handleOpenEditModal = (r: DrivingRecord) => {
@@ -725,7 +811,7 @@ export default function App() {
       if (role === 'pro_driver') return 'PRO기사';
       return '일반기사';
     };
-    const headers = ['가입구분', '단톡방닉네임', '추천인', '이름', '연락처', '이메일', '승인상태', '권한', '마케팅동의', '가입일', '최근접속', '접속횟수', '누적운행건수', '당월매출'];
+    const headers = ['가입구분', '단톡방닉네임', '추천인', '이름', '연락처', '이메일', '승인상태', '권한', '마케팅동의', '가입일', '최근접속', '접속횟수', '누적운행건수', '당월매출', '앱회수미수금'];
     const rows = filtered.map((m) => [
       m.joinType === 'referral' ? '지인추천' : '단톡방회원',
       esc(m.kakaoId || ''),
@@ -741,6 +827,7 @@ export default function App() {
       m.loginCount || 0,
       m.recordCount || 0,
       m.monthlyGross || 0,
+      m.recoveredAmount || 0,
     ]);
     const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -783,6 +870,7 @@ export default function App() {
   const openAdminUserDetail = (user: MemberProfile) => { setAdminSelectedUser(user); setAdminSelectedUserRecords(adminAllRecords.filter(r => r.userId === user.id).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10)); };
 
   const currentMonthPrefix = customDate.substring(0, 7);
+  const prevMonthPrefix = getPrevMonthPrefix(currentMonthPrefix);
   const unpaidRecords = records.filter((r) => !r.isGrossPaid || (!r.isExpensePaid && (r.fuelAmount > 0 || r.extraExpenseAmount > 0)));
   const totalUnpaidAmount = unpaidRecords.reduce((acc, r) => acc + (!r.isGrossPaid ? r.grossAmount : 0) + (!r.isExpensePaid ? (r.fuelAmount + r.extraExpenseAmount) : 0), 0);
   const isAdminUser = currentUserRole === 'super_admin' || currentUserRole === 'manager';
@@ -790,10 +878,23 @@ export default function App() {
   const groupMemberCount = adminMemberList.filter(m => m.joinType !== 'referral').length;
   const referralMemberCount = adminMemberList.filter(m => m.joinType === 'referral').length;
 
+  // 기사님 본인: 앱으로 지켜낸 돈 (미수금 회수 실적) & 전월 대비 수익 성장
+  const myRecoveredRecords = records.filter((r) => calcRecoveredForRecord(r) > 0);
+  const myTotalRecoveredAmount = myRecoveredRecords.reduce((sum, r) => sum + calcRecoveredForRecord(r), 0);
+  const myMonthlyRecoveredAmount = myRecoveredRecords.filter((r) => (r.date || '').startsWith(currentMonthPrefix)).reduce((sum, r) => sum + calcRecoveredForRecord(r), 0);
+
+  // 관제탑: 플랫폼 전체 누적 회수액
+  const platformRecoveredRecords = adminAllRecords.filter((r) => calcRecoveredForRecord(r) > 0);
+  const platformTotalRecoveredAmount = platformRecoveredRecords.reduce((sum, r) => sum + calcRecoveredForRecord(r), 0);
+
   const monthlyRecords = records.filter((r) => (r.date || '').startsWith(currentMonthPrefix));
+  const prevMonthlyRecords = records.filter((r) => (r.date || '').startsWith(prevMonthPrefix));
   const monthlyExpenses = expenses.filter((e) => (e.date || '').startsWith(currentMonthPrefix));
   const monthlyGross = monthlyRecords.reduce((acc, cur) => acc + cur.grossAmount, 0);
   const monthlyNet = monthlyRecords.reduce((acc, cur) => acc + cur.netAmount, 0);
+  const prevMonthlyNet = prevMonthlyRecords.reduce((acc, cur) => acc + cur.netAmount, 0);
+  const netGrowthDiff = monthlyNet - prevMonthlyNet;
+  const netGrowthRate = prevMonthlyNet > 0 ? Math.round((netGrowthDiff / prevMonthlyNet) * 100) : null;
   const monthlyExpense = monthlyExpenses.reduce((acc, cur) => acc + cur.amount, 0);
   const monthlyProfit = monthlyNet - monthlyExpense;
 
@@ -1023,6 +1124,20 @@ export default function App() {
       </header>
 
       <main className="max-w-[1400px] mx-auto px-4 lg:px-8 pt-5 pb-10 space-y-5 h-full">
+        {/* 미수금 회수 / 수익 마일스톤 축하 알림 배너 */}
+        {celebrationAlert && (
+          <section className={`rounded-2xl p-4 flex items-start justify-between gap-3 fade-in-text border ${celebrationAlert.type === 'recovery' ? 'bg-emerald-500/15 border-emerald-500/40 shadow-[0_0_20px_rgba(16,185,129,0.2)]' : 'bg-[#8B5CF6]/15 border-[#8B5CF6]/50 shadow-[0_0_20px_rgba(139,92,246,0.25)]'}`}>
+            <div className="flex items-start gap-3">
+              <Sparkles className={`w-5 h-5 mt-0.5 shrink-0 ${celebrationAlert.type === 'recovery' ? 'text-emerald-400' : 'text-[#38BDF8]'}`} />
+              <div>
+                <div className="text-sm font-extrabold text-white">{celebrationAlert.title}</div>
+                <div className="text-xs text-slate-200 mt-0.5">{celebrationAlert.message}</div>
+              </div>
+            </div>
+            <button onClick={() => setCelebrationAlert(null)} className="text-slate-400 hover:text-white p-1 cursor-pointer"><X className="w-4 h-4" /></button>
+          </section>
+        )}
+
         {totalUnpaidAmount > 0 && activeTab !== 'admin' && (
           <section className="bg-[#EC4899]/10 border border-[#EC4899]/40 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-[0_0_15px_rgba(236,72,153,0.1)] fade-in-text">
             <div className="flex items-center gap-3">
@@ -1286,6 +1401,7 @@ export default function App() {
                       <div className="flex items-center gap-1.5">
                         <span className="px-2 py-0.5 bg-[#EC4899]/20 text-[#EC4899] text-[10px] font-bold rounded">청구 대기</span>
                         <span className="px-2 py-0.5 bg-[#8B5CF6]/20 text-[#38BDF8] text-[10px] font-bold rounded">{r.platform || '미지정'}</span>
+                        {r.claimSentAt && <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 text-[10px] font-bold rounded">문자발송됨</span>}
                       </div>
                       <span className="text-[10px] text-slate-400 font-mono">{r.date}</span>
                     </div>
@@ -1412,6 +1528,36 @@ export default function App() {
               <button onClick={handleExportMyCSV} className="w-full sm:w-auto px-4 py-2.5 bg-[#10B981]/15 hover:bg-[#10B981]/25 text-[#10B981] border border-[#10B981]/40 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors">
                 <Download className="w-4 h-4" /> 내 장부 엑셀(CSV) 다운로드
               </button>
+            </div>
+
+            {/* 앱으로 지켜낸 내 돈 & 수익 성장 리포트 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-gradient-to-br from-emerald-950/50 to-[#0B1120] border border-emerald-500/40 rounded-2xl p-5 shadow-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-extrabold text-emerald-400 flex items-center gap-1.5"><ShieldCheck className="w-4 h-4" /> 앱으로 지켜낸 내 돈 (미수금 회수)</span>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold">누적 {myRecoveredRecords.length}건</span>
+                </div>
+                <div className="text-2xl sm:text-3xl font-extrabold text-white mt-1">{myTotalRecoveredAmount.toLocaleString()}원</div>
+                <div className="text-[11px] text-slate-300 mt-2">
+                  이번 달 회수액: <strong className="text-emerald-400">{myMonthlyRecoveredAmount.toLocaleString()}원</strong> · 정산 문자 발송 후 입금 완료된 금액 기준
+                </div>
+              </div>
+              <div className="bg-gradient-to-br from-indigo-950/50 to-[#0B1120] border border-[#38BDF8]/40 rounded-2xl p-5 shadow-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-extrabold text-[#38BDF8] flex items-center gap-1.5"><TrendingUp className="w-4 h-4" /> 전월 대비 탁송 순수익 성장</span>
+                  {netGrowthRate !== null && (
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${netGrowthDiff >= 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-[#EC4899]/20 text-[#EC4899]'}`}>
+                      {netGrowthDiff >= 0 ? `▲ +${netGrowthRate}%` : `▼ ${netGrowthRate}%`}
+                    </span>
+                  )}
+                </div>
+                <div className="text-2xl sm:text-3xl font-extrabold text-white mt-1">
+                  {netGrowthDiff >= 0 ? `+${netGrowthDiff.toLocaleString()}` : netGrowthDiff.toLocaleString()}원
+                </div>
+                <div className="text-[11px] text-slate-300 mt-2">
+                  지난달({prevMonthPrefix}) 순수익: <strong className="text-white">{prevMonthlyNet.toLocaleString()}원</strong> → 이번 달: <strong className="text-[#38BDF8]">{monthlyNet.toLocaleString()}원</strong>
+                </div>
+              </div>
             </div>
 
             {analyticsMode === 'month' && (
@@ -1726,6 +1872,7 @@ export default function App() {
                               {m.name || '미입력'}
                               {isPending && <span className="px-1.5 py-0.5 bg-[#EC4899] text-white text-[9px] rounded font-extrabold">승인대기</span>}
                               {isAce && <span className="px-1.5 py-0.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[9px] rounded font-extrabold">🏆 에이스</span>}
+                              {(m.recoveredAmount || 0) > 0 && <span className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[9px] rounded font-extrabold">회수 {(m.recoveredAmount || 0).toLocaleString()}원</span>}
                             </div>
                             <div className="font-mono text-[#38BDF8] text-[11px] mt-0.5">{formatPhoneNumber(m.phone) || '번호없음'}</div>
                           </div>
@@ -1754,7 +1901,7 @@ export default function App() {
 
                 <div className="hidden md:block overflow-x-auto rounded-lg border border-white/10">
                   <table className="w-full text-left text-xs whitespace-nowrap">
-                    <thead className="bg-[#0B1120] text-slate-400 border-b border-white/10"><tr><th className="p-3">이름/연락처</th><th className="p-3 text-center">단톡방 닉네임 / 추천인</th><th className="p-3 text-center">승인 상태</th><th className="p-3 text-center">당월 실적</th><th className="p-3 text-center">권한 변경</th><th className="p-3 text-right">리포트</th></tr></thead>
+                    <thead className="bg-[#0B1120] text-slate-400 border-b border-white/10"><tr><th className="p-3">이름/연락처</th><th className="p-3 text-center">단톡방 닉네임 / 추천인</th><th className="p-3 text-center">승인 상태</th><th className="p-3 text-center">당월 실적 / 앱 회수액</th><th className="p-3 text-center">권한 변경</th><th className="p-3 text-right">리포트</th></tr></thead>
                     <tbody className="divide-y divide-white/5">
                       {displayedMembers.length === 0 ? <tr><td colSpan={6} className="p-10 text-center text-slate-500">검색 조건에 맞는 기사님이 없습니다.</td></tr> : displayedMembers.map((m) => {
                         const isAce = (m.monthlyGross || 0) >= 1500000 || (m.recordCount || 0) >= 10;
@@ -1779,7 +1926,10 @@ export default function App() {
                                 <button onClick={() => handleUpdateApprovalStatus(m.id, 'pending')} className="px-2.5 py-1 bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-[#EC4899]/20 hover:text-[#EC4899] hover:border-[#EC4899]/40 rounded text-[10px] font-bold cursor-pointer">승인완료</button>
                               )}
                             </td>
-                            <td className="p-3 text-center"><div className="font-bold text-white">{m.recordCount}건</div><div className="text-[#EC4899] font-semibold mt-1">{(m.monthlyGross || 0).toLocaleString()}원</div></td>
+                            <td className="p-3 text-center">
+                              <div className="font-bold text-white">{m.recordCount}건 · <span className="text-[#EC4899]">{(m.monthlyGross || 0).toLocaleString()}원</span></div>
+                              {(m.recoveredAmount || 0) > 0 && <div className="text-emerald-400 font-bold text-[10px] mt-1">앱 회수 {(m.recoveredAmount || 0).toLocaleString()}원 ({m.recoveredCount}건)</div>}
+                            </td>
                             <td className="p-3 text-center"><select value={m.role} onChange={(e) => handleUpdateMemberRole(m.id, e.target.value)} className="bg-[#0B1120] border border-white/20 text-white rounded px-2 py-1.5 text-[11px] cursor-pointer outline-none focus:border-[#8B5CF6]"><option value="user">일반 기사</option><option value="pro_driver">PRO 기사</option><option value="vip_driver">VIP 기사 (스카우트)</option><option value="manager">운영 직원</option><option value="super_admin">최고 관리자</option></select></td>
                             <td className="p-3 text-right"><button onClick={() => openAdminUserDetail(m)} className="px-2.5 py-1.5 hp-primary-btn hover:bg-white/20 text-white rounded text-[10px] font-bold flex items-center gap-1 ml-auto cursor-pointer"><Search className="w-3 h-3" />상세</button></td>
                           </tr>
@@ -1793,7 +1943,16 @@ export default function App() {
             
             {adminSubTab === 'analytics' && (
               <div className="space-y-4">
-                <div className="flex justify-end mb-2"><button onClick={handleExportAdminCSV} className="w-full sm:w-auto px-3 py-2.5 bg-[#0B1120] hover:bg-white/10 border border-white/20 text-slate-300 text-xs font-bold rounded-lg cursor-pointer transition-colors flex items-center justify-center gap-1.5"><Download className="w-3.5 h-3.5" />전체 기사 운행내역 CSV 다운로드</button></div>
+                {/* 관제탑: 플랫폼 전체 누적 미수금 회수액 전광판 */}
+                <div className="bg-gradient-to-r from-emerald-950/60 via-[#0B1120] to-indigo-950/60 border border-emerald-500/40 rounded-2xl p-5 sm:p-6 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <div className="text-xs font-extrabold text-emerald-400 flex items-center gap-1.5"><ShieldCheck className="w-4 h-4" /> 탁송대리비서가 지켜낸 전체 기사님 미수금 누적 회수액</div>
+                    <div className="text-3xl sm:text-4xl font-extrabold text-white mt-2">{platformTotalRecoveredAmount.toLocaleString()}원</div>
+                    <div className="text-xs text-slate-300 mt-1">총 <strong className="text-emerald-400">{platformRecoveredRecords.length}건</strong>의 미수금이 앱 정산 문자를 통해 회수 완료되었습니다.</div>
+                  </div>
+                  <button onClick={handleExportAdminCSV} className="w-full sm:w-auto px-4 py-2.5 bg-[#0B1120] hover:bg-white/10 border border-white/20 text-slate-200 text-xs font-bold rounded-xl cursor-pointer transition-colors flex items-center justify-center gap-1.5 shrink-0"><Download className="w-3.5 h-3.5" />전체 운행내역 CSV</button>
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="glass-card p-5 rounded-xl"><span className="text-xs text-slate-400">플랫폼 총 가입 기사</span><div className="text-2xl font-bold text-white mt-1">{adminMemberList.length}명</div></div>
                   <div className="glass-card p-5 rounded-xl"><span className="text-xs text-slate-400">누적 접속 횟수</span><div className="text-2xl font-bold text-[#8B5CF6] mt-1">{adminMemberList.reduce((acc, m) => acc + (m.loginCount || 0), 0)}회</div></div>
@@ -1920,7 +2079,7 @@ export default function App() {
             <textarea rows={10} value={claimMessageText} onChange={(e) => setClaimMessageText(e.target.value)} className="w-full p-4 rounded-xl text-xs font-mono mb-4 leading-relaxed bg-[#FFFFFF] text-[#000000] focus:shadow-[0_0_12px_#8B5CF6] focus:border-[#8B5CF6] transition-all outline-none" />
             <div className="flex flex-col sm:flex-row gap-2">
               <button onClick={() => setClaimModalOpen(false)} className="w-full sm:flex-1 py-3 bg-[#0B1120] border border-white/10 hover:bg-white/10 text-white font-semibold rounded-lg text-xs cursor-pointer transition-colors">닫기</button>
-              <button onClick={() => { navigator.clipboard.writeText(claimMessageText); alert('수정된 정산 청구 문자가 복사되었습니다.'); setClaimModalOpen(false); }} className="w-full sm:flex-1 py-3 hp-primary-btn text-white font-bold rounded-lg text-xs cursor-pointer shadow-md flex items-center justify-center gap-1.5"><Copy className="w-3.5 h-3.5" />복사하기</button>
+              <button onClick={handleCopyClaimMessage} className="w-full sm:flex-1 py-3 hp-primary-btn text-white font-bold rounded-lg text-xs cursor-pointer shadow-md flex items-center justify-center gap-1.5"><Copy className="w-3.5 h-3.5" />복사하기</button>
             </div>
           </div>
         </div>
@@ -1934,7 +2093,8 @@ export default function App() {
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mb-4">
               <div className="bg-[#0B1120] p-3 rounded-lg border border-white/10 text-center"><div className="text-[10px] text-slate-400 mb-1">총 누적 운행</div><div className="font-bold text-white">{adminSelectedUser.recordCount}건</div></div>
               <div className="bg-[#0B1120] p-3 rounded-lg border border-white/10 text-center"><div className="text-[10px] text-slate-400 mb-1">당월 매출</div><div className="font-bold text-[#8B5CF6]">{(adminSelectedUser.monthlyGross || 0).toLocaleString()}원</div></div>
-              <div className="bg-[#0B1120] p-3 rounded-lg border border-white/10 text-center sm:col-span-2 flex flex-col justify-center"><div className="text-[10px] text-slate-400 mb-1">연락처 / 가입일</div><div className="font-mono text-[#38BDF8] text-xs">{formatPhoneNumber(adminSelectedUser.phone) || '번호없음'} <span className="text-slate-500 mx-1">|</span> {adminSelectedUser.createdAt}</div></div>
+              <div className="bg-[#0B1120] p-3 rounded-lg border border-emerald-500/30 text-center"><div className="text-[10px] text-emerald-400 mb-1">앱 회수 미수금</div><div className="font-bold text-emerald-400">{(adminSelectedUser.recoveredAmount || 0).toLocaleString()}원</div></div>
+              <div className="bg-[#0B1120] p-3 rounded-lg border border-white/10 text-center flex flex-col justify-center"><div className="text-[10px] text-slate-400 mb-1">연락처</div><div className="font-mono text-[#38BDF8] text-xs">{formatPhoneNumber(adminSelectedUser.phone) || '번호없음'}</div></div>
             </div>
             <div className="overflow-y-auto pr-2 space-y-4 flex-1 scrollbar-hide">
               <div>
