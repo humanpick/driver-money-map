@@ -14,13 +14,11 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-const APP_VERSION = '1.0.6';
+const APP_VERSION = '1.0.7';
 const ADMIN_DEFAULT_EMAIL = 'beat4989@naver.com';
 const ADMIN_DEFAULT_NAME = '김탁송';
 const ADMIN_DEFAULT_PHONE = '01091417586';
 const KAKAO_CHAT_URL = 'https://open.kakao.com/o/gshehyWi';
-const DRIVEON_CHANNEL_URL = 'http://pf.kakao.com/_lBEfn';
-const DRIVEON_REFERRER_TEXT = '공민준 (010-9141-7586)';
 
 const PLATFORMS = [
   { name: '로지', defaultFee: '20' },
@@ -100,13 +98,6 @@ interface MemberProfile {
   lastLoginAt?: string; loginCount?: number; recordCount?: number; monthlyGross?: number;
   joinType?: 'group' | 'referral'; kakaoId?: string; referrer?: string;
   approvalStatus?: 'pending' | 'approved'; marketingAgreed?: boolean;
-  driveonAppliedAt?: string;
-  referralCount?: number;
-}
-interface ReferralItem {
-  maskedName: string;
-  approvalStatus: 'pending' | 'approved';
-  createdAt: string;
 }
 interface NoticeItem { id: string; title: string; content: string; isActive: boolean; updatedAt?: string; }
 interface MonthlyFixed { id: string; memo: string; amount: number; platform?: string; }
@@ -226,7 +217,6 @@ export default function App() {
   const [session, setSession] = useState<any>(null);
   const [currentUserRole, setCurrentUserRole] = useState<string>('user');
   const [currentUserProfile, setCurrentUserProfile] = useState<MemberProfile | null>(null);
-  const [myReferrals, setMyReferrals] = useState<ReferralItem[]>([]);
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState(''); const [name, setName] = useState(''); const [phone, setPhone] = useState('');
   const [password, setPassword] = useState(''); const [passwordConfirm, setPasswordConfirm] = useState('');
@@ -238,19 +228,6 @@ export default function App() {
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [authLoading, setAuthLoading] = useState(false); const [authError, setAuthError] = useState(''); const [authSuccess, setAuthSuccess] = useState('');
   const [honeypot, setHoneypot] = useState(''); const [captchaVerified, setCaptchaVerified] = useState(false);
-
-  // 전용 초대 링크(?ref=...)로 접속 시 지인 추천 자동 세팅
-  useEffect(() => {
-    try {
-      const params = new URLSearchParams(window.location.search);
-      const refParam = params.get('ref');
-      if (refParam && refParam.trim()) {
-        setAuthMode('signup');
-        setJoinType('referral');
-        setReferrer(refParam.trim());
-      }
-    } catch (e) {}
-  }, []);
 
   const [activeTab, setActiveTab] = useState<'records' | 'claims' | 'expense' | 'analytics' | 'wallet' | 'trade_centers' | 'auctions' | 'admin'>('records');
   const [adminSubTab, setAdminSubTab] = useState<'campaign' | 'members' | 'analytics'>('members');
@@ -310,7 +287,6 @@ export default function App() {
   const [adminSearchTerm, setAdminSearchTerm] = useState('');
   const [showScoutOnly, setShowScoutOnly] = useState(false);
   const [showPendingOnly, setShowPendingOnly] = useState(false);
-  const [showDriveOnOnly, setShowDriveOnOnly] = useState(false);
 
   const [newDate, setNewDate] = useState<string>(() => getTodayKST());
   const [newPlatform, setNewPlatform] = useState<string>('로지');
@@ -355,42 +331,6 @@ export default function App() {
     await supabase.from('profiles').update(partial).eq('id', userId);
   };
 
-  // 내 전용 초대 링크 복사
-  const handleCopyInviteLink = async () => {
-    const refKey = (currentUserProfile?.kakaoId || currentUserProfile?.name || '').trim();
-    if (!refKey) {
-      alert('추천인 식별 정보가 없습니다.');
-      return;
-    }
-    const inviteUrl = `${window.location.origin}/?ref=${encodeURIComponent(refKey)}`;
-    const inviteMsg = `[탁송대리비서 초대]\n현직 기사가 만든 탁송·대리 전용 장부!\n아래 링크로 가입하시면 추천인이 자동 입력됩니다.\n👉 ${inviteUrl}`;
-    try {
-      await navigator.clipboard.writeText(inviteMsg);
-      alert('내 전용 초대 링크가 복사되었습니다!\n지인 기사님 카톡방에 바로 붙여넣기 해주세요.');
-    } catch (e) {
-      alert(`초대 링크: ${inviteUrl}`);
-    }
-  };
-
-  // 드라이브온 가입 신청 (추천인 문구 자동복사 + 관제탑 기록 + 카카오채널 이동)
-  const handleDriveOnApply = async () => {
-    const applyMsg = `[탁송대리비서 앱 추천]\n안녕하세요! 탁송/대리 보험 및 드라이브온 소속 가입 상담 요청드립니다.\n• 추천인: ${DRIVEON_REFERRER_TEXT}`;
-    try {
-      await navigator.clipboard.writeText(applyMsg);
-    } catch (e) {}
-
-    if (session?.user?.id) {
-      const nowIso = new Date().toISOString();
-      try {
-        await supabase.from('profiles').update({ driveon_applied_at: nowIso }).eq('id', session.user.id);
-        setCurrentUserProfile(prev => prev ? { ...prev, driveonAppliedAt: nowIso.substring(0, 16).replace('T', ' ') } : prev);
-      } catch (e) {}
-    }
-
-    alert(`추천인(${DRIVEON_REFERRER_TEXT}) 문구가 자동 복사되었습니다!\n열리는 드라이브온 카카오채널 채팅창에 '붙여넣기 → 전송'만 해주세요.`);
-    window.open(DRIVEON_CHANNEL_URL, '_blank', 'noopener,noreferrer');
-  };
-
   useEffect(() => { localStorage.setItem('jundriver_accounts_v2', JSON.stringify(accounts)); }, [accounts]);
   useEffect(() => { localStorage.setItem('jundriver_monthly_fixed_v1', JSON.stringify(monthlyFixedItems)); }, [monthlyFixedItems]);
 
@@ -417,22 +357,6 @@ export default function App() {
       setNoticeList(formatted);
       setActiveNotice(formatted.find((n) => n.isActive) || null);
     }
-  };
-
-  const fetchMyReferrals = async (myKakaoId: string, myName: string) => {
-    try {
-      const { data, error } = await supabase.rpc('get_my_referrals', {
-        p_kakao_id: myKakaoId || '',
-        p_name: myName || '',
-      });
-      if (!error && Array.isArray(data)) {
-        setMyReferrals(data.map((item: any) => ({
-          maskedName: item.masked_name || '기사',
-          approvalStatus: item.approval_status === 'pending' ? 'pending' : 'approved',
-          createdAt: item.created_at ? String(item.created_at).substring(0, 10) : '-',
-        })));
-      }
-    } catch (e) {}
   };
 
   const fetchUserData = async (userId: string, userEmail: string, userMeta?: any, userCreatedAt?: string) => {
@@ -489,10 +413,7 @@ export default function App() {
       lastLoginAt: profilePayload.last_login_at, loginCount: profilePayload.login_count,
       joinType: profilePayload.join_type, kakaoId: profilePayload.kakao_id, referrer: profilePayload.referrer,
       approvalStatus: resolvedApproval, marketingAgreed: profilePayload.marketing_agreed,
-      driveonAppliedAt: profile?.driveon_applied_at ? profile.driveon_applied_at.substring(0, 16).replace('T', ' ') : undefined,
     });
-
-    fetchMyReferrals(profilePayload.kakao_id, profilePayload.name);
 
     if (resolvedApproval === 'pending') return;
 
@@ -523,23 +444,12 @@ export default function App() {
       setAdminMemberList(profiles.map((p: any) => {
         const userRecords = allRecs.filter((r: any) => r.user_id === p.id);
         const monthlyGross = userRecords.filter((r: any) => (r.date || '').startsWith(currentMonthStr)).reduce((sum: number, r: any) => sum + Number(r.gross_amount), 0);
-        const pKakao = (p.kakao_id || '').trim();
-        const pName = (p.name || '').trim();
-        const refCount = profiles.filter((other: any) => {
-          if (other.id === p.id || other.join_type !== 'referral') return false;
-          const refVal = (other.referrer || '').trim();
-          if (!refVal) return false;
-          return (pKakao && refVal === pKakao) || (pName && refVal === pName);
-        }).length;
-
         return {
           id: p.id, email: p.email || '', name: p.name || '미상', phone: p.phone || '', role: p.role || 'user',
           createdAt: p.created_at ? p.created_at.substring(0, 10) : '-', lastLoginAt: p.last_login_at ? p.last_login_at.substring(0, 16).replace('T', ' ') : '기록없음',
           loginCount: p.login_count || 0, recordCount: userRecords.length, monthlyGross: monthlyGross,
           joinType: p.join_type || 'group', kakaoId: p.kakao_id || '', referrer: p.referrer || '',
           approvalStatus: p.approval_status || 'approved', marketingAgreed: Boolean(p.marketing_agreed),
-          driveonAppliedAt: p.driveon_applied_at ? p.driveon_applied_at.substring(0, 16).replace('T', ' ') : undefined,
-          referralCount: refCount,
         };
       }));
       setAdminAllRecords(allRecs.map((r: any) => ({
@@ -558,7 +468,7 @@ export default function App() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (session?.user) fetchUserData(session.user.id, session.user.email || '', session.user.user_metadata, session.user.created_at);
-      else { cloudSettingsLoadedRef.current = false; setRecords([]); setExpenses([]); setMyReferrals([]); setCurrentUserRole('user'); setCurrentUserProfile(null); }
+      else { cloudSettingsLoadedRef.current = false; setRecords([]); setExpenses([]); setCurrentUserRole('user'); setCurrentUserProfile(null); }
     });
     return () => subscription.unsubscribe();
   }, []);
@@ -826,9 +736,6 @@ export default function App() {
   const totalUnpaidAmount = unpaidRecords.reduce((acc, r) => acc + (!r.isGrossPaid ? r.grossAmount : 0) + (!r.isExpensePaid ? (r.fuelAmount + r.extraExpenseAmount) : 0), 0);
   const isAdminUser = currentUserRole === 'super_admin' || currentUserRole === 'manager';
   const pendingCount = adminMemberList.filter(m => m.approvalStatus === 'pending').length;
-  const driveOnCount = adminMemberList.filter(m => Boolean(m.driveonAppliedAt)).length;
-  const approvedRefCount = myReferrals.filter(r => r.approvalStatus === 'approved').length;
-  const pendingRefCount = myReferrals.filter(r => r.approvalStatus === 'pending').length;
 
   const monthlyRecords = records.filter((r) => (r.date || '').startsWith(currentMonthPrefix));
   const monthlyExpenses = expenses.filter((e) => (e.date || '').startsWith(currentMonthPrefix));
@@ -873,7 +780,6 @@ export default function App() {
     const isAce = (m.monthlyGross || 0) >= 1500000 || (m.recordCount || 0) >= 10;
     if (showPendingOnly && m.approvalStatus !== 'pending') return false;
     if (showScoutOnly && !isAce) return false;
-    if (showDriveOnOnly && !m.driveonAppliedAt) return false;
     return matchesSearch;
   });
 
@@ -1016,9 +922,6 @@ export default function App() {
             <a href={KAKAO_CHAT_URL} target="_blank" rel="noopener noreferrer" className="w-full py-2.5 bg-[#FEE500] hover:bg-[#FDD835] text-[#191919] font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors">
               <MessageSquare className="w-3.5 h-3.5" /> 탁송대리비서 소통방 입장하기
             </a>
-            <button type="button" onClick={handleDriveOnApply} className="w-full py-2.5 bg-[#38BDF8]/15 hover:bg-[#38BDF8]/25 text-[#38BDF8] border border-[#38BDF8]/40 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors">
-              <Sparkles className="w-3.5 h-3.5" /> 탁송의신 입장 · 드라이브온 가입 신청
-            </button>
             <button type="button" onClick={() => setShowPrivacyModal(true)} className="text-[11px] text-slate-400 hover:text-[#38BDF8] underline cursor-pointer pt-1">개인정보 처리방침 보기</button>
           </div>
         </div>
@@ -1060,9 +963,6 @@ export default function App() {
             <a href={KAKAO_CHAT_URL} target="_blank" rel="noopener noreferrer" className="w-full py-3 bg-[#FEE500] hover:bg-[#FDD835] text-[#191919] font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors">
               <MessageSquare className="w-4 h-4" /> 탁송대리비서 소통방 입장하기
             </a>
-            <button type="button" onClick={handleDriveOnApply} className="w-full py-3 bg-[#38BDF8]/15 hover:bg-[#38BDF8]/25 text-[#38BDF8] border border-[#38BDF8]/40 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 cursor-pointer transition-colors">
-              <Sparkles className="w-4 h-4" /> 탁송의신 입장 · 드라이브온 가입 신청
-            </button>
             <button onClick={handleLogout} className="w-full py-2.5 bg-white/5 hover:bg-white/10 text-slate-300 font-semibold text-xs rounded-xl cursor-pointer">로그아웃</button>
           </div>
         </div>
@@ -1079,7 +979,7 @@ export default function App() {
           <div className="flex items-center gap-2"><div className="w-8 h-8 bg-gradient-to-br from-[#8B5CF6] to-[#EC4899] rounded-lg flex items-center justify-center shadow-[0_0_10px_#8B5CF6]"><Car className="w-4 h-4 text-white" /></div><span className="font-bold text-base text-white">탁송대리비서</span><span className="px-1.5 py-0.5 text-[10px] font-extrabold bg-[#8B5CF6]/20 text-[#8B5CF6] rounded border border-[#8B5CF6]/30">PRO</span></div>
           <div className="flex items-center gap-2">
             {isAdminUser && <button onClick={() => { fetchAdminData(); setActiveTab('admin'); }} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all relative ${activeTab === 'admin' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#38BDF8]/10 border border-[#38BDF8]/30 text-[#38BDF8] hover:bg-[#38BDF8]/20'}`}><Crown className="w-3.5 h-3.5" /><span className="hidden sm:inline">관제탑</span>{pendingCount > 0 && <span className="ml-0.5 px-1.5 py-0.2 rounded-full bg-[#EC4899] text-white text-[9px] font-extrabold">{pendingCount}</span>}</button>}
-            <button onClick={() => { setShowProfileModal(true); if (currentUserProfile) fetchMyReferrals(currentUserProfile.kakaoId || '', currentUserProfile.name || ''); }} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg glass-card text-xs text-slate-200 cursor-pointer"><User className="w-3.5 h-3.5 text-[#8B5CF6]" /><span className="block font-bold text-white">{currentUserProfile?.name || '기사'}님</span></button>
+            <button onClick={() => setShowProfileModal(true)} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg glass-card text-xs text-slate-200 cursor-pointer"><User className="w-3.5 h-3.5 text-[#8B5CF6]" /><span className="block font-bold text-white">{currentUserProfile?.name || '기사'}님</span></button>
             <button onClick={handleLogout} className="p-1.5 rounded-lg glass-card text-slate-400 hover:text-[#EC4899] cursor-pointer"><LogOut className="w-4 h-4" /></button>
           </div>
         </div>
@@ -1757,9 +1657,6 @@ export default function App() {
                     <button onClick={() => setShowPendingOnly(!showPendingOnly)} className={`flex-1 sm:flex-none px-3.5 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${showPendingOnly ? 'bg-[#EC4899] text-white shadow-[0_0_15px_rgba(236,72,153,0.5)]' : 'bg-[#0B1120] text-slate-400 border border-white/10 hover:border-[#EC4899]/50'}`}>
                       <ShieldAlert className="w-4 h-4" /> 승인 대기만 ({pendingCount})
                     </button>
-                    <button onClick={() => setShowDriveOnOnly(!showDriveOnOnly)} className={`flex-1 sm:flex-none px-3.5 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${showDriveOnOnly ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_15px_rgba(56,189,248,0.5)]' : 'bg-[#0B1120] text-slate-400 border border-white/10 hover:border-[#38BDF8]/50'}`}>
-                      <Sparkles className="w-4 h-4" /> 드라이브온 신청 ({driveOnCount})
-                    </button>
                     <button onClick={() => setShowScoutOnly(!showScoutOnly)} className={`flex-1 sm:flex-none px-3.5 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${showScoutOnly ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-[0_0_15px_rgba(245,158,11,0.5)] border-0' : 'bg-[#0B1120] text-slate-400 border border-white/10 hover:border-amber-500/50'}`}>
                       <Award className="w-4 h-4" /> 🏆 에이스 기사만
                     </button>
@@ -1777,8 +1674,6 @@ export default function App() {
                             <div className="text-white font-bold flex flex-wrap items-center gap-1.5 text-sm">
                               {m.name || '미입력'}
                               {isPending && <span className="px-1.5 py-0.5 bg-[#EC4899] text-white text-[9px] rounded font-extrabold">승인대기</span>}
-                              {(m.referralCount || 0) > 0 && <span className="px-1.5 py-0.5 bg-[#8B5CF6]/25 text-[#A78BFA] border border-[#8B5CF6]/40 text-[9px] rounded font-extrabold">추천 {m.referralCount}명</span>}
-                              {m.driveonAppliedAt && <span className="px-1.5 py-0.5 bg-[#38BDF8]/20 text-[#38BDF8] border border-[#38BDF8]/40 text-[9px] rounded font-extrabold">드라이브온 신청</span>}
                               {isAce && <span className="px-1.5 py-0.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[9px] rounded font-extrabold">🏆 에이스</span>}
                             </div>
                             <div className="font-mono text-[#38BDF8] text-[11px] mt-0.5">{formatPhoneNumber(m.phone) || '번호없음'}</div>
@@ -1792,9 +1687,6 @@ export default function App() {
                           <span className="text-slate-400">{m.joinType === 'referral' ? '지인추천' : '단톡방'}</span>
                           <span className="font-bold text-[#38BDF8]">{m.joinType === 'referral' ? (m.referrer || '-') : (m.kakaoId || '-')}</span>
                         </div>
-                        {m.driveonAppliedAt && (
-                          <div className="text-[10px] text-[#38BDF8] font-mono">드라이브온 신청일시: {m.driveonAppliedAt}</div>
-                        )}
                         <div className="flex flex-col gap-2 pt-1">
                           {isPending ? (
                             <button onClick={() => handleUpdateApprovalStatus(m.id, 'approved')} className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold cursor-pointer">✔ 가입 승인하기</button>
@@ -1821,8 +1713,6 @@ export default function App() {
                             <td className="p-3">
                               <div className="text-white font-bold flex items-center gap-1.5">
                                 {m.name || '미입력'}
-                                {(m.referralCount || 0) > 0 && <span className="px-1.5 py-0.5 bg-[#8B5CF6]/25 text-[#A78BFA] border border-[#8B5CF6]/40 text-[9px] rounded font-extrabold">추천 {m.referralCount}명</span>}
-                                {m.driveonAppliedAt && <span className="px-1.5 py-0.5 bg-[#38BDF8]/20 text-[#38BDF8] border border-[#38BDF8]/40 text-[9px] rounded font-extrabold" title={`신청일시: ${m.driveonAppliedAt}`}>드라이브온</span>}
                                 {isAce && <span className="px-1.5 py-0.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[9px] rounded font-extrabold shadow-sm">🏆 에이스</span>}
                               </div>
                               <div className="font-mono text-[#38BDF8] text-[11px] mt-1">{formatPhoneNumber(m.phone) || '번호없음'}</div>
@@ -2020,52 +1910,16 @@ export default function App() {
           <div className="w-full max-w-sm glass-card rounded-2xl p-6 shadow-2xl relative z-20 max-h-[90vh] overflow-y-auto scrollbar-hide">
             <button onClick={() => setShowProfileModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 cursor-pointer"><X className="w-5 h-5" /></button>
             <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2"><User className="w-4 h-4 text-[#8B5CF6]" />기사 프로필 및 계정 관리</h3>
-            <div className="bg-[#0B1120] border border-white/10 rounded-xl p-3.5 space-y-2 mb-3.5">
+            <div className="bg-[#0B1120] border border-white/10 rounded-xl p-3.5 space-y-2 mb-4">
               <div className="flex justify-between items-center text-xs"><span className="text-slate-400">기사 성함</span><span className="text-white font-bold">{currentUserProfile?.name || session?.user?.user_metadata?.name || '미상'}</span></div>
               <div className="flex justify-between items-center text-xs"><span className="text-slate-400">연락처</span><span className="text-[#38BDF8] font-mono font-semibold">{formatPhoneNumber(currentUserProfile?.phone || session?.user?.user_metadata?.phone || '') || '미등록'}</span></div>
               <div className="flex justify-between items-center text-xs"><span className="text-slate-400">가입 구분</span><span className="text-slate-200 font-semibold">{currentUserProfile?.joinType === 'referral' ? `추천인(${currentUserProfile.referrer || '-'})` : `단톡방(${currentUserProfile?.kakaoId || '-'})`}</span></div>
               <div className="flex justify-between items-center text-xs"><span className="text-slate-400">앱 버전</span><span className="text-emerald-400 font-mono font-bold">v{APP_VERSION}</span></div>
             </div>
-
-            {/* 내 지인 추천 현황 카드 */}
-            <div className="bg-[#0B1120] border border-[#8B5CF6]/40 rounded-xl p-3.5 space-y-2.5 mb-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-extrabold text-white flex items-center gap-1.5"><Users className="w-3.5 h-3.5 text-[#8B5CF6]" />내 지인 추천 현황</span>
-                <span className="text-[11px] font-bold text-[#38BDF8]">총 {myReferrals.length}명</span>
-              </div>
-              <div className="bg-[#8B5CF6]/15 border border-[#8B5CF6]/30 rounded-lg px-2.5 py-2 text-[11px] font-bold text-[#C4B5FD] text-center leading-snug">
-                🎁 지인 1명 추천 시 정식 출시 후 무료 이용권 지급!
-              </div>
-              <div className="flex justify-between text-[11px] text-slate-400 px-0.5">
-                <span>승인 완료 <strong className="text-emerald-400">{approvedRefCount}명</strong></span>
-                <span>승인 대기 <strong className="text-[#EC4899]">{pendingRefCount}명</strong></span>
-              </div>
-              {myReferrals.length > 0 ? (
-                <div className="max-h-24 overflow-y-auto space-y-1.5 pr-0.5 scrollbar-hide">
-                  {myReferrals.map((ref, idx) => (
-                    <div key={idx} className="flex items-center justify-between bg-white/[0.03] px-2.5 py-1.5 rounded-lg text-[11px]">
-                      <span className="text-slate-200 font-semibold">{ref.maskedName} 님 <span className="text-slate-500 text-[10px] ml-1">{ref.createdAt}</span></span>
-                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${ref.approvalStatus === 'approved' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-[#EC4899]/20 text-[#EC4899]'}`}>
-                        {ref.approvalStatus === 'approved' ? '승인완료' : '승인대기'}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-[11px] text-slate-500 text-center py-1">아직 추천으로 가입한 지인이 없습니다.</div>
-              )}
-              <button type="button" onClick={handleCopyInviteLink} className="w-full py-2 bg-[#8B5CF6]/20 hover:bg-[#8B5CF6]/35 text-[#C4B5FD] border border-[#8B5CF6]/40 font-bold rounded-lg text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors">
-                <Copy className="w-3.5 h-3.5" /> 내 전용 초대 링크 복사하기
-              </button>
-            </div>
-
             <div className="flex flex-col gap-2">
               <a href={KAKAO_CHAT_URL} target="_blank" rel="noopener noreferrer" className="w-full py-2.5 bg-[#FEE500] hover:bg-[#FDD835] text-[#191919] font-bold rounded-lg text-xs flex items-center justify-center gap-1.5 transition-colors">
                 <MessageSquare className="w-3.5 h-3.5" /> 탁송대리비서 소통방 입장하기
               </a>
-              <button type="button" onClick={handleDriveOnApply} className="w-full py-2.5 bg-[#38BDF8]/15 hover:bg-[#38BDF8]/25 text-[#38BDF8] border border-[#38BDF8]/40 font-bold rounded-lg text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors">
-                <Sparkles className="w-3.5 h-3.5" /> 탁송의신 입장 · 드라이브온 가입 신청
-              </button>
               <button onClick={() => { sessionStorage.removeItem('app_reloaded_version'); forceClearAndReload(); }} className="w-full py-2.5 bg-white/10 hover:bg-white/20 text-slate-200 font-bold rounded-lg text-xs flex items-center justify-center gap-1.5 cursor-pointer">
                 <RefreshCw className="w-3.5 h-3.5" /> 최신 버전 강제 새로고침
               </button>
