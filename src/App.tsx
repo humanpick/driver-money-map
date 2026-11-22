@@ -14,7 +14,7 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-const APP_VERSION = '1.0.7';
+const APP_VERSION = '1.0.8';
 const ADMIN_DEFAULT_EMAIL = 'beat4989@naver.com';
 const ADMIN_DEFAULT_NAME = '김탁송';
 const ADMIN_DEFAULT_PHONE = '01091417586';
@@ -220,9 +220,7 @@ export default function App() {
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState(''); const [name, setName] = useState(''); const [phone, setPhone] = useState('');
   const [password, setPassword] = useState(''); const [passwordConfirm, setPasswordConfirm] = useState('');
-  const [joinType, setJoinType] = useState<'group' | 'referral'>('group');
   const [kakaoId, setKakaoId] = useState('');
-  const [referrer, setReferrer] = useState('');
   const [agreePrivacy, setAgreePrivacy] = useState(false);
   const [agreeMarketing, setAgreeMarketing] = useState(false);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
@@ -480,9 +478,8 @@ export default function App() {
     if (honeypot.trim() !== '') { setAuthLoading(false); return; }
     if (!captchaVerified) { setAuthError('보안 확인(인간 인증 체크)을 완료해 주세요.'); setAuthLoading(false); return; }
     const trimmedName = name.trim(); const cleanPhone = phone.replace(/[^0-9]/g, ''); const cleanEmail = email.trim().toLowerCase();
-    const trimmedKakao = kakaoId.trim(); const trimmedReferrer = referrer.trim();
-    if (joinType === 'group' && !trimmedKakao) { setAuthError('단톡방 닉네임(아이디/생년/지역)을 톡방과 똑같이 입력해 주세요.'); setAuthLoading(false); return; }
-    if (joinType === 'referral' && !trimmedReferrer) { setAuthError('추천인 닉네임(아이디/생년/지역)을 톡방과 똑같이 입력해 주세요.'); setAuthLoading(false); return; }
+    const trimmedKakao = kakaoId.trim();
+    if (!trimmedKakao) { setAuthError('단톡방 닉네임(아이디/생년/지역)을 톡방과 똑같이 입력해 주세요.'); setAuthLoading(false); return; }
     if (password.length < 6) { setAuthError('비밀번호는 최소 6자리 이상이어야 합니다.'); setAuthLoading(false); return; }
     if (password !== passwordConfirm) { setAuthError('비밀번호가 일치하지 않습니다.'); setAuthLoading(false); return; }
     if (!agreePrivacy) { setAuthError('[필수] 개인정보 수집 및 이용에 동의해 주세요.'); setAuthLoading(false); return; }
@@ -496,9 +493,9 @@ export default function App() {
       options: {
         data: {
           name: trimmedName, phone: cleanPhone, privacy_policy_agreed: true,
-          marketing_agreed: agreeMarketing, join_type: joinType,
-          kakao_id: joinType === 'group' ? trimmedKakao : '',
-          referrer: joinType === 'referral' ? trimmedReferrer : '',
+          marketing_agreed: agreeMarketing, join_type: 'group',
+          kakao_id: trimmedKakao,
+          referrer: '',
           approval_status: initialApproval, created_at: nowIso
         }
       }
@@ -511,8 +508,8 @@ export default function App() {
           id: data.user.id, email: cleanEmail, name: trimmedName, phone: cleanPhone,
           role: cleanEmail === ADMIN_DEFAULT_EMAIL ? 'super_admin' : 'user',
           created_at: nowIso, last_login_at: nowIso, login_count: 1,
-          join_type: joinType, kakao_id: joinType === 'group' ? trimmedKakao : '',
-          referrer: joinType === 'referral' ? trimmedReferrer : '',
+          join_type: 'group', kakao_id: trimmedKakao,
+          referrer: '',
           approval_status: initialApproval, marketing_agreed: agreeMarketing
         };
         const { error: profErr } = await supabase.from('profiles').upsert([profileData]);
@@ -830,11 +827,11 @@ export default function App() {
           <div className="overflow-y-auto pr-1 space-y-3 text-xs text-slate-300 leading-relaxed flex-1">
             <div className="bg-[#0B1120] p-3.5 rounded-xl border border-white/10 space-y-1.5">
               <div className="font-bold text-white">1. 개인정보 수집 및 이용 목적</div>
-              <p>회원 식별, 회원 가입 승인 확인(단톡방 회원 및 추천인 확인), 운행 일지·정산·경비 장부 서비스 제공 및 고객 문의 응대</p>
+              <p>회원 식별, 회원 가입 승인 확인(단톡방 회원 확인), 운행 일지·정산·경비 장부 서비스 제공 및 고객 문의 응대</p>
             </div>
             <div className="bg-[#0B1120] p-3.5 rounded-xl border border-white/10 space-y-1.5">
               <div className="font-bold text-white">2. 수집하는 개인정보 항목</div>
-              <p>[필수] 이메일, 비밀번호(암호화 저장), 이름, 휴대폰 번호, 가입 구분(단톡방 닉네임 또는 추천인)</p>
+              <p>[필수] 이메일, 비밀번호(암호화 저장), 이름, 휴대폰 번호, 단톡방 닉네임</p>
               <p>[선택] 이벤트 및 혜택 안내 수신 동의 여부</p>
             </div>
             <div className="bg-[#0B1120] p-3.5 rounded-xl border border-white/10 space-y-1.5">
@@ -882,19 +879,7 @@ export default function App() {
             </form>
           ) : (
             <form onSubmit={handleSignUp} className="space-y-3">
-              <div className="p-3 rounded-xl bg-[#0B1120] border border-white/10 space-y-2.5">
-                <div className="text-[11px] font-bold text-[#38BDF8]">가입 구분</div>
-                <div className="grid grid-cols-2 gap-2">
-                  <button type="button" onClick={() => setJoinType('group')} className={`py-2 rounded-lg text-xs font-bold border transition-all cursor-pointer ${joinType === 'group' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6]' : 'bg-white/5 text-slate-400 border-white/10'}`}>단톡방 회원</button>
-                  <button type="button" onClick={() => setJoinType('referral')} className={`py-2 rounded-lg text-xs font-bold border transition-all cursor-pointer ${joinType === 'referral' ? 'bg-[#8B5CF6] text-white border-[#8B5CF6]' : 'bg-white/5 text-slate-400 border-white/10'}`}>지인 추천 (외부)</button>
-                </div>
-                {joinType === 'group' ? (
-                  <input type="text" value={kakaoId} onChange={(e) => setKakaoId(e.target.value)} placeholder="단톡방 닉네임(아이디/생년/지역) 톡방과 똑같이" required className="w-full px-3 py-2 rounded-lg text-xs" />
-                ) : (
-                  <input type="text" value={referrer} onChange={(e) => setReferrer(e.target.value)} placeholder="추천인 닉네임(아이디/생년/지역) 톡방과 똑같이" required className="w-full px-3 py-2 rounded-lg text-xs" />
-                )}
-              </div>
-
+              <input type="text" value={kakaoId} onChange={(e) => setKakaoId(e.target.value)} placeholder="단톡방 닉네임(아이디/생년/지역) 톡방과 똑같이" required className="w-full px-3.5 py-2.5 rounded-lg text-xs" />
               <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="이메일" required className="w-full px-3.5 py-2.5 rounded-lg" />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2"><input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="이름 (김탁송)" required className="w-full px-3.5 py-2.5 rounded-lg" /><input type="tel" value={phone} onChange={(e) => setPhone(e.target.value.replace(/[^0-9]/g, ''))} placeholder="휴대폰번호" maxLength={11} required className="w-full px-3.5 py-2.5 rounded-lg" /></div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2"><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="비밀번호(6자리 이상)" required className="w-full px-3.5 py-2.5 rounded-lg" /><input type="password" value={passwordConfirm} onChange={(e) => setPasswordConfirm(e.target.value)} placeholder="비밀번호 재입력" required className="w-full px-3.5 py-2.5 rounded-lg" /></div>
@@ -943,17 +928,13 @@ export default function App() {
             <h2 className="text-lg font-extrabold text-white">가입 승인 대기 중</h2>
             <p className="text-xs text-slate-300 mt-2 leading-relaxed">
               <span className="font-bold text-[#38BDF8]">{currentUserProfile.name}</span> 기사님의 신청이 정상 접수되었습니다.<br />
-              관리자가 단톡방/추천인 확인 후 승인하면 바로 이용하실 수 있습니다.
+              관리자가 단톡방 확인 후 승인하면 바로 이용하실 수 있습니다.
             </p>
           </div>
           <div className="bg-[#0B1120] border border-white/10 rounded-xl p-4 text-left text-xs space-y-2">
             <div className="flex justify-between">
-              <span className="text-slate-400">신청 구분</span>
-              <span className="font-bold text-white">{currentUserProfile.joinType === 'referral' ? '지인 추천(외부)' : '단톡방 회원'}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-400">{currentUserProfile.joinType === 'referral' ? '추천인' : '단톡방 닉네임'}</span>
-              <span className="font-bold text-[#38BDF8]">{currentUserProfile.joinType === 'referral' ? (currentUserProfile.referrer || '-') : (currentUserProfile.kakaoId || '-')}</span>
+              <span className="text-slate-400">단톡방 닉네임</span>
+              <span className="font-bold text-[#38BDF8]">{currentUserProfile.kakaoId || currentUserProfile.referrer || '-'}</span>
             </div>
           </div>
           <div className="space-y-2">
@@ -1652,7 +1633,7 @@ export default function App() {
             {adminSubTab === 'members' && (
               <div className="glass-card p-5 sm:p-6 rounded-xl space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2">
-                  <input type="text" placeholder="이름 / 연락처 / 단톡방 닉네임 / 추천인 검색..." value={adminSearchTerm} onChange={(e) => setAdminSearchTerm(e.target.value)} className="px-3 py-2.5 rounded-lg text-xs w-full sm:max-w-xs" />
+                  <input type="text" placeholder="이름 / 연락처 / 단톡방 닉네임 검색..." value={adminSearchTerm} onChange={(e) => setAdminSearchTerm(e.target.value)} className="px-3 py-2.5 rounded-lg text-xs w-full sm:max-w-xs" />
                   <div className="flex flex-wrap gap-2">
                     <button onClick={() => setShowPendingOnly(!showPendingOnly)} className={`flex-1 sm:flex-none px-3.5 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${showPendingOnly ? 'bg-[#EC4899] text-white shadow-[0_0_15px_rgba(236,72,153,0.5)]' : 'bg-[#0B1120] text-slate-400 border border-white/10 hover:border-[#EC4899]/50'}`}>
                       <ShieldAlert className="w-4 h-4" /> 승인 대기만 ({pendingCount})
@@ -1684,8 +1665,8 @@ export default function App() {
                           </div>
                         </div>
                         <div className="bg-black/30 p-2.5 rounded-lg border border-white/5 flex justify-between text-[11px]">
-                          <span className="text-slate-400">{m.joinType === 'referral' ? '지인추천' : '단톡방'}</span>
-                          <span className="font-bold text-[#38BDF8]">{m.joinType === 'referral' ? (m.referrer || '-') : (m.kakaoId || '-')}</span>
+                          <span className="text-slate-400">단톡방 닉네임</span>
+                          <span className="font-bold text-[#38BDF8]">{m.kakaoId || m.referrer || '-'}</span>
                         </div>
                         <div className="flex flex-col gap-2 pt-1">
                           {isPending ? (
@@ -1703,7 +1684,7 @@ export default function App() {
 
                 <div className="hidden md:block overflow-x-auto rounded-lg border border-white/10">
                   <table className="w-full text-left text-xs whitespace-nowrap">
-                    <thead className="bg-[#0B1120] text-slate-400 border-b border-white/10"><tr><th className="p-3">이름/연락처</th><th className="p-3 text-center">신청 구분 / 닉네임·추천인</th><th className="p-3 text-center">승인 상태</th><th className="p-3 text-center">당월 실적</th><th className="p-3 text-center">권한 변경</th><th className="p-3 text-right">리포트</th></tr></thead>
+                    <thead className="bg-[#0B1120] text-slate-400 border-b border-white/10"><tr><th className="p-3">이름/연락처</th><th className="p-3 text-center">단톡방 닉네임</th><th className="p-3 text-center">승인 상태</th><th className="p-3 text-center">당월 실적</th><th className="p-3 text-center">권한 변경</th><th className="p-3 text-right">리포트</th></tr></thead>
                     <tbody className="divide-y divide-white/5">
                       {displayedMembers.length === 0 ? <tr><td colSpan={6} className="p-10 text-center text-slate-500">검색 조건에 맞는 기사님이 없습니다.</td></tr> : displayedMembers.map((m) => {
                         const isAce = (m.monthlyGross || 0) >= 1500000 || (m.recordCount || 0) >= 10;
@@ -1718,8 +1699,7 @@ export default function App() {
                               <div className="font-mono text-[#38BDF8] text-[11px] mt-1">{formatPhoneNumber(m.phone) || '번호없음'}</div>
                             </td>
                             <td className="p-3 text-center">
-                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${m.joinType === 'referral' ? 'bg-[#8B5CF6]/20 text-[#8B5CF6]' : 'bg-[#38BDF8]/20 text-[#38BDF8]'}`}>{m.joinType === 'referral' ? '지인추천' : '단톡방'}</span>
-                              <div className="text-white font-semibold mt-1">{m.joinType === 'referral' ? (m.referrer || '-') : (m.kakaoId || '-')}</div>
+                              <div className="text-white font-semibold">{m.kakaoId || m.referrer || '-'}</div>
                             </td>
                             <td className="p-3 text-center">
                               {isPending ? (
@@ -1913,7 +1893,7 @@ export default function App() {
             <div className="bg-[#0B1120] border border-white/10 rounded-xl p-3.5 space-y-2 mb-4">
               <div className="flex justify-between items-center text-xs"><span className="text-slate-400">기사 성함</span><span className="text-white font-bold">{currentUserProfile?.name || session?.user?.user_metadata?.name || '미상'}</span></div>
               <div className="flex justify-between items-center text-xs"><span className="text-slate-400">연락처</span><span className="text-[#38BDF8] font-mono font-semibold">{formatPhoneNumber(currentUserProfile?.phone || session?.user?.user_metadata?.phone || '') || '미등록'}</span></div>
-              <div className="flex justify-between items-center text-xs"><span className="text-slate-400">가입 구분</span><span className="text-slate-200 font-semibold">{currentUserProfile?.joinType === 'referral' ? `추천인(${currentUserProfile.referrer || '-'})` : `단톡방(${currentUserProfile?.kakaoId || '-'})`}</span></div>
+              <div className="flex justify-between items-center text-xs"><span className="text-slate-400">단톡방 닉네임</span><span className="text-slate-200 font-semibold">{currentUserProfile?.kakaoId || currentUserProfile?.referrer || '-'}</span></div>
               <div className="flex justify-between items-center text-xs"><span className="text-slate-400">앱 버전</span><span className="text-emerald-400 font-mono font-bold">v{APP_VERSION}</span></div>
             </div>
             <div className="flex flex-col gap-2">
