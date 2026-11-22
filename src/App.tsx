@@ -388,6 +388,16 @@ export default function App() {
 
     const currentCount = profile?.login_count || 0;
     const nowIso = new Date().toISOString();
+    // ▼ 여기서부터 붙여넣기 (전화번호 중복 가입 차단)
+    const { data: phoneExists, error: phoneCheckErr } = await supabase.rpc('check_phone_exists', {
+      p_phone: cleanPhone,
+    });
+    if (!phoneCheckErr && phoneExists) {
+      setAuthError('이미 가입되어 있거나 승인 대기 중인 휴대폰 번호입니다.');
+      setAuthLoading(false);
+      return;
+    }
+    // ▲ 여기까지 붙여넣기
     const profilePayload: any = {
       id: userId, email: cleanMail, name: profile?.name || metaName, phone: profile?.phone || metaPhone,
       role: role, created_at: profile?.created_at || userCreatedAt || nowIso,
