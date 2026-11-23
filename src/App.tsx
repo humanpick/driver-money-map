@@ -14,7 +14,7 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-const APP_VERSION = '1.0.11';
+const APP_VERSION = '1.0.12';
 const ADMIN_DEFAULT_EMAIL = 'beat4989@naver.com';
 const ADMIN_DEFAULT_NAME = '김탁송';
 const ADMIN_DEFAULT_PHONE = '01091417586';
@@ -132,30 +132,30 @@ const TRADE_CENTERS = [
   { id: '18', name: '전주 월드컵매매단지', tier: 'B', region: '호남권', addr: '전북 전주시 덕진구 온고을로 860', desc: '전북권 핵심 거점.' }
 ];
 
-// [절대 수정 금지] 고정 탁송 경매일 데이터
+// 고정 탁송 경매일 데이터 (시/도 포함 정확한 지도 검색용 주소 반영)
 const AUCTION_SCHEDULES = [
   { day: '월요일', hex: '#38BDF8', locations: [
-    { name: '안성 롯데렌탈', tier: 'S', addr: '내가천리 12', tag: '롯데' },
-    { name: '광혜원 오토보이', tier: 'B', addr: '금천길 37', tag: '오토보이' }
+    { name: '안성 롯데렌탈', tier: 'S', addr: '경기도 안성시 공도읍 내가천리 12', tag: '롯데' },
+    { name: '광혜원 오토보이', tier: 'B', addr: '충북 진천군 광혜원면 금천길 37', tag: '오토보이' }
   ] },
   { day: '화요일', hex: '#EC4899', locations: [
-    { name: '분당 현대글로비스', tier: 'S', addr: '능평리 174-25', tag: '글로비스' },
+    { name: '분당 현대글로비스', tier: 'S', addr: '경기도 광주시 능평로 167', tag: '글로비스' },
     { name: '부강 케이카', tier: 'A', addr: '세종특별자치시 부강면 문곡리 산 249', tag: '케이카' },
-    { name: '시화 현대글로비스', tier: 'S', addr: '정왕천로 271', tag: '글로비스' },
-    { name: '천안 구성동 sk경매장', tier: 'B', addr: '천안 구성동', tag: 'SK' }
+    { name: '시화 현대글로비스', tier: 'S', addr: '경기도 시흥시 정왕천로 271', tag: '글로비스' },
+    { name: '천안 구성동 sk경매장', tier: 'B', addr: '충남 천안시 동남구 구성동', tag: 'SK' }
   ] },
   { day: '수요일', hex: '#10B981', locations: [
-    { name: '안성오토허브 (구)aj옥션셀카옥션', tier: 'S', addr: '문터길 60', tag: '오토허브' }
+    { name: '안성오토허브 (구)aj옥션셀카옥션', tier: 'S', addr: '경기도 안성시 원곡면 문터길 60', tag: '오토허브' }
   ] },
   { day: '목요일', hex: '#F59E0B', locations: [
-    { name: '오산 케이카', tier: 'A', addr: '오산시 은계동 7-30', tag: '케이카' },
-    { name: '양산 현대글로비스', tier: 'S', addr: '산막동 572-1', tag: '글로비스' },
-    { name: '광혜원 오토보이', tier: 'B', addr: '금천길 37', tag: '오토보이' },
-    { name: '인천 현대글로비스', tier: 'S', addr: '가좌동 173-203', tag: '글로비스' }
+    { name: '오산 케이카', tier: 'A', addr: '경기도 오산시 은계동 7-30', tag: '케이카' },
+    { name: '양산 현대글로비스', tier: 'S', addr: '경남 양산시 산막동 572-1', tag: '글로비스' },
+    { name: '광혜원 오토보이', tier: 'B', addr: '충북 진천군 광혜원면 금천길 37', tag: '오토보이' },
+    { name: '인천 현대글로비스', tier: 'S', addr: '인천광역시 서구 가좌동 173-203', tag: '글로비스' }
   ] },
   { day: '금요일', hex: '#8B5CF6', locations: [
-    { name: '시화 현대글로비스', tier: 'S', addr: '정왕동 2122-4', tag: '글로비스' },
-    { name: '분당 현대글로비스', tier: 'S', addr: '능평리 174-25', tag: '글로비스' }
+    { name: '시화 현대글로비스', tier: 'S', addr: '경기도 시흥시 정왕천로 271', tag: '글로비스' },
+    { name: '분당 현대글로비스', tier: 'S', addr: '경기도 광주시 능평로 167', tag: '글로비스' }
   ] }
 ];
 
