@@ -14,7 +14,7 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-const APP_VERSION = '1.0.12';
+const APP_VERSION = '1.0.13';
 const ADMIN_DEFAULT_EMAIL = 'beat4989@naver.com';
 const ADMIN_DEFAULT_NAME = '김탁송';
 const ADMIN_DEFAULT_PHONE = '01091417586';
@@ -259,6 +259,14 @@ export default function App() {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [adminSelectedUser, setAdminSelectedUser] = useState<MemberProfile | null>(null);
   const [adminSelectedUserRecords, setAdminSelectedUserRecords] = useState<DrivingRecord[]>([]);
+
+  // 관제탑 회원 정보 수정 팝업 상태
+  const [editingMember, setEditingMember] = useState<MemberProfile | null>(null);
+  const [editMemberName, setEditMemberName] = useState('');
+  const [editMemberPhone, setEditMemberPhone] = useState('');
+  const [editMemberKakaoId, setEditMemberKakaoId] = useState('');
+  const [editMemberReferrer, setEditMemberReferrer] = useState('');
+  const [editMemberSaving, setEditMemberSaving] = useState(false);
 
   const [editingRecord, setEditingRecord] = useState<DrivingRecord | null>(null);
   const [actionRecordId, setActionRecordId] = useState<string | null>(null);
@@ -791,6 +799,46 @@ export default function App() {
     const { error } = await supabase.from('profiles').update({ approval_status: nextStatus }).eq('id', memberId);
     if (error) { alert('승인 상태 변경 실패: ' + error.message); return; }
     fetchAdminData();
+  };
+
+  const handleOpenEditMemberModal = (m: MemberProfile) => {
+    setEditingMember(m);
+    setEditMemberName(m.name || '');
+    setEditMemberPhone((m.phone || '').replace(/[^0-9]/g, ''));
+    setEditMemberKakaoId(m.kakaoId || '');
+    setEditMemberReferrer(m.referrer || '');
+  };
+
+  const handleUpdateMemberProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingMember || !isAdminUser) return;
+    const trimmedName = editMemberName.trim();
+    const cleanPhone = editMemberPhone.replace(/[^0-9]/g, '');
+    const trimmedKakao = editMemberKakaoId.trim();
+    const trimmedRef = editMemberReferrer.trim();
+    if (!trimmedName) { alert('기사님 이름을 입력해 주세요.'); return; }
+
+    setEditMemberSaving(true);
+    const updatePayload: any = {
+      name: trimmedName,
+      phone: cleanPhone,
+      kakao_id: trimmedKakao,
+      referrer: trimmedRef,
+    };
+    const { error } = await supabase.from('profiles').update(updatePayload).eq('id', editingMember.id);
+    setEditMemberSaving(false);
+
+    if (error) {
+      alert('회원 정보 수정 실패: ' + error.message);
+      return;
+    }
+
+    setAdminMemberList(prev => prev.map(m => m.id === editingMember.id ? { ...m, name: trimmedName, phone: cleanPhone, kakaoId: trimmedKakao, referrer: trimmedRef } : m));
+    if (editingMember.id === session?.user?.id && currentUserProfile) {
+      setCurrentUserProfile({ ...currentUserProfile, name: trimmedName, phone: cleanPhone, kakaoId: trimmedKakao, referrer: trimmedRef });
+    }
+    setEditingMember(null);
+    alert('회원 정보가 수정되었습니다.');
   };
 
   const handleExportMembersCSV = (targetType: 'all' | 'group' | 'referral') => {
@@ -1892,7 +1940,10 @@ export default function App() {
                             <button onClick={() => handleUpdateApprovalStatus(m.id, 'pending')} className="w-full py-2 bg-white/5 hover:bg-[#EC4899]/20 text-slate-400 hover:text-[#EC4899] rounded-lg text-[11px] font-semibold cursor-pointer">승인 해제(대기 전환)</button>
                           )}
                           <select value={m.role} onChange={(e) => handleUpdateMemberRole(m.id, e.target.value)} className="w-full bg-[#0B1120] border border-white/20 text-white rounded px-3 py-2 text-xs cursor-pointer"><option value="user">일반 기사</option><option value="pro_driver">PRO 기사</option><option value="vip_driver">VIP 기사 (스카우트)</option><option value="manager">운영 직원</option><option value="super_admin">최고 관리자</option></select>
-                          <button onClick={() => openAdminUserDetail(m)} className="w-full py-2.5 hp-primary-btn text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"><Search className="w-3.5 h-3.5" />상세 리포트 보기</button>
+                          <div className="grid grid-cols-2 gap-2">
+                            <button onClick={() => handleOpenEditMemberModal(m)} className="py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"><Edit2 className="w-3.5 h-3.5" />정보 수정</button>
+                            <button onClick={() => openAdminUserDetail(m)} className="py-2.5 hp-primary-btn text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"><Search className="w-3.5 h-3.5" />상세 리포트</button>
+                          </div>
                         </div>
                       </div>
                     );
@@ -1901,7 +1952,7 @@ export default function App() {
 
                 <div className="hidden md:block overflow-x-auto rounded-lg border border-white/10">
                   <table className="w-full text-left text-xs whitespace-nowrap">
-                    <thead className="bg-[#0B1120] text-slate-400 border-b border-white/10"><tr><th className="p-3">이름/연락처</th><th className="p-3 text-center">단톡방 닉네임 / 추천인</th><th className="p-3 text-center">승인 상태</th><th className="p-3 text-center">당월 실적 / 앱 회수액</th><th className="p-3 text-center">권한 변경</th><th className="p-3 text-right">리포트</th></tr></thead>
+                    <thead className="bg-[#0B1120] text-slate-400 border-b border-white/10"><tr><th className="p-3">이름/연락처</th><th className="p-3 text-center">단톡방 닉네임 / 추천인</th><th className="p-3 text-center">승인 상태</th><th className="p-3 text-center">당월 실적 / 앱 회수액</th><th className="p-3 text-center">권한 변경</th><th className="p-3 text-right">관리</th></tr></thead>
                     <tbody className="divide-y divide-white/5">
                       {displayedMembers.length === 0 ? <tr><td colSpan={6} className="p-10 text-center text-slate-500">검색 조건에 맞는 기사님이 없습니다.</td></tr> : displayedMembers.map((m) => {
                         const isAce = (m.monthlyGross || 0) >= 1500000 || (m.recordCount || 0) >= 10;
@@ -1931,7 +1982,12 @@ export default function App() {
                               {(m.recoveredAmount || 0) > 0 && <div className="text-emerald-400 font-bold text-[10px] mt-1">앱 회수 {(m.recoveredAmount || 0).toLocaleString()}원 ({m.recoveredCount}건)</div>}
                             </td>
                             <td className="p-3 text-center"><select value={m.role} onChange={(e) => handleUpdateMemberRole(m.id, e.target.value)} className="bg-[#0B1120] border border-white/20 text-white rounded px-2 py-1.5 text-[11px] cursor-pointer outline-none focus:border-[#8B5CF6]"><option value="user">일반 기사</option><option value="pro_driver">PRO 기사</option><option value="vip_driver">VIP 기사 (스카우트)</option><option value="manager">운영 직원</option><option value="super_admin">최고 관리자</option></select></td>
-                            <td className="p-3 text-right"><button onClick={() => openAdminUserDetail(m)} className="px-2.5 py-1.5 hp-primary-btn hover:bg-white/20 text-white rounded text-[10px] font-bold flex items-center gap-1 ml-auto cursor-pointer"><Search className="w-3 h-3" />상세</button></td>
+                            <td className="p-3 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button onClick={() => handleOpenEditMemberModal(m)} className="px-2.5 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer"><Edit2 className="w-3 h-3" />수정</button>
+                                <button onClick={() => openAdminUserDetail(m)} className="px-2.5 py-1.5 hp-primary-btn hover:bg-white/20 text-white rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer"><Search className="w-3 h-3" />상세</button>
+                              </div>
+                            </td>
                           </tr>
                         );
                       })}
@@ -1982,6 +2038,43 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {/* 관제탑: 기사님 회원 정보 수정 팝업 모달 */}
+      {editingMember && (
+        <div className="fixed inset-0 z-[75] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setEditingMember(null)}>
+          <div className="w-full max-w-sm glass-card rounded-2xl p-6 shadow-2xl relative" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-sm font-bold text-[#38BDF8] flex items-center gap-1.5"><Edit2 className="w-4 h-4" /> 기사님 정보 수정</h3>
+              <button onClick={() => setEditingMember(null)} className="text-slate-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="text-[11px] text-slate-400 bg-[#0B1120] px-3 py-2 rounded-lg border border-white/10 mb-4 font-mono truncate">
+              이메일: {editingMember.email || '-'}
+            </div>
+            <form onSubmit={handleUpdateMemberProfile} className="space-y-3.5">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1">기사님 이름</label>
+                <input type="text" value={editMemberName} onChange={(e) => setEditMemberName(e.target.value)} placeholder="이름 입력" required className="w-full px-3 py-2.5 rounded-lg text-xs" />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1">휴대폰 번호 (숫자만)</label>
+                <input type="tel" value={editMemberPhone} onChange={(e) => setEditMemberPhone(e.target.value.replace(/[^0-9]/g, ''))} placeholder="01012345678" maxLength={11} className="w-full px-3 py-2.5 rounded-lg text-xs font-mono" />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1">단톡방 닉네임</label>
+                <input type="text" value={editMemberKakaoId} onChange={(e) => setEditMemberKakaoId(e.target.value)} placeholder="아이디/생년/지역" className="w-full px-3 py-2.5 rounded-lg text-xs" />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1">추천인 (지인 추천 회원용 · 선택)</label>
+                <input type="text" value={editMemberReferrer} onChange={(e) => setEditMemberReferrer(e.target.value)} placeholder="추천인 닉네임" className="w-full px-3 py-2.5 rounded-lg text-xs" />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button type="button" onClick={() => setEditingMember(null)} className="flex-1 py-3 bg-white/10 hover:bg-white/20 text-white font-semibold rounded-lg text-xs cursor-pointer">취소</button>
+                <button type="submit" disabled={editMemberSaving} className="flex-1 py-3 hp-primary-btn font-bold rounded-lg text-xs cursor-pointer">{editMemberSaving ? '저장 중...' : '수정 저장'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* 빠른 정산 팝업 모달 */}
       {actionRecordId && currentActionRecord && (
