@@ -14,7 +14,7 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-const APP_VERSION = '1.0.13';
+const APP_VERSION = '1.0.14';
 const ADMIN_DEFAULT_EMAIL = 'beat4989@naver.com';
 const ADMIN_DEFAULT_NAME = '김탁송';
 const ADMIN_DEFAULT_PHONE = '01091417586';
@@ -320,6 +320,7 @@ export default function App() {
   const [newFuel, setNewFuel] = useState(''); const [newExtraExpense, setNewExtraExpense] = useState(''); const [newTip, setNewTip] = useState('');
   const [newMemo, setNewMemo] = useState('');
   const [newPaymentMethod, setNewPaymentMethod] = useState<'현금' | '카드'>('현금');
+  const [recordSaving, setRecordSaving] = useState(false);
   
   const [expCategory, setExpCategory] = useState('대중교통'); const [expPlatform, setExpPlatform] = useState('공통');
   const [expAmount, setExpAmount] = useState(''); const [expMemo, setExpMemo] = useState('');
@@ -575,7 +576,8 @@ export default function App() {
   const handleDeleteNotice = async (id: string) => { if (!window.confirm('삭제하시겠습니까?')) return; await supabase.from('announcements').delete().eq('id', id); fetchNotices(); };
 
   const handleAddRecord = async (e: React.FormEvent) => {
-    e.preventDefault(); if (!session) return;
+    e.preventDefault(); if (!session || recordSaving) return;
+    setRecordSaving(true);
     const gross = cleanNumber(newGross);
     const feeRate = newPlatform === '기타어플' ? cleanNumber(newFeeRate) : 20;
     const fuel = cleanNumber(newFuel);
@@ -586,12 +588,20 @@ export default function App() {
     const newRecord: DrivingRecord = { ...payload, startTime: payload.start_time, endTime: payload.end_time, grossAmount: gross, feeRate, fuelAmount: fuel, extraExpenseAmount: extraExp, tipAmount: tip, isGrossPaid: false, isExpensePaid: false, netAmount: Math.round(net), totalClaimAmount: Math.round(claimTotal), paymentMethod: newPaymentMethod, platform: newPlatform, memo: newMemo.trim() };
     
     let { error } = await supabase.from('driving_records').insert([payload]);
-    if (error && (error.message.includes('payment_method') || error.message.includes('platform') || error.message.includes('memo'))) {
+    if (error && (error.message.includes('payment_method') || error.message.includes('platform') || error.message.includes('memo') || error.message.includes('column'))) {
       const fb = { ...payload };
-      if (error.message.includes('payment_method')) delete fb.payment_method;
-      if (error.message.includes('platform')) delete fb.platform;
-      if (error.message.includes('memo')) delete fb.memo;
-      await supabase.from('driving_records').insert([fb]);
+      delete fb.payment_method;
+      delete fb.platform;
+      delete fb.memo;
+      const retry = await supabase.from('driving_records').insert([fb]);
+      error = retry.error;
+    }
+
+    setRecordSaving(false);
+
+    if (error) {
+      alert('운행 일지 저장 실패: ' + error.message + '\n(Supabase 테이블 컬럼 또는 권한 설정을 확인해 주세요)');
+      return;
     }
     
     // 수익 마일스톤(100만 원 단위 돌파) 축하 알림 체크
@@ -685,14 +695,14 @@ export default function App() {
     const net = gross - (gross * (feeRate / 100)) + tip; const claimTotal = gross + fuel + extraExp;
     const payload: any = { date: editDate, platform: editPlatform, fee_rate: feeRate, departure: editDeparture, destination: editDestination, gross_amount: gross, fuel_amount: fuel, extra_expense_amount: extraExp, tip_amount: tip, net_amount: Math.round(net), total_claim_amount: Math.round(claimTotal), payment_method: editPaymentMethod, memo: editMemo.trim() };
     let { error } = await supabase.from('driving_records').update(payload).eq('id', editingRecord.id);
-    if (error && (error.message.includes('payment_method') || error.message.includes('platform') || error.message.includes('memo'))) {
+    if (error && (error.message.includes('payment_method') || error.message.includes('platform') || error.message.includes('memo') || error.message.includes('column'))) {
       const fb = { ...payload };
-      if (error.message.includes('payment_method')) delete fb.payment_method;
-      if (error.message.includes('platform')) delete fb.platform;
-      if (error.message.includes('memo')) delete fb.memo;
+      delete fb.payment_method;
+      delete fb.platform;
+      delete fb.memo;
       error = (await supabase.from('driving_records').update(fb).eq('id', editingRecord.id)).error;
     }
-    if (!error) { const updatedList = records.map((r) => r.id === editingRecord.id ? { ...r, date: editDate, platform: editPlatform, feeRate, departure: editDeparture, destination: editDestination, grossAmount: gross, fuelAmount: fuel, extraExpenseAmount: extraExp, tipAmount: tip, netAmount: Math.round(net), totalClaimAmount: Math.round(claimTotal), paymentMethod: editPaymentMethod, memo: editMemo.trim() } : r); updatedList.sort((a, b) => a.date.localeCompare(b.date)); setRecords(updatedList); setEditingRecord(null); } else { alert('수정 실패'); }
+    if (!error) { const updatedList = records.map((r) => r.id === editingRecord.id ? { ...r, date: editDate, platform: editPlatform, feeRate, departure: editDeparture, destination: editDestination, grossAmount: gross, fuelAmount: fuel, extraExpenseAmount: extraExp, tipAmount: tip, netAmount: Math.round(net), totalClaimAmount: Math.round(claimTotal), paymentMethod: editPaymentMethod, memo: editMemo.trim() } : r); updatedList.sort((a, b) => a.date.localeCompare(b.date)); setRecords(updatedList); setEditingRecord(null); } else { alert('수정 실패: ' + error.message); }
   };
 
   const handleDeleteSingleRecord = async (id: string) => {
@@ -746,6 +756,8 @@ export default function App() {
       const updatedExp = [{ id: expenseId, date: newDate, category: expCategory, amount: cleanAmt, memo: expMemo, platform: expPlatform }, ...expenses];
       updatedExp.sort((a, b) => a.date.localeCompare(b.date));
       setExpenses(updatedExp); setExpAmount(''); setExpMemo('');
+    } else {
+      alert('경비 저장 실패: ' + error.message);
     }
   };
   const handleDeleteExpense = async (id: string) => { await supabase.from('expenses').delete().eq('id', id); setExpenses(expenses.filter((e) => e.id !== id)); };
@@ -1281,7 +1293,7 @@ export default function App() {
                   <textarea rows={2} placeholder="콜 관련 특이사항, 차량 이슈, 대기시간 등 기록" value={newMemo} onChange={(e) => setNewMemo(e.target.value)} className="w-full px-3 py-2 rounded-lg text-xs" />
                 </div>
 
-                <button type="submit" className="w-full py-3.5 hp-primary-btn font-bold rounded-lg text-xs cursor-pointer mt-2">운행 일지 등록</button>
+                <button type="submit" disabled={recordSaving} className="w-full py-3.5 hp-primary-btn font-bold rounded-lg text-xs cursor-pointer mt-2">{recordSaving ? 'DB 저장 중...' : '운행 일지 등록'}</button>
               </form>
             </div>
             
