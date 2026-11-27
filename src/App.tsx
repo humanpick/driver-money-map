@@ -584,8 +584,6 @@ export default function App() {
     }
   };
 
-  useEffect(() => {
-    fetchNotices();
     const fetchDriverNotices = async () => {
     const { data, error } = await supabase
       .from('driver_notices')
