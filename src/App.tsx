@@ -14,7 +14,7 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-const APP_VERSION = '1.0.19';
+const APP_VERSION = '1.0.20';
 const ADMIN_DEFAULT_EMAIL = 'beat4989@naver.com';
 const ADMIN_DEFAULT_NAME = '김탁송';
 const ADMIN_DEFAULT_PHONE = '01091417586';
@@ -109,6 +109,7 @@ interface MemberProfile {
   lastMonthGross?: number; recoveredAmount?: number; recoveredCount?: number;
   joinType?: 'group' | 'referral'; kakaoId?: string; referrer?: string;
   approvalStatus?: 'pending' | 'approved' | 'rejected'; marketingAgreed?: boolean;
+  createdAtFull?: string;
 }
 interface NoticeItem { id: string; title: string; content: string; isActive: boolean; updatedAt?: string; }
 interface MonthlyFixed { id: string; memo: string; amount: number; platform?: string; }
@@ -376,6 +377,8 @@ export default function App() {
   const [showScoutOnly, setShowScoutOnly] = useState(false);
   const [showPendingOnly, setShowPendingOnly] = useState(false);
   const [showRejectedOnly, setShowRejectedOnly] = useState(false);
+  const [adminSortBy, setAdminSortBy] = useState<'created_desc' | 'created_asc' | 'login_desc' | 'gross_desc'>('created_desc');
+  const [adminStatusFilter, setAdminStatusFilter] = useState<'all' | 'today' | 'active7d' | 'inactive'>('all');
 
   const [newDate, setNewDate] = useState<string>(() => getTodayKST());
   const [newPlatform, setNewPlatform] = useState<string>('로지');
@@ -550,9 +553,18 @@ export default function App() {
         const lastMonthGross = userRecords.filter((r) => (r.date || '').startsWith(lastMonthStr)).reduce((sum, r) => sum + r.grossAmount, 0);
         const recoveredRecs = userRecords.filter((r) => calcRecoveredForRecord(r) > 0);
         const recoveredAmount = recoveredRecs.reduce((sum, r) => sum + calcRecoveredForRecord(r), 0);
+        const toKST = (iso?: string) => {
+          if (!iso) return '';
+          const d = new Date(new Date(iso).getTime() + 9 * 60 * 60 * 1000);
+          return isNaN(d.getTime()) ? iso.substring(0, 16).replace('T', ' ') : d.toISOString().substring(0, 16).replace('T', ' ');
+        };
+        const createdKST = toKST(p.created_at);
+        const loginKST = toKST(p.last_login_at);
         return {
           id: p.id, email: p.email || '', name: p.name || '미상', phone: p.phone || '', role: p.role || 'user',
-          createdAt: p.created_at ? p.created_at.substring(0, 10) : '-', lastLoginAt: p.last_login_at ? p.last_login_at.substring(0, 16).replace('T', ' ') : '기록없음',
+          createdAt: createdKST ? createdKST.substring(0, 10) : '-',
+          createdAtFull: createdKST || '',
+          lastLoginAt: loginKST || '기록없음',
           loginCount: p.login_count || 0, recordCount: userRecords.length, monthlyGross, lastMonthGross,
           recoveredAmount, recoveredCount: recoveredRecs.length,
           joinType: p.join_type || 'group', kakaoId: p.kakao_id || '', referrer: p.referrer || '',
@@ -1072,25 +1084,52 @@ export default function App() {
     if (tradeFilter === '수도권') return center.region === '수도권'; if (tradeFilter === '충청권') return center.region === '충청권'; if (tradeFilter === '영남권') return center.region === '영남권'; if (tradeFilter === '호남권') return center.region === '호남권'; return true;
   });
 
-  const displayedMembers = adminMemberList.filter(m => {
-    const safeName = m.name || ''; const safePhone = m.phone || ''; const safeEmail = m.email || '';
-    const safeKakao = m.kakaoId || ''; const safeRef = m.referrer || '';
-    const matchesSearch = safeName.includes(adminSearchTerm) || safePhone.includes(adminSearchTerm) || safeEmail.includes(adminSearchTerm) || safeKakao.includes(adminSearchTerm) || safeRef.includes(adminSearchTerm);
-    const isAce = (m.monthlyGross || 0) >= 1500000 || (m.recordCount || 0) >= 10;
-    if (isSuperAdmin) {
-      if (showPendingOnly) {
-        if (m.approvalStatus !== 'pending') return false;
-      } else if (showRejectedOnly) {
-        if (m.approvalStatus !== 'rejected') return false;
+  const todayKST = getTodayKST();
+  const sevenDaysAgoKST = new Date(Date.now() + 9 * 60 * 60 * 1000 - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+  const getConnStatus = (m: MemberProfile): 'today' | 'active7d' | 'inactive' => {
+    const d = m.lastLoginAt && m.lastLoginAt !== '기록없음' ? m.lastLoginAt.substring(0, 10) : '';
+    if (d === todayKST) return 'today';
+    if (d && d >= sevenDaysAgoKST) return 'active7d';
+    return 'inactive';
+  };
+
+  const activeMemberPool = adminMemberList.filter(m => m.approvalStatus !== 'rejected');
+  const todayLoginCount = activeMemberPool.filter(m => getConnStatus(m) === 'today').length;
+  const active7dCount = activeMemberPool.filter(m => getConnStatus(m) === 'active7d').length;
+  const inactiveCount = activeMemberPool.filter(m => getConnStatus(m) === 'inactive').length;
+
+  const displayedMembers = adminMemberList
+    .filter(m => {
+      const safeName = m.name || ''; const safePhone = m.phone || ''; const safeEmail = m.email || '';
+      const safeKakao = m.kakaoId || ''; const safeRef = m.referrer || '';
+      const matchesSearch = safeName.includes(adminSearchTerm) || safePhone.includes(adminSearchTerm) || safeEmail.includes(adminSearchTerm) || safeKakao.includes(adminSearchTerm) || safeRef.includes(adminSearchTerm);
+      const isAce = (m.monthlyGross || 0) >= 1500000 || (m.recordCount || 0) >= 10;
+      if (isSuperAdmin) {
+        if (showPendingOnly) {
+          if (m.approvalStatus !== 'pending') return false;
+        } else if (showRejectedOnly) {
+          if (m.approvalStatus !== 'rejected') return false;
+        } else {
+          if (m.approvalStatus === 'rejected') return false;
+        }
       } else {
         if (m.approvalStatus === 'rejected') return false;
       }
-    } else {
-      if (m.approvalStatus === 'rejected') return false;
-    }
-    if (showScoutOnly && !isAce) return false;
-    return matchesSearch;
-  });
+      if (showScoutOnly && !isAce) return false;
+      if (adminStatusFilter !== 'all' && getConnStatus(m) !== adminStatusFilter) return false;
+      return matchesSearch;
+    })
+    .sort((a, b) => {
+      if (adminSortBy === 'created_asc') return (a.createdAtFull || a.createdAt || '').localeCompare(b.createdAtFull || b.createdAt || '');
+      if (adminSortBy === 'login_desc') {
+        const la = a.lastLoginAt === '기록없음' ? '' : (a.lastLoginAt || '');
+        const lb = b.lastLoginAt === '기록없음' ? '' : (b.lastLoginAt || '');
+        return lb.localeCompare(la);
+      }
+      if (adminSortBy === 'gross_desc') return (b.monthlyGross || 0) - (a.monthlyGross || 0);
+      return (b.createdAtFull || b.createdAt || '').localeCompare(a.createdAtFull || a.createdAt || '');
+    });
 
   const getTopDestinations = () => {
     if (adminAllRecords.length === 0) return []; const counts: Record<string, number> = {};
@@ -2087,8 +2126,36 @@ export default function App() {
 
             {adminSubTab === 'members' && (
               <div className="glass-card p-5 sm:p-6 rounded-xl space-y-4">
+                {/* 기사 접속현황 요약 전광판 (터치 시 상태별 필터링) */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  <button type="button" onClick={() => setAdminStatusFilter('all')} className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${adminStatusFilter === 'all' ? 'bg-[#8B5CF6]/20 border-[#8B5CF6] shadow-[0_0_12px_rgba(139,92,246,0.25)]' : 'bg-[#0B1120] border-white/10 hover:border-white/25'}`}>
+                    <div className="text-[11px] text-slate-400 font-semibold">전체 정상 회원</div>
+                    <div className="text-lg font-extrabold text-white mt-0.5">{activeMemberPool.length}명</div>
+                  </button>
+                  <button type="button" onClick={() => setAdminStatusFilter(adminStatusFilter === 'today' ? 'all' : 'today')} className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${adminStatusFilter === 'today' ? 'bg-emerald-500/20 border-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.25)]' : 'bg-[#0B1120] border-white/10 hover:border-emerald-500/40'}`}>
+                    <div className="text-[11px] text-emerald-400 font-bold">🟢 오늘 접속</div>
+                    <div className="text-lg font-extrabold text-white mt-0.5">{todayLoginCount}명</div>
+                  </button>
+                  <button type="button" onClick={() => setAdminStatusFilter(adminStatusFilter === 'active7d' ? 'all' : 'active7d')} className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${adminStatusFilter === 'active7d' ? 'bg-[#38BDF8]/20 border-[#38BDF8] shadow-[0_0_12px_rgba(56,189,248,0.25)]' : 'bg-[#0B1120] border-white/10 hover:border-[#38BDF8]/40'}`}>
+                    <div className="text-[11px] text-[#38BDF8] font-bold">🔵 최근 7일 내</div>
+                    <div className="text-lg font-extrabold text-white mt-0.5">{active7dCount}명</div>
+                  </button>
+                  <button type="button" onClick={() => setAdminStatusFilter(adminStatusFilter === 'inactive' ? 'all' : 'inactive')} className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${adminStatusFilter === 'inactive' ? 'bg-slate-600/30 border-slate-400' : 'bg-[#0B1120] border-white/10 hover:border-slate-500'}`}>
+                    <div className="text-[11px] text-slate-400 font-bold">⚪ 7일+ 미접속</div>
+                    <div className="text-lg font-extrabold text-slate-200 mt-0.5">{inactiveCount}명</div>
+                  </button>
+                </div>
+
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <input type="text" placeholder="이름 / 연락처 / 단톡방 닉네임 검색..." value={adminSearchTerm} onChange={(e) => setAdminSearchTerm(e.target.value)} className="px-3 py-2.5 rounded-lg text-xs w-full sm:max-w-xs" />
+                  <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                    <input type="text" placeholder="이름 / 연락처 / 단톡방 닉네임 검색..." value={adminSearchTerm} onChange={(e) => setAdminSearchTerm(e.target.value)} className="px-3 py-2.5 rounded-lg text-xs w-full sm:w-60" />
+                    <select value={adminSortBy} onChange={(e) => setAdminSortBy(e.target.value as any)} className="px-3 py-2.5 rounded-lg text-xs cursor-pointer">
+                      <option value="created_desc">📅 가입일 최신순</option>
+                      <option value="created_asc">📅 가입일 오래된순</option>
+                      <option value="login_desc">🕒 최근 접속순</option>
+                      <option value="gross_desc">💰 당월 매출순</option>
+                    </select>
+                  </div>
                   <div className="flex flex-wrap gap-2">
                     {isSuperAdmin && (
                       <>
@@ -2143,9 +2210,18 @@ export default function App() {
                             <div className="text-[#EC4899] font-semibold">{(m.monthlyGross || 0).toLocaleString()}원</div>
                           </div>
                         </div>
-                        <div className="bg-black/30 p-2.5 rounded-lg border border-white/5 flex justify-between text-[11px]">
-                          <span className="text-slate-400">{m.joinType === 'referral' ? '지인추천' : '단톡방 닉네임'}</span>
-                          <span className="font-bold text-[#38BDF8]">{m.joinType === 'referral' ? (m.referrer || '-') : (m.kakaoId || '-')}</span>
+                        <div className="bg-black/30 p-2.5 rounded-lg border border-white/5 space-y-1 text-[11px]">
+                          <div className="flex justify-between">
+                            <span className="text-slate-400">회원가입일</span>
+                            <span className="font-mono text-slate-200">{m.createdAt}</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-slate-400">접속현황</span>
+                            <span className="font-semibold text-slate-200">
+                              {getConnStatus(m) === 'today' ? <span className="text-emerald-400 font-bold">🟢 오늘</span> : getConnStatus(m) === 'active7d' ? <span className="text-[#38BDF8] font-bold">🔵 7일 내</span> : <span className="text-slate-400">⚪ 미접속</span>}
+                              {' · '}{m.lastLoginAt === '기록없음' ? '기록없음' : m.lastLoginAt?.substring(5)} ({m.loginCount || 0}회)
+                            </span>
+                          </div>
                         </div>
                         <div className="flex flex-col gap-2 pt-1">
                          {isSuperAdmin && (
@@ -2168,7 +2244,9 @@ export default function App() {
 
                 <div className="hidden md:block overflow-x-auto rounded-lg border border-white/10">
                   <table className="w-full text-left text-xs whitespace-nowrap">
-                    <thead className="bg-[#0B1120] text-slate-400 border-b border-white/10"><tr><th className="p-3">이름/연락처</th><th className="p-3 text-center">단톡방 닉네임 / 추천인</th>{isSuperAdmin && <th className="p-3 text-center">승인 상태</th>}<th className="p-3 text-center">당월 실적 / 앱 회수액</th><th className="p-3 text-center">권한 변경</th><th className="p-3 text-right">관리</th></tr></thead>
+                    <thead className="bg-[#0B1120] text-slate-400 border-b border-white/10"><tr><th className="p-3">이름/연락처</th><th className="p-3 text-center">단톡방 닉네임 / 추천인</th>{isSuperAdmin && <th className="p-3 text-center">승인 상태</th>}<th className="p-3 text-center">가입일 / 접속현황</th><th className="p-3 text-center">당월 실적 / 앱 회수액</th><th className="p-3 text-center">권한 변경</th><th className="p-3 text-right">관리</th></tr></thead>
+                    <tbody className="divide-y divide-white/5">
+                      {displayedMembers.length === 0 ? <tr><td colSpan={isSuperAdmin ? 7 : 6} className="p-10 text-center text-slate-500">검색 조건에 맞는 기사님이 없습니다.</td></tr> : displayedMembers.map((m) => {
                     <tbody className="divide-y divide-white/5">
                       {displayedMembers.length === 0 ? <tr><td colSpan={isSuperAdmin ? 6 : 5} className="p-10 text-center text-slate-500">검색 조건에 맞는 기사님이 없습니다.</td></tr> : displayedMembers.map((m) => {
                         const isAce = (m.monthlyGross || 0) >= 1500000 || (m.recordCount || 0) >= 10;
@@ -2190,6 +2268,20 @@ export default function App() {
                             {isSuperAdmin && (
                               <td className="p-3 text-center"><select value={m.approvalStatus || 'approved'} onChange={(e) => handleUpdateApprovalStatus(m.id, e.target.value as any)} className="rounded px-2 py-1.5 text-[11px] cursor-pointer"><option value="approved">✔ 승인완료</option><option value="pending">⏳ 승인대기</option><option value="rejected">✕ 승인거절</option></select></td>
                             )}
+                            <td className="p-3 text-center">
+                              <div className="font-mono text-[11px] text-slate-300">가입: <span className="text-white font-semibold">{m.createdAt}</span></div>
+                              <div className="mt-1 flex items-center justify-center gap-1 text-[10px]">
+                                {getConnStatus(m) === 'today' ? (
+                                  <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold">🟢 오늘 접속</span>
+                                ) : getConnStatus(m) === 'active7d' ? (
+                                  <span className="px-1.5 py-0.5 rounded bg-[#38BDF8]/20 text-[#38BDF8] font-bold">🔵 최근 7일</span>
+                                ) : (
+                                  <span className="px-1.5 py-0.5 rounded bg-white/5 text-slate-400 font-semibold">⚪ 미접속</span>
+                                )}
+                                <span className="text-slate-400 font-mono">({m.loginCount || 0}회)</span>
+                              </div>
+                              <div className="text-[10px] text-slate-500 font-mono mt-0.5">{m.lastLoginAt === '기록없음' ? '접속기록 없음' : `최근 ${m.lastLoginAt?.substring(5)}`}</div>
+                            </td>
                             <td className="p-3 text-center">
                               <div className="font-bold text-white">{m.recordCount}건 · <span className="text-[#EC4899]">{(m.monthlyGross || 0).toLocaleString()}원</span></div>
                               {(m.recoveredAmount || 0) > 0 && <div className="text-emerald-400 font-bold text-[10px] mt-1">앱 회수 {(m.recoveredAmount || 0).toLocaleString()}원 ({m.recoveredCount}건)</div>}
