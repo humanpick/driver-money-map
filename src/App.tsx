@@ -638,15 +638,6 @@ export default function App() {
     setAuthLoading(false);
   };
   const handleEnterKakaoChat = async () => {
-    try {
-      await navigator.clipboard.writeText(KAKAO_CHAT_CODE);
-      alert(`단톡방 참여코드 [${KAKAO_CHAT_CODE}]이 자동 복사되었습니다.\n카톡방 창이 열리면 비밀번호 칸에 '붙여넣기' 해주세요!`);
-    } catch (e) {
-      alert(`단톡방 참여코드는 [${KAKAO_CHAT_CODE}] 입니다.\n카톡방 창이 열리면 입력해 주세요!`);
-    }
-    window.open(KAKAO_CHAT_URL, '_blank', 'noopener,noreferrer');
-  };
-  const handleEnterKakaoChat = async () => {
     if (!isAdminUser && currentUserProfile?.approvalStatus !== 'approved') {
       alert('관리자 가입 승인 완료 후 단톡방 입장이 가능합니다.');
       return;
