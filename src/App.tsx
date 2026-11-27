@@ -19,7 +19,7 @@ const ADMIN_DEFAULT_EMAIL = 'beat4989@naver.com';
 const ADMIN_DEFAULT_NAME = '김탁송';
 const ADMIN_DEFAULT_PHONE = '01091417586';
 const KAKAO_CHAT_URL = 'https://open.kakao.com/o/gshehyWi';
-
+const KAKAO_CHAT_CODE = '7586';
 const PLATFORMS = [
   { name: '로지', defaultFee: '20' },
   { name: '아이콘', defaultFee: '20' },
@@ -637,7 +637,15 @@ export default function App() {
     }
     setAuthLoading(false);
   };
-
+  const handleEnterKakaoChat = async () => {
+    try {
+      await navigator.clipboard.writeText(KAKAO_CHAT_CODE);
+      alert(`단톡방 참여코드 [${KAKAO_CHAT_CODE}]이 자동 복사되었습니다.\n카톡방 창이 열리면 비밀번호 칸에 '붙여넣기' 해주세요!`);
+    } catch (e) {
+      alert(`단톡방 참여코드는 [${KAKAO_CHAT_CODE}] 입니다.\n카톡방 창이 열리면 입력해 주세요!`);
+    }
+    window.open(KAKAO_CHAT_URL, '_blank', 'noopener,noreferrer');
+  };
   const handleLogout = async () => { await supabase.auth.signOut(); setShowProfileModal(false); setActiveTab('records'); };
   
   const handleSaveNoticeTemplate = async (e: React.FormEvent) => { e.preventDefault(); if (!inputNoticeTitle.trim() || !inputNoticeContent.trim()) return; setNoticeLoading(true); const targetId = editingNoticeId || `notice_${Date.now()}`; const { error } = await supabase.from('announcements').upsert({ id: targetId, title: inputNoticeTitle.trim(), content: inputNoticeContent.trim(), is_active: editingNoticeId ? (noticeList.find(n => n.id === editingNoticeId)?.isActive || false) : false, updated_at: new Date().toISOString() }); if (!error) { alert(editingNoticeId ? '수정되었습니다.' : '저장되었습니다.'); setInputNoticeTitle(''); setInputNoticeContent(''); setEditingNoticeId(null); fetchNotices(); } setNoticeLoading(false); };
@@ -1203,9 +1211,9 @@ export default function App() {
             </form>
           )}
           <div className="mt-5 pt-3 border-t border-white/10 space-y-2 text-center">
-            <a href={KAKAO_CHAT_URL} target="_blank" rel="noopener noreferrer" className="w-full py-2.5 bg-[#FEE500] hover:bg-[#FDD835] text-[#191919] font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors">
-              <MessageSquare className="w-3.5 h-3.5" /> 탁송대리비서 소통방 입장하기
-            </a>
+            <button type="button" onClick={handleEnterKakaoChat} className="w-full py-3 bg-[#FEE500] hover:bg-[#FDD835] text-[#191919] font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer">
+              <MessageSquare className="w-4 h-4" /> 탁송대리비서 소통방 입장하기 (비번 자동복사)
+            </button>
             <button type="button" onClick={() => setShowPrivacyModal(true)} className="text-[11px] text-slate-400 hover:text-[#38BDF8] underline cursor-pointer pt-1">개인정보 처리방침 보기</button>
           </div>
         </div>
@@ -1230,9 +1238,9 @@ export default function App() {
             </p>
           </div>
           <div className="space-y-2">
-            <a href={KAKAO_CHAT_URL} target="_blank" rel="noopener noreferrer" className="w-full py-3 bg-[#FEE500] hover:bg-[#FDD835] text-[#191919] font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors">
-              <MessageSquare className="w-4 h-4" /> 탁송대리비서 소통방 입장하기
-            </a>
+            <button type="button" onClick={handleEnterKakaoChat} className="w-full py-2.5 bg-[#FEE500] hover:bg-[#FDD835] text-[#191919] font-bold rounded-lg text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer">
+                <MessageSquare className="w-3.5 h-3.5" /> 탁송대리비서 소통방 입장하기 (비번 자동복사)
+              </button>
             <button onClick={handleLogout} className="w-full py-2.5 bg-white/5 hover:bg-white/10 text-slate-300 font-semibold text-xs rounded-xl cursor-pointer">로그아웃</button>
           </div>
         </div>
