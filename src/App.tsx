@@ -14,7 +14,7 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-const APP_VERSION = '1.0.20';
+const APP_VERSION = '1.0.21';
 const ADMIN_DEFAULT_EMAIL = 'beat4989@naver.com';
 const ADMIN_DEFAULT_NAME = '김탁송';
 const ADMIN_DEFAULT_PHONE = '01091417586';
@@ -1878,11 +1878,33 @@ export default function App() {
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 mb-4 border-b border-white/10 gap-2">
                     <div className="flex items-center gap-2"><CalendarDays className="w-4 h-4 text-[#8B5CF6]" /><h2 className="text-xs font-bold text-slate-200 tracking-wide uppercase">{Number(analyticsMonth.split('-')[0])}년 {Number(analyticsMonth.split('-')[1])}월 총 누적 결산</h2></div>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div className="bg-white/[0.02] p-3 rounded-xl sm:bg-transparent sm:p-0"><div className="text-[11px] text-slate-400 mb-1">총 탁송 매출</div><div className="text-xl lg:text-2xl font-extrabold text-white">{monthlyGross.toLocaleString()}원</div></div>
-                    <div className="bg-white/[0.02] p-3 rounded-xl sm:bg-transparent sm:p-0"><div className="text-[11px] text-slate-400 mb-1">탁송 순수익</div><div className="text-xl lg:text-2xl font-extrabold text-[#38BDF8]">{monthlyNet.toLocaleString()}원</div></div>
-                    <div className="bg-white/[0.02] p-3 rounded-xl sm:bg-transparent sm:p-0"><div className="text-[11px] text-slate-400 mb-1">일반 경비 지출</div><div className="text-xl lg:text-2xl font-extrabold text-[#EC4899]">-{monthlyExpense.toLocaleString()}원</div></div>
-                    <div className="bg-white/[0.02] p-3 rounded-xl sm:bg-transparent sm:p-0"><div className="text-[11px] text-slate-400 mb-1">최종 실수령액 (예상)</div><div className="text-xl lg:text-2xl font-extrabold text-[#38BDF8]">{monthlyProfit.toLocaleString()}원</div></div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                    <div className="bg-gradient-to-br from-[#8B5CF6]/20 to-[#38BDF8]/10 border border-[#8B5CF6]/50 p-3.5 rounded-xl shadow-[0_0_15px_rgba(139,92,246,0.15)]">
+                      <div className="text-[11px] font-bold text-[#C4B5FD] mb-1 flex items-center justify-between">
+                        <span>총 탁송 매출</span>
+                        <span className="px-1.5 py-0.5 rounded bg-[#8B5CF6]/30 text-[9px] text-white font-extrabold">수수료 차감 전</span>
+                      </div>
+                      <div className="text-2xl lg:text-[26px] font-black text-white tracking-tight">{monthlyGross.toLocaleString()}원</div>
+                      <div className="text-[10px] text-slate-300 mt-1">운임 100% 기준 누적액</div>
+                    </div>
+                    <div className="bg-white/[0.03] border border-white/10 p-3.5 rounded-xl">
+                      <div className="text-[11px] font-bold text-[#38BDF8] mb-1 flex items-center justify-between">
+                        <span>수수료 차감 후 금액</span>
+                        <span className="px-1.5 py-0.5 rounded bg-[#38BDF8]/15 text-[9px] text-[#38BDF8] font-bold">순수익</span>
+                      </div>
+                      <div className="text-xl lg:text-2xl font-extrabold text-[#38BDF8]">{monthlyNet.toLocaleString()}원</div>
+                      <div className="text-[10px] text-slate-400 mt-1">수수료 -{monthlyRecords.reduce((sum, r) => sum + Math.round(r.grossAmount * (r.feeRate / 100)), 0).toLocaleString()}원 차감</div>
+                    </div>
+                    <div className="bg-white/[0.03] border border-white/10 p-3.5 rounded-xl">
+                      <div className="text-[11px] text-slate-400 mb-1">일반 경비 지출</div>
+                      <div className="text-xl lg:text-2xl font-extrabold text-[#EC4899]">-{monthlyExpense.toLocaleString()}원</div>
+                      <div className="text-[10px] text-slate-500 mt-1">교통·식대·고정비 합계</div>
+                    </div>
+                    <div className="bg-white/[0.03] border border-white/10 p-3.5 rounded-xl">
+                      <div className="text-[11px] text-slate-300 font-semibold mb-1">최종 실수령액 (경비 제외)</div>
+                      <div className="text-xl lg:text-2xl font-extrabold text-emerald-400">{monthlyProfit.toLocaleString()}원</div>
+                      <div className="text-[10px] text-slate-400 mt-1">순수익에서 일반 경비 차감</div>
+                    </div>
                   </div>
                 </section>
 
