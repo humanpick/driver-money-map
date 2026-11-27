@@ -14,7 +14,7 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-const APP_VERSION = '1.0.17';
+const APP_VERSION = '1.0.18';
 const ADMIN_DEFAULT_EMAIL = 'beat4989@naver.com';
 const ADMIN_DEFAULT_NAME = '김탁송';
 const ADMIN_DEFAULT_PHONE = '01091417586';
@@ -646,6 +646,19 @@ export default function App() {
     }
     window.open(KAKAO_CHAT_URL, '_blank', 'noopener,noreferrer');
   };
+  const handleEnterKakaoChat = async () => {
+    if (!isAdminUser && currentUserProfile?.approvalStatus !== 'approved') {
+      alert('관리자 가입 승인 완료 후 단톡방 입장이 가능합니다.');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(KAKAO_CHAT_CODE);
+      alert(`단톡방 참여코드 [${KAKAO_CHAT_CODE}]이 자동 복사되었습니다.\n카카오톡 창이 열리면 비밀번호 칸에 '붙여넣기' 해주세요!`);
+    } catch (e) {
+      alert(`단톡방 참여코드는 [${KAKAO_CHAT_CODE}] 입니다.\n카카오톡 창이 열리면 입력해 주세요!`);
+    }
+    window.open(KAKAO_CHAT_URL, '_blank', 'noopener,noreferrer');
+  };
   const handleLogout = async () => { await supabase.auth.signOut(); setShowProfileModal(false); setActiveTab('records'); };
   
   const handleSaveNoticeTemplate = async (e: React.FormEvent) => { e.preventDefault(); if (!inputNoticeTitle.trim() || !inputNoticeContent.trim()) return; setNoticeLoading(true); const targetId = editingNoticeId || `notice_${Date.now()}`; const { error } = await supabase.from('announcements').upsert({ id: targetId, title: inputNoticeTitle.trim(), content: inputNoticeContent.trim(), is_active: editingNoticeId ? (noticeList.find(n => n.id === editingNoticeId)?.isActive || false) : false, updated_at: new Date().toISOString() }); if (!error) { alert(editingNoticeId ? '수정되었습니다.' : '저장되었습니다.'); setInputNoticeTitle(''); setInputNoticeContent(''); setEditingNoticeId(null); fetchNotices(); } setNoticeLoading(false); };
@@ -1211,9 +1224,9 @@ export default function App() {
             </form>
           )}
           <div className="mt-5 pt-3 border-t border-white/10 space-y-2 text-center">
-            <button type="button" onClick={handleEnterKakaoChat} className="w-full py-3 bg-[#FEE500] hover:bg-[#FDD835] text-[#191919] font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer">
-              <MessageSquare className="w-4 h-4" /> 탁송대리비서 소통방 입장하기 (비번 자동복사)
-            </button>
+            <p className="text-[11px] text-slate-400 bg-[#0B1120] py-2.5 px-3 rounded-xl border border-white/10">
+              🔒 단톡방 입장 링크 및 참여코드는 <span className="text-[#38BDF8] font-bold">회원가입 및 승인 완료 후</span> 확인하실 수 있습니다.
+            </p>
             <button type="button" onClick={() => setShowPrivacyModal(true)} className="text-[11px] text-slate-400 hover:text-[#38BDF8] underline cursor-pointer pt-1">개인정보 처리방침 보기</button>
           </div>
         </div>
@@ -1274,7 +1287,9 @@ export default function App() {
             <button onClick={() => session?.user && fetchUserData(session.user.id, session.user.email || '', session.user.user_metadata, session.user.created_at)} className="w-full py-3 hp-primary-btn font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 cursor-pointer">
               <RefreshCw className="w-4 h-4" /> 승인 상태 새로고침
             </button>
-            <a href={KAKAO_CHAT_URL} target="_blank" rel="noopener noreferrer" className="w-full py-3 bg-[#FEE500] hover:bg-[#FDD835] text-[#191919] font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors">
+            <div className="p-3 bg-[#0B1120] border border-white/10 rounded-xl text-[11px] text-slate-300 leading-relaxed">
+              🔒 <span className="text-[#38BDF8] font-bold">관리자 가입 승인 완료</span> 후 상단 프로필 메뉴에서 단톡방 입장 버튼과 참여코드가 자동으로 열립니다.
+            </div>
               <MessageSquare className="w-4 h-4" /> 탁송대리비서 소통방 입장하기
             </a>
             <button onClick={handleLogout} className="w-full py-2.5 bg-white/5 hover:bg-white/10 text-slate-300 font-semibold text-xs rounded-xl cursor-pointer">로그아웃</button>
@@ -2537,9 +2552,11 @@ export default function App() {
               <div className="flex justify-between items-center text-xs"><span className="text-slate-400">앱 버전</span><span className="text-emerald-400 font-mono font-bold">v{APP_VERSION}</span></div>
             </div>
             <div className="flex flex-col gap-2">
-              <a href={KAKAO_CHAT_URL} target="_blank" rel="noopener noreferrer" className="w-full py-2.5 bg-[#FEE500] hover:bg-[#FDD835] text-[#191919] font-bold rounded-lg text-xs flex items-center justify-center gap-1.5 transition-colors">
-                <MessageSquare className="w-3.5 h-3.5" /> 탁송대리비서 소통방 입장하기
-              </a>
+              {(isAdminUser || currentUserProfile?.approvalStatus === 'approved') && (
+                <button type="button" onClick={handleEnterKakaoChat} className="w-full py-2.5 bg-[#FEE500] hover:bg-[#FDD835] text-[#191919] font-bold rounded-lg text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer">
+                  <MessageSquare className="w-3.5 h-3.5" /> 단톡방 입장 (참여코드: {KAKAO_CHAT_CODE} 자동복사)
+                </button>
+              )}
               <button onClick={() => { sessionStorage.removeItem('app_reloaded_version'); forceClearAndReload(); }} className="w-full py-2.5 bg-white/10 hover:bg-white/20 text-slate-200 font-bold rounded-lg text-xs flex items-center justify-center gap-1.5 cursor-pointer">
                 <RefreshCw className="w-3.5 h-3.5" /> 최신 버전 강제 새로고침
               </button>
