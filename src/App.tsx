@@ -1114,7 +1114,7 @@ export default function App() {
   const injectStyles = () => (
     <style dangerouslySetInnerHTML={{ __html: `
       @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
-      * { font-family: 'Pretendard', sans-serif !important; }
+      * * { font-family: 'Pretendard', sans-serif !important; }
       body { background-color: #0B1120; color: white; min-height: 100vh; overflow-y: auto; overflow-x: hidden; }
       input, select, textarea { background-color: #FFFFFF !important; color: #000000 !important; font-weight: 600 !important; border: 1px solid transparent !important; transition: all 0.3s ease !important; }
       input::placeholder, textarea::placeholder { color: #94A3B8 !important; font-weight: 400 !important; }
@@ -1282,8 +1282,6 @@ export default function App() {
             <div className="p-3 bg-[#0B1120] border border-white/10 rounded-xl text-[11px] text-slate-300 leading-relaxed">
               🔒 <span className="text-[#38BDF8] font-bold">관리자 가입 승인 완료</span> 후 상단 프로필 메뉴에서 단톡방 입장 버튼과 참여코드가 자동으로 열립니다.
             </div>
-              <MessageSquare className="w-4 h-4" /> 탁송대리비서 소통방 입장하기
-            </a>
             <button onClick={handleLogout} className="w-full py-2.5 bg-white/5 hover:bg-white/10 text-slate-300 font-semibold text-xs rounded-xl cursor-pointer">로그아웃</button>
           </div>
         </div>
@@ -1343,7 +1341,7 @@ export default function App() {
             <button onClick={() => setActiveTab('wallet')} className={`py-2.5 px-2 text-center rounded-xl text-xs font-bold cursor-pointer transition-all ${activeTab === 'wallet' ? 'hp-primary-btn shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'bg-white/5 text-slate-300 hover:text-white'}`}>계좌 관리</button>
             <button onClick={() => setActiveTab('trade_centers')} className={`py-2.5 px-2 text-center rounded-xl text-xs font-bold cursor-pointer transition-all ${activeTab === 'trade_centers' ? 'hp-primary-btn shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'bg-white/5 text-slate-300 hover:text-white'}`}>매매단지</button>
             <button onClick={() => setActiveTab('auctions')} className={`py-2.5 px-2 text-center rounded-xl text-xs font-bold cursor-pointer transition-all ${activeTab === 'auctions' ? 'hp-primary-btn shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'bg-white/5 text-slate-300 hover:text-white'}`}>경매장</button>
-            {isAdminUser && <button onClick={() => setActiveTab('admin')} className={`py-2.5 px-2 text-center rounded-xl text-xs font-bold cursor-pointer transition-all ${activeTab === 'admin' ? 'bg-[#38BDF8] text-[#0B1120] font-extrabold' : 'bg-[#38BDF8]/10 text-[#38BDF8]'}`}>{isAdminUser && <button onClick={() => setActiveTab('admin')} className={`py-2.5 px-2 text-center rounded-xl text-xs font-bold cursor-pointer transition-all ${activeTab === 'admin' ? 'bg-[#38BDF8] text-[#0B1120] font-extrabold' : 'bg-[#38BDF8]/10 text-[#38BDF8]'}`}>관제탑 {isSuperAdmin && pendingCount > 0 && `(${pendingCount})`}</button>} `(${pendingCount})`}</button>}
+            {isAdminUser && <button onClick={() => setActiveTab('admin')} className={`py-2.5 px-2 text-center rounded-xl text-xs font-bold cursor-pointer transition-all ${activeTab === 'admin' ? 'bg-[#38BDF8] text-[#0B1120] font-extrabold' : 'bg-[#38BDF8]/10 text-[#38BDF8]'}`}>관제탑 {isSuperAdmin && pendingCount > 0 && `(${pendingCount})`}</button>}
           </div>
         </div>
 
@@ -1839,7 +1837,7 @@ export default function App() {
                 </div>
                 <section className="bg-gradient-to-r from-[#0B1120] via-indigo-950/40 to-[#0B1120] border border-[#8B5CF6]/30 rounded-2xl p-5 sm:p-6 shadow-xl">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 mb-4 border-b border-white/10 gap-2">
-                    <div className="flex items-center gap-2"><CalendarDays className="w-4 h-4 text-[#8B5CF6]" /><div className="flex items-center gap-2"><CalendarDays className="w-4 h-4 text-[#8B5CF6]" /><h2 className="text-xs font-bold text-slate-200 tracking-wide uppercase">{Number(analyticsMonth.split('-')[0])}년 {Number(analyticsMonth.split('-')[1])}월 총 누적 결산</h2></div></div>
+                    <div className="flex items-center gap-2"><CalendarDays className="w-4 h-4 text-[#8B5CF6]" /><h2 className="text-xs font-bold text-slate-200 tracking-wide uppercase">{Number(analyticsMonth.split('-')[0])}년 {Number(analyticsMonth.split('-')[1])}월 총 누적 결산</h2></div>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div className="bg-white/[0.02] p-3 rounded-xl sm:bg-transparent sm:p-0"><div className="text-[11px] text-slate-400 mb-1">총 탁송 매출</div><div className="text-xl lg:text-2xl font-extrabold text-white">{monthlyGross.toLocaleString()}원</div></div>
@@ -2053,7 +2051,7 @@ export default function App() {
             </div>
             <div className="flex flex-col sm:flex-row gap-2 border-b border-white/10 pb-3">
               <button onClick={() => setAdminSubTab('campaign')} className={`w-full sm:w-auto px-3 py-2 rounded text-xs font-bold cursor-pointer transition-colors ${adminSubTab === 'campaign' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#0B1120] text-slate-400 hover:text-white border border-white/10'}`}>공지/이벤트 문구보관함</button>
-              <button onClick={() => setAdminSubTab('members')} className={`w-full sm:w-auto px-3 py-2 rounded text-xs font-bold cursor-pointer transition-colors ${adminSubTab === 'members' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#0B1120] text-slate-400 hover:text-white border border-white/10'}`}><button onClick={() => setAdminSubTab('members')} className={`w-full sm:w-auto px-3 py-2 rounded text-xs font-bold cursor-pointer transition-colors ${adminSubTab === 'members' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#0B1120] text-slate-400 hover:text-white border border-white/10'}`}>{isSuperAdmin ? `회원 접속 현황 및 승인${pendingCount > 0 ? ` (${pendingCount})` : ''}` : '회원 접속 현황'}</button> `(${pendingCount})`}</button>
+              <button onClick={() => setAdminSubTab('members')} className={`w-full sm:w-auto px-3 py-2 rounded text-xs font-bold cursor-pointer transition-colors ${adminSubTab === 'members' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#0B1120] text-slate-400 hover:text-white border border-white/10'}`}>{isSuperAdmin ? `회원 접속 현황 및 승인${pendingCount > 0 ? ` (${pendingCount})` : ''}` : '회원 접속 현황'}</button>
               <button onClick={() => setAdminSubTab('analytics')} className={`w-full sm:w-auto px-3 py-2 rounded text-xs font-bold cursor-pointer transition-colors ${adminSubTab === 'analytics' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#0B1120] text-slate-400 hover:text-white border border-white/10'}`}>플랫폼 트래픽 및 매출 통계</button>
             </div>
 
@@ -2178,12 +2176,6 @@ export default function App() {
                         const isRejected = isSuperAdmin && m.approvalStatus === 'rejected';
                         return (
                           <tr key={m.id} className={`transition-all ${isPending ? 'bg-[#EC4899]/10 hover:bg-[#EC4899]/15' : isRejected ? 'bg-slate-800/40 hover:bg-slate-800/60' : isAce ? 'bg-amber-500/5 hover:bg-amber-500/10' : 'hover:bg-white/5'}`}>
-                    <tbody className="divide-y divide-white/5">
-                      {displayedMembers.length === 0 ? <tr><td colSpan={6} className="p-10 text-center text-slate-500">검색 조건에 맞는 기사님이 없습니다.</td></tr> : displayedMembers.map((m) => {
-                        const isAce = (m.monthlyGross || 0) >= 1500000 || (m.recordCount || 0) >= 10;
-                        const isPending = m.approvalStatus === 'pending';
-                        return (
-                          <tr key={m.id} className={`transition-all ${isPending ? 'bg-[#EC4899]/10 hover:bg-[#EC4899]/15' : isAce ? 'bg-amber-500/5 hover:bg-amber-500/10' : 'hover:bg-white/5'}`}>
                             <td className="p-3">
                               <div className="text-white font-bold flex items-center gap-1.5">
                                 {m.name || '미입력'}
