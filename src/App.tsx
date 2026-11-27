@@ -899,8 +899,9 @@ export default function App() {
   const handleUpdateMemberRole = async (memberId: string, newRole: string) => { if (currentUserRole !== 'super_admin') return; await supabase.from('profiles').update({ role: newRole }).eq('id', memberId); fetchAdminData(); };
   const handleUpdateApprovalStatus = async (memberId: string, nextStatus: 'approved' | 'pending' | 'rejected') => {
     if (currentUserRole !== 'super_admin') return;
-    const { error } = await supabase.from('profiles').update({ approval_status: nextStatus }).eq('id', memberId);
+    const { data, error } = await supabase.from('profiles').update({ approval_status: nextStatus }).eq('id', memberId).select();
     if (error) { alert('승인 상태 변경 실패: ' + error.message); return; }
+    if (!data || data.length === 0) { alert('DB 권한(RLS) 문제로 변경이 반영되지 않았습니다. Supabase SQL 정책을 확인해 주세요.'); return; }
     fetchAdminData();
   };
 
