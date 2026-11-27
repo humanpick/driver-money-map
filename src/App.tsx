@@ -2115,6 +2115,7 @@ export default function App() {
                       <Award className="w-4 h-4" /> 🏆 에이스 기사만
                     </button>
                   </div>
+                </div>
 
                 {/* 회원 목록 구분별 엑셀(CSV) 다운로드 */}
                 <div className="flex flex-wrap items-center gap-2 p-3 rounded-xl bg-[#0B1120] border border-white/10">
