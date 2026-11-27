@@ -14,7 +14,7 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-const APP_VERSION = '1.0.21';
+const APP_VERSION = '1.0.22';
 const ADMIN_DEFAULT_EMAIL = 'beat4989@naver.com';
 const ADMIN_DEFAULT_NAME = '김탁송';
 const ADMIN_DEFAULT_PHONE = '01091417586';
@@ -246,7 +246,7 @@ export default function App() {
 
   const [celebrationAlert, setCelebrationAlert] = useState<{ type: 'recovery' | 'growth'; title: string; message: string } | null>(null);
 
-  const [activeTab, setActiveTab] = useState<'records' | 'claims' | 'expense' | 'analytics' | 'wallet' | 'trade_centers' | 'auctions' | 'admin'>('records');
+  const [activeTab, setActiveTab] = useState<'records' | 'claims' | 'expense' | 'analytics' | 'wallet' | 'trade_centers' | 'auctions' | 'notices' | 'admin'>('records');
   const [adminSubTab, setAdminSubTab] = useState<'campaign' | 'members' | 'analytics'>('members');
   
   const [dateFilter, setDateFilter] = useState<'day' | 'month' | 'year' | 'custom'>('month');
@@ -370,6 +370,16 @@ export default function App() {
   const [noticeList, setNoticeList] = useState<NoticeItem[]>([]);
   const [inputNoticeTitle, setInputNoticeTitle] = useState(''); const [inputNoticeContent, setInputNoticeContent] = useState('');
   const [editingNoticeId, setEditingNoticeId] = useState<string | null>(null); const [noticeLoading, setNoticeLoading] = useState(false);
+  const [driverNotices, setDriverNotices] = useState<Array<{ id: string; category: string; title: string; content: string; isPinned: boolean; authorName: string; createdAt: string }>>([]);
+  const [noticeCategoryFilter, setNoticeCategoryFilter] = useState<'전체' | '탁송' | '대리' | '공통'>('전체');
+  const [noticeBoardModalOpen, setNoticeBoardModalOpen] = useState(false);
+  const [editingBoardNoticeId, setEditingBoardNoticeId] = useState<string | null>(null);
+  const [boardCategory, setBoardCategory] = useState<'탁송' | '대리' | '공통'>('탁송');
+  const [boardTitle, setBoardTitle] = useState('');
+  const [boardContent, setBoardContent] = useState('');
+  const [boardPinned, setBoardPinned] = useState(false);
+  const [boardSaving, setBoardSaving] = useState(false);
+  const [selectedBoardNotice, setSelectedBoardNotice] = useState<{ id: string; category: string; title: string; content: string; isPinned: boolean; authorName: string; createdAt: string } | null>(null);
 
   const [adminMemberList, setAdminMemberList] = useState<MemberProfile[]>([]);
   const [adminAllRecords, setAdminAllRecords] = useState<DrivingRecord[]>([]);
@@ -576,6 +586,86 @@ export default function App() {
 
   useEffect(() => {
     fetchNotices();
+    const fetchDriverNotices = async () => {
+    const { data, error } = await supabase
+      .from('driver_notices')
+      .select('*')
+      .order('is_pinned', { ascending: false })
+      .order('created_at', { ascending: false });
+    if (data && !error) {
+      setDriverNotices(
+        data.map((d: any) => ({
+          id: d.id,
+          category: d.category || '탁송',
+          title: d.title,
+          content: d.content,
+          isPinned: Boolean(d.is_pinned),
+          authorName: d.author_name || '관리자',
+          createdAt: d.created_at ? d.created_at.substring(0, 10) : '-',
+        }))
+      );
+    }
+  };
+
+  const handleOpenNewBoardNotice = () => {
+    if (!isAdminUser) return;
+    setEditingBoardNoticeId(null);
+    setBoardCategory('탁송');
+    setBoardTitle('');
+    setBoardContent('');
+    setBoardPinned(false);
+    setNoticeBoardModalOpen(true);
+  };
+
+  const handleOpenEditBoardNotice = (item: { id: string; category: string; title: string; content: string; isPinned: boolean }) => {
+    if (!isAdminUser) return;
+    setEditingBoardNoticeId(item.id);
+    setBoardCategory((item.category as '탁송' | '대리' | '공통') || '탁송');
+    setBoardTitle(item.title);
+    setBoardContent(item.content);
+    setBoardPinned(item.isPinned);
+    setNoticeBoardModalOpen(true);
+  };
+
+  const handleSaveBoardNotice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isAdminUser || !boardTitle.trim() || !boardContent.trim()) return;
+    setBoardSaving(true);
+    const targetId = editingBoardNoticeId || `dnotice_${Date.now()}`;
+    const payload = {
+      id: targetId,
+      category: boardCategory,
+      title: boardTitle.trim(),
+      content: boardContent.trim(),
+      is_pinned: boardPinned,
+      author_name: currentUserProfile?.name || '관리자',
+      updated_at: new Date().toISOString(),
+    };
+    const { error } = await supabase.from('driver_notices').upsert(payload);
+    setBoardSaving(false);
+    if (error) {
+      alert('공지 저장 실패: ' + error.message);
+      return;
+    }
+    setNoticeBoardModalOpen(false);
+    setEditingBoardNoticeId(null);
+    fetchDriverNotices();
+  };
+
+  const handleDeleteBoardNotice = async (id: string) => {
+    if (!isAdminUser || !window.confirm('이 공지사항을 삭제하시겠습니까?')) return;
+    const { error } = await supabase.from('driver_notices').delete().eq('id', id);
+    if (error) {
+      alert('삭제 실패: ' + error.message);
+      return;
+    }
+    if (selectedBoardNotice?.id === id) setSelectedBoardNotice(null);
+    fetchDriverNotices();
+  };
+
+  useEffect(() => {
+    fetchNotices();
+    fetchDriverNotices();
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session?.user) fetchUserData(session.user.id, session.user.email || '', session.user.user_metadata, session.user.created_at);
@@ -1380,6 +1470,7 @@ export default function App() {
             <button onClick={() => setActiveTab('wallet')} className={`py-2.5 px-2 text-center rounded-xl text-xs font-bold cursor-pointer transition-all ${activeTab === 'wallet' ? 'hp-primary-btn shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'bg-white/5 text-slate-300 hover:text-white'}`}>계좌 관리</button>
             <button onClick={() => setActiveTab('trade_centers')} className={`py-2.5 px-2 text-center rounded-xl text-xs font-bold cursor-pointer transition-all ${activeTab === 'trade_centers' ? 'hp-primary-btn shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'bg-white/5 text-slate-300 hover:text-white'}`}>매매단지</button>
             <button onClick={() => setActiveTab('auctions')} className={`py-2.5 px-2 text-center rounded-xl text-xs font-bold cursor-pointer transition-all ${activeTab === 'auctions' ? 'hp-primary-btn shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'bg-white/5 text-slate-300 hover:text-white'}`}>경매장</button>
+            <button onClick={() => { fetchDriverNotices(); setActiveTab('notices'); }} className={`py-2.5 px-2 text-center rounded-xl text-xs font-bold cursor-pointer transition-all ${activeTab === 'notices' ? 'hp-primary-btn shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'bg-white/5 text-slate-300 hover:text-white'}`}>공지사항</button>
             {isAdminUser && <button onClick={() => setActiveTab('admin')} className={`py-2.5 px-2 text-center rounded-xl text-xs font-bold cursor-pointer transition-all ${activeTab === 'admin' ? 'bg-[#38BDF8] text-[#0B1120] font-extrabold' : 'bg-[#38BDF8]/10 text-[#38BDF8]'}`}>관제탑 {isSuperAdmin && pendingCount > 0 && `(${pendingCount})`}</button>}
           </div>
         </div>
@@ -2098,6 +2189,223 @@ export default function App() {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+        {activeTab === 'notices' && (
+          <div className="space-y-5 fade-in-text">
+            <div className="glass-card rounded-xl p-5 shadow-lg border border-[#8B5CF6]/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Megaphone className="w-5 h-5 text-[#38BDF8]" /> 탁송 · 대리 중요 정보 및 공지사항
+                </h3>
+                <p className="text-[11px] text-slate-400 mt-1">현장 주의사항, 정산·보험 팁, 단톡방 필독 안내를 확인하세요.</p>
+              </div>
+              {isAdminUser && (
+                <button
+                  type="button"
+                  onClick={handleOpenNewBoardNotice}
+                  className="w-full sm:w-auto px-4 py-2.5 hp-primary-btn rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+                >
+                  <PlusCircle className="w-4 h-4" /> 공지사항 등록
+                </button>
+              )}
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {(['전체', '탁송', '대리', '공통'] as const).map((cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setNoticeCategoryFilter(cat)}
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                    noticeCategoryFilter === cat
+                      ? 'bg-[#8B5CF6] text-white shadow-[0_0_10px_rgba(139,92,246,0.4)]'
+                      : 'bg-[#0B1120] text-slate-400 border border-white/10 hover:border-[#8B5CF6]/50'
+                  }`}
+                >
+                  {cat} ({cat === '전체' ? driverNotices.length : driverNotices.filter((n) => n.category === cat).length})
+                </button>
+              ))}
+            </div>
+
+            <div className="space-y-3">
+              {driverNotices.filter((n) => noticeCategoryFilter === '전체' || n.category === noticeCategoryFilter).length === 0 ? (
+                <div className="glass-card rounded-xl p-10 text-center text-slate-400 text-xs">
+                  등록된 공지사항이 없습니다.
+                </div>
+              ) : (
+                driverNotices
+                  .filter((n) => noticeCategoryFilter === '전체' || n.category === noticeCategoryFilter)
+                  .map((notice) => (
+                    <div
+                      key={notice.id}
+                      onClick={() => setSelectedBoardNotice(notice)}
+                      className={`glass-card rounded-xl p-4 sm:p-5 border transition-all cursor-pointer hover:border-[#8B5CF6]/60 ${
+                        notice.isPinned ? 'border-[#38BDF8]/50 bg-[#38BDF8]/[0.04]' : 'border-white/10'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1.5 min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {notice.isPinned && (
+                              <span className="px-2 py-0.5 rounded bg-[#EC4899] text-white text-[10px] font-extrabold">📌 필독고정</span>
+                            )}
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                notice.category === '탁송'
+                                  ? 'bg-[#38BDF8]/20 text-[#38BDF8]'
+                                  : notice.category === '대리'
+                                  ? 'bg-[#8B5CF6]/20 text-[#C4B5FD]'
+                                  : 'bg-emerald-500/20 text-emerald-400'
+                              }`}
+                            >
+                              {notice.category}
+                            </span>
+                            <span className="text-[11px] text-slate-500 font-mono">{notice.createdAt}</span>
+                          </div>
+                          <h4 className="text-sm sm:text-base font-extrabold text-white">{notice.title}</h4>
+                          <p className="text-xs text-slate-300 line-clamp-2 whitespace-pre-line leading-relaxed">{notice.content}</p>
+                        </div>
+                        {isAdminUser && (
+                          <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditBoardNotice(notice)}
+                              className="p-2 bg-white/10 hover:bg-white/20 text-slate-200 rounded-lg cursor-pointer"
+                              title="수정"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteBoardNotice(notice.id)}
+                              className="p-2 bg-white/10 hover:bg-[#EC4899]/20 text-slate-300 hover:text-[#EC4899] rounded-lg cursor-pointer"
+                              title="삭제"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* 공지사항 상세 보기 모달 */}
+        {selectedBoardNotice && (
+          <div className="fixed inset-0 z-[75] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setSelectedBoardNotice(null)}>
+            <div className="w-full max-w-lg glass-card rounded-2xl p-6 shadow-2xl relative max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+              <button onClick={() => setSelectedBoardNotice(null)} className="absolute top-4 right-4 text-slate-400 hover:text-white cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+              <div className="flex items-center gap-2 mb-2">
+                {selectedBoardNotice.isPinned && (
+                  <span className="px-2 py-0.5 rounded bg-[#EC4899] text-white text-[10px] font-extrabold">📌 필독고정</span>
+                )}
+                <span className="px-2 py-0.5 rounded bg-[#38BDF8]/20 text-[#38BDF8] text-[10px] font-bold">{selectedBoardNotice.category}</span>
+                <span className="text-[11px] text-slate-400 font-mono">{selectedBoardNotice.createdAt}</span>
+              </div>
+              <h3 className="text-base font-extrabold text-white mb-4 pr-6">{selectedBoardNotice.title}</h3>
+              <div className="overflow-y-auto pr-1 flex-1 bg-[#0B1120] p-4 rounded-xl border border-white/10 text-xs text-slate-200 leading-relaxed whitespace-pre-line">
+                {selectedBoardNotice.content}
+              </div>
+              <div className="flex gap-2 mt-4">
+                {isAdminUser && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const target = selectedBoardNotice;
+                      setSelectedBoardNotice(null);
+                      handleOpenEditBoardNotice(target);
+                    }}
+                    className="px-4 py-3 bg-white/10 hover:bg-white/20 text-white font-bold rounded-lg text-xs cursor-pointer"
+                  >
+                    수정하기
+                  </button>
+                )}
+                <button type="button" onClick={() => setSelectedBoardNotice(null)} className="flex-1 py-3 hp-primary-btn font-bold rounded-lg text-xs cursor-pointer">
+                  닫기
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 관리자 전용: 공지사항 작성/수정 모달 */}
+        {isAdminUser && noticeBoardModalOpen && (
+          <div className="fixed inset-0 z-[75] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setNoticeBoardModalOpen(false)}>
+            <div className="w-full max-w-md glass-card rounded-2xl p-6 shadow-2xl relative" onClick={(e) => e.stopPropagation()}>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-sm font-bold text-[#38BDF8] flex items-center gap-1.5">
+                  <Megaphone className="w-4 h-4" /> {editingBoardNoticeId ? '공지사항 수정' : '새 공지사항 등록'}
+                </h3>
+                <button onClick={() => setNoticeBoardModalOpen(false)} className="text-slate-400 hover:text-white cursor-pointer">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <form onSubmit={handleSaveBoardNotice} className="space-y-3.5">
+                <div className="grid grid-cols-3 gap-2">
+                  {(['탁송', '대리', '공통'] as const).map((cat) => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setBoardCategory(cat)}
+                      className={`py-2 rounded-lg text-xs font-bold border cursor-pointer ${
+                        boardCategory === cat ? 'bg-[#8B5CF6] text-white border-[#8B5CF6]' : 'bg-[#0B1120] text-slate-300 border-white/15'
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">공지 제목</label>
+                  <input
+                    type="text"
+                    value={boardTitle}
+                    onChange={(e) => setBoardTitle(e.target.value)}
+                    placeholder="예: 경매장 출고 시 인수증 확인 필수 안내"
+                    required
+                    className="w-full px-3 py-2.5 rounded-lg text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">상세 내용</label>
+                  <textarea
+                    rows={6}
+                    value={boardContent}
+                    onChange={(e) => setBoardContent(e.target.value)}
+                    placeholder="기사님들께 공유할 중요 정보를 입력하세요."
+                    required
+                    className="w-full px-3 py-2.5 rounded-lg text-xs"
+                  />
+                </div>
+                <label className="flex items-center gap-2 text-xs text-slate-200 font-semibold cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={boardPinned}
+                    onChange={(e) => setBoardPinned(e.target.checked)}
+                    className="w-4 h-4 rounded text-[#8B5CF6] cursor-pointer"
+                  />
+                  <span>📌 목록 최상단 필독 고정</span>
+                </label>
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setNoticeBoardModalOpen(false)}
+                    className="flex-1 py-3 bg-white/10 hover:bg-white/20 text-white font-semibold rounded-lg text-xs cursor-pointer"
+                  >
+                    취소
+                  </button>
+                  <button type="submit" disabled={boardSaving} className="flex-1 py-3 hp-primary-btn font-bold rounded-lg text-xs cursor-pointer">
+                    {boardSaving ? '저장 중...' : editingBoardNoticeId ? '수정 저장' : '공지 등록'}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}
