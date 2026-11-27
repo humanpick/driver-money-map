@@ -14,7 +14,7 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-const APP_VERSION = '1.0.16';
+const APP_VERSION = '1.0.17';
 const ADMIN_DEFAULT_EMAIL = 'beat4989@naver.com';
 const ADMIN_DEFAULT_NAME = '김탁송';
 const ADMIN_DEFAULT_PHONE = '01091417586';
@@ -108,7 +108,7 @@ interface MemberProfile {
   lastLoginAt?: string; loginCount?: number; recordCount?: number; monthlyGross?: number;
   lastMonthGross?: number; recoveredAmount?: number; recoveredCount?: number;
   joinType?: 'group' | 'referral'; kakaoId?: string; referrer?: string;
-  approvalStatus?: 'pending' | 'approved'; marketingAgreed?: boolean;
+  approvalStatus?: 'pending' | 'approved' | 'rejected'; marketingAgreed?: boolean;
 }
 interface NoticeItem { id: string; title: string; content: string; isActive: boolean; updatedAt?: string; }
 interface MonthlyFixed { id: string; memo: string; amount: number; platform?: string; }
@@ -375,6 +375,7 @@ export default function App() {
   const [adminSearchTerm, setAdminSearchTerm] = useState('');
   const [showScoutOnly, setShowScoutOnly] = useState(false);
   const [showPendingOnly, setShowPendingOnly] = useState(false);
+  const [showRejectedOnly, setShowRejectedOnly] = useState(false);
 
   const [newDate, setNewDate] = useState<string>(() => getTodayKST());
   const [newPlatform, setNewPlatform] = useState<string>('로지');
@@ -458,7 +459,7 @@ export default function App() {
     role = cleanMail === ADMIN_DEFAULT_EMAIL ? 'super_admin' : (profile?.role || 'user');
     setCurrentUserRole(role);
 
-    const resolvedApproval: 'pending' | 'approved' =
+    const resolvedApproval: 'pending' | 'approved' | 'rejected' =
       role === 'super_admin' || role === 'manager'
         ? 'approved'
         : (profile?.approval_status || userMeta?.approval_status || 'approved');
@@ -507,7 +508,7 @@ export default function App() {
       approvalStatus: resolvedApproval, marketingAgreed: profilePayload.marketing_agreed,
     });
 
-    if (resolvedApproval === 'pending') return;
+    if (resolvedApproval === 'pending' || resolvedApproval === 'rejected') return;
 
     const { data: recordsData } = await supabase.from('driving_records').select('*').eq('user_id', userId).order('date', { ascending: true });
     if (recordsData) {
@@ -875,8 +876,8 @@ export default function App() {
     if (session?.user?.id) syncUserSettingsToCloud(session.user.id, { bank_accounts: nextAccounts });
   };
   const handleUpdateMemberRole = async (memberId: string, newRole: string) => { if (currentUserRole !== 'super_admin') return; await supabase.from('profiles').update({ role: newRole }).eq('id', memberId); fetchAdminData(); };
-  const handleUpdateApprovalStatus = async (memberId: string, nextStatus: 'approved' | 'pending') => {
-    if (!isAdminUser) return;
+  const handleUpdateApprovalStatus = async (memberId: string, nextStatus: 'approved' | 'pending' | 'rejected') => {
+    if (currentUserRole !== 'super_admin') return;
     const { error } = await supabase.from('profiles').update({ approval_status: nextStatus }).eq('id', memberId);
     if (error) { alert('승인 상태 변경 실패: ' + error.message); return; }
     fetchAdminData();
@@ -1002,8 +1003,10 @@ export default function App() {
   const prevMonthPrefix = getPrevMonthPrefix(currentMonthPrefix);
   const unpaidRecords = records.filter((r) => !r.isGrossPaid || (!r.isExpensePaid && (r.fuelAmount > 0 || r.extraExpenseAmount > 0)));
   const totalUnpaidAmount = unpaidRecords.reduce((acc, r) => acc + (!r.isGrossPaid ? r.grossAmount : 0) + (!r.isExpensePaid ? (r.fuelAmount + r.extraExpenseAmount) : 0), 0);
-  const isAdminUser = currentUserRole === 'super_admin' || currentUserRole === 'manager';
+  const isSuperAdmin = currentUserRole === 'super_admin';
+  const isAdminUser = isSuperAdmin || currentUserRole === 'manager';
   const pendingCount = adminMemberList.filter(m => m.approvalStatus === 'pending').length;
+  const rejectedCount = adminMemberList.filter(m => m.approvalStatus === 'rejected').length;
   const groupMemberCount = adminMemberList.filter(m => m.joinType !== 'referral').length;
   const referralMemberCount = adminMemberList.filter(m => m.joinType === 'referral').length;
 
@@ -1061,7 +1064,17 @@ export default function App() {
     const safeKakao = m.kakaoId || ''; const safeRef = m.referrer || '';
     const matchesSearch = safeName.includes(adminSearchTerm) || safePhone.includes(adminSearchTerm) || safeEmail.includes(adminSearchTerm) || safeKakao.includes(adminSearchTerm) || safeRef.includes(adminSearchTerm);
     const isAce = (m.monthlyGross || 0) >= 1500000 || (m.recordCount || 0) >= 10;
-    if (showPendingOnly && m.approvalStatus !== 'pending') return false;
+    if (isSuperAdmin) {
+      if (showPendingOnly) {
+        if (m.approvalStatus !== 'pending') return false;
+      } else if (showRejectedOnly) {
+        if (m.approvalStatus !== 'rejected') return false;
+      } else {
+        if (m.approvalStatus === 'rejected') return false;
+      }
+    } else {
+      if (m.approvalStatus === 'rejected') return false;
+    }
     if (showScoutOnly && !isAce) return false;
     return matchesSearch;
   });
@@ -1199,7 +1212,33 @@ export default function App() {
       </div>
     );
   }
-
+  // 가입 승인 거절 화면
+  if (!isAdminUser && currentUserProfile?.approvalStatus === 'rejected') {
+    return (
+      <div className="min-h-screen bg-[#0B1120] text-slate-100 flex items-center justify-center p-4">
+        {injectStyles()}
+        {renderPrivacyModal()}
+        <div className="w-full max-w-[420px] glass-card rounded-2xl p-7 text-center space-y-5 shadow-2xl">
+          <div className="w-14 h-14 mx-auto rounded-2xl bg-[#EC4899]/20 border border-[#EC4899]/40 flex items-center justify-center">
+            <ShieldAlert className="w-7 h-7 text-[#EC4899]" />
+          </div>
+          <div>
+            <h2 className="text-lg font-extrabold text-white">가입 승인이 거절되었습니다</h2>
+            <p className="text-xs text-slate-300 mt-2 leading-relaxed">
+              단톡방 회원 확인이 되지 않아 가입 승인이 거절되었습니다.<br />
+              소통방 입장 후 닉네임을 확인해 주세요.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <a href={KAKAO_CHAT_URL} target="_blank" rel="noopener noreferrer" className="w-full py-3 bg-[#FEE500] hover:bg-[#FDD835] text-[#191919] font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors">
+              <MessageSquare className="w-4 h-4" /> 탁송대리비서 소통방 입장하기
+            </a>
+            <button onClick={handleLogout} className="w-full py-2.5 bg-white/5 hover:bg-white/10 text-slate-300 font-semibold text-xs rounded-xl cursor-pointer">로그아웃</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
   // 가입 승인 대기 화면
   if (!isAdminUser && currentUserProfile?.approvalStatus === 'pending') {
     return (
@@ -1245,7 +1284,7 @@ export default function App() {
         <div className="max-w-[1400px] mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2"><div className="w-8 h-8 bg-gradient-to-br from-[#8B5CF6] to-[#EC4899] rounded-lg flex items-center justify-center shadow-[0_0_10px_#8B5CF6]"><Car className="w-4 h-4 text-white" /></div><span className="font-bold text-base text-white">탁송대리비서</span><span className="px-1.5 py-0.5 text-[10px] font-extrabold bg-[#8B5CF6]/20 text-[#8B5CF6] rounded border border-[#8B5CF6]/30">PRO</span></div>
           <div className="flex items-center gap-2">
-            {isAdminUser && <button onClick={() => { fetchAdminData(); setActiveTab('admin'); }} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all relative ${activeTab === 'admin' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#38BDF8]/10 border border-[#38BDF8]/30 text-[#38BDF8] hover:bg-[#38BDF8]/20'}`}><Crown className="w-3.5 h-3.5" /><span className="hidden sm:inline">관제탑</span>{pendingCount > 0 && <span className="ml-0.5 px-1.5 py-0.2 rounded-full bg-[#EC4899] text-white text-[9px] font-extrabold">{pendingCount}</span>}</button>}
+            {isAdminUser && <button onClick={() => { fetchAdminData(); setActiveTab('admin'); }} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all relative ${activeTab === 'admin' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#38BDF8]/10 border border-[#38BDF8]/30 text-[#38BDF8] hover:bg-[#38BDF8]/20'}`}><Crown className="w-3.5 h-3.5" /><span className="hidden sm:inline">관제탑</span>{isSuperAdmin &&pendingCount > 0 && <span className="ml-0.5 px-1.5 py-0.2 rounded-full bg-[#EC4899] text-white text-[9px] font-extrabold">{pendingCount}</span>}</button>}
             <button onClick={() => setShowProfileModal(true)} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg glass-card text-xs text-slate-200 cursor-pointer"><User className="w-3.5 h-3.5 text-[#8B5CF6]" /><span className="block font-bold text-white">{currentUserProfile?.name || '기사'}님</span></button>
             <button onClick={handleLogout} className="p-1.5 rounded-lg glass-card text-slate-400 hover:text-[#EC4899] cursor-pointer"><LogOut className="w-4 h-4" /></button>
           </div>
@@ -1289,7 +1328,7 @@ export default function App() {
             <button onClick={() => setActiveTab('wallet')} className={`py-2.5 px-2 text-center rounded-xl text-xs font-bold cursor-pointer transition-all ${activeTab === 'wallet' ? 'hp-primary-btn shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'bg-white/5 text-slate-300 hover:text-white'}`}>계좌 관리</button>
             <button onClick={() => setActiveTab('trade_centers')} className={`py-2.5 px-2 text-center rounded-xl text-xs font-bold cursor-pointer transition-all ${activeTab === 'trade_centers' ? 'hp-primary-btn shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'bg-white/5 text-slate-300 hover:text-white'}`}>매매단지</button>
             <button onClick={() => setActiveTab('auctions')} className={`py-2.5 px-2 text-center rounded-xl text-xs font-bold cursor-pointer transition-all ${activeTab === 'auctions' ? 'hp-primary-btn shadow-[0_2px_10px_rgba(139,92,246,0.4)]' : 'bg-white/5 text-slate-300 hover:text-white'}`}>경매장</button>
-            {isAdminUser && <button onClick={() => setActiveTab('admin')} className={`py-2.5 px-2 text-center rounded-xl text-xs font-bold cursor-pointer transition-all ${activeTab === 'admin' ? 'bg-[#38BDF8] text-[#0B1120] font-extrabold' : 'bg-[#38BDF8]/10 text-[#38BDF8]'}`}>관제탑 {pendingCount > 0 && `(${pendingCount})`}</button>}
+            {isAdminUser && <button onClick={() => setActiveTab('admin')} className={`py-2.5 px-2 text-center rounded-xl text-xs font-bold cursor-pointer transition-all ${activeTab === 'admin' ? 'bg-[#38BDF8] text-[#0B1120] font-extrabold' : 'bg-[#38BDF8]/10 text-[#38BDF8]'}`}>{isAdminUser && <button onClick={() => setActiveTab('admin')} className={`py-2.5 px-2 text-center rounded-xl text-xs font-bold cursor-pointer transition-all ${activeTab === 'admin' ? 'bg-[#38BDF8] text-[#0B1120] font-extrabold' : 'bg-[#38BDF8]/10 text-[#38BDF8]'}`}>관제탑 {isSuperAdmin && pendingCount > 0 && `(${pendingCount})`}</button>} `(${pendingCount})`}</button>}
           </div>
         </div>
 
@@ -1999,7 +2038,7 @@ export default function App() {
             </div>
             <div className="flex flex-col sm:flex-row gap-2 border-b border-white/10 pb-3">
               <button onClick={() => setAdminSubTab('campaign')} className={`w-full sm:w-auto px-3 py-2 rounded text-xs font-bold cursor-pointer transition-colors ${adminSubTab === 'campaign' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#0B1120] text-slate-400 hover:text-white border border-white/10'}`}>공지/이벤트 문구보관함</button>
-              <button onClick={() => setAdminSubTab('members')} className={`w-full sm:w-auto px-3 py-2 rounded text-xs font-bold cursor-pointer transition-colors ${adminSubTab === 'members' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#0B1120] text-slate-400 hover:text-white border border-white/10'}`}>회원 접속 현황 및 승인 {pendingCount > 0 && `(${pendingCount})`}</button>
+              <button onClick={() => setAdminSubTab('members')} className={`w-full sm:w-auto px-3 py-2 rounded text-xs font-bold cursor-pointer transition-colors ${adminSubTab === 'members' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#0B1120] text-slate-400 hover:text-white border border-white/10'}`}><button onClick={() => setAdminSubTab('members')} className={`w-full sm:w-auto px-3 py-2 rounded text-xs font-bold cursor-pointer transition-colors ${adminSubTab === 'members' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#0B1120] text-slate-400 hover:text-white border border-white/10'}`}>{isSuperAdmin ? `회원 접속 현황 및 승인${pendingCount > 0 ? ` (${pendingCount})` : ''}` : '회원 접속 현황'}</button> `(${pendingCount})`}</button>
               <button onClick={() => setAdminSubTab('analytics')} className={`w-full sm:w-auto px-3 py-2 rounded text-xs font-bold cursor-pointer transition-colors ${adminSubTab === 'analytics' ? 'bg-[#38BDF8] text-[#0B1120] shadow-[0_0_10px_#38BDF8]' : 'bg-[#0B1120] text-slate-400 hover:text-white border border-white/10'}`}>플랫폼 트래픽 및 매출 통계</button>
             </div>
 
@@ -2038,14 +2077,20 @@ export default function App() {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <input type="text" placeholder="이름 / 연락처 / 단톡방 닉네임 검색..." value={adminSearchTerm} onChange={(e) => setAdminSearchTerm(e.target.value)} className="px-3 py-2.5 rounded-lg text-xs w-full sm:max-w-xs" />
                   <div className="flex flex-wrap gap-2">
-                    <button onClick={() => setShowPendingOnly(!showPendingOnly)} className={`flex-1 sm:flex-none px-3.5 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${showPendingOnly ? 'bg-[#EC4899] text-white shadow-[0_0_15px_rgba(236,72,153,0.5)]' : 'bg-[#0B1120] text-slate-400 border border-white/10 hover:border-[#EC4899]/50'}`}>
-                      <ShieldAlert className="w-4 h-4" /> 승인 대기만 ({pendingCount})
-                    </button>
+                    {isSuperAdmin && (
+                      <>
+                        <button onClick={() => { setShowPendingOnly(!showPendingOnly); setShowRejectedOnly(false); }} className={`flex-1 sm:flex-none px-3.5 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${showPendingOnly ? 'bg-[#EC4899] text-white shadow-[0_0_15px_rgba(236,72,153,0.5)]' : 'bg-[#0B1120] text-slate-400 border border-white/10 hover:border-[#EC4899]/50'}`}>
+                          <ShieldAlert className="w-4 h-4" /> 승인 대기만 ({pendingCount})
+                        </button>
+                        <button onClick={() => { setShowRejectedOnly(!showRejectedOnly); setShowPendingOnly(false); }} className={`flex-1 sm:flex-none px-3.5 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${showRejectedOnly ? 'bg-slate-600 text-white shadow-[0_0_12px_rgba(148,163,184,0.4)]' : 'bg-[#0B1120] text-slate-400 border border-white/10 hover:border-slate-500'}`}>
+                          승인 거절만 ({rejectedCount})
+                        </button>
+                      </>
+                    )}
                     <button onClick={() => setShowScoutOnly(!showScoutOnly)} className={`flex-1 sm:flex-none px-3.5 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${showScoutOnly ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-[0_0_15px_rgba(245,158,11,0.5)] border-0' : 'bg-[#0B1120] text-slate-400 border border-white/10 hover:border-amber-500/50'}`}>
                       <Award className="w-4 h-4" /> 🏆 에이스 기사만
                     </button>
                   </div>
-                </div>
 
                 {/* 회원 목록 구분별 엑셀(CSV) 다운로드 */}
                 <div className="flex flex-wrap items-center gap-2 p-3 rounded-xl bg-[#0B1120] border border-white/10">
@@ -2064,14 +2109,16 @@ export default function App() {
                 <div className="md:hidden space-y-3">
                   {displayedMembers.length === 0 ? <div className="p-10 text-center text-slate-500 text-xs">검색 조건에 맞는 기사님이 없습니다.</div> : displayedMembers.map((m) => {
                     const isAce = (m.monthlyGross || 0) >= 1500000 || (m.recordCount || 0) >= 10;
-                    const isPending = m.approvalStatus === 'pending';
+                    const isPending = isSuperAdmin && m.approvalStatus === 'pending';
+                    const isRejected = isSuperAdmin && m.approvalStatus === 'rejected';
                     return (
-                      <div key={m.id} className={`p-4 rounded-xl border space-y-2.5 text-xs ${isPending ? 'bg-[#EC4899]/10 border-[#EC4899]/40' : isAce ? 'bg-amber-500/5 border-amber-500/30' : 'bg-[#0B1120] border-white/10'}`}>
+                      <div key={m.id} className={`p-4 rounded-xl border space-y-2.5 text-xs ${isPending ? 'bg-[#EC4899]/10 border-[#EC4899]/40' : isRejected ? 'bg-slate-800/40 border-slate-600/50' : isAce ? 'bg-amber-500/5 border-amber-500/30' : 'bg-[#0B1120] border-white/10'}`}>
                         <div className="flex justify-between items-start">
                           <div>
                             <div className="text-white font-bold flex flex-wrap items-center gap-1.5 text-sm">
                               {m.name || '미입력'}
                               {isPending && <span className="px-1.5 py-0.5 bg-[#EC4899] text-white text-[9px] rounded font-extrabold">승인대기</span>}
+                              {isRejected && <span className="px-1.5 py-0.5 bg-slate-600 text-white text-[9px] rounded font-extrabold">승인거절</span>}
                               {isAce && <span className="px-1.5 py-0.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[9px] rounded font-extrabold">🏆 에이스</span>}
                               {(m.recoveredAmount || 0) > 0 && <span className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[9px] rounded font-extrabold">회수 {(m.recoveredAmount || 0).toLocaleString()}원</span>}
                             </div>
@@ -2087,10 +2134,20 @@ export default function App() {
                           <span className="font-bold text-[#38BDF8]">{m.joinType === 'referral' ? (m.referrer || '-') : (m.kakaoId || '-')}</span>
                         </div>
                         <div className="flex flex-col gap-2 pt-1">
-                          {isPending ? (
-                            <button onClick={() => handleUpdateApprovalStatus(m.id, 'approved')} className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold cursor-pointer">✔ 가입 승인하기</button>
-                          ) : (
-                            <button onClick={() => handleUpdateApprovalStatus(m.id, 'pending')} className="w-full py-2 bg-white/5 hover:bg-[#EC4899]/20 text-slate-400 hover:text-[#EC4899] rounded-lg text-[11px] font-semibold cursor-pointer">승인 해제(대기 전환)</button>
+                          {isSuperAdmin && (
+                            isPending ? (
+                              <div className="grid grid-cols-2 gap-2">
+                                <button onClick={() => handleUpdateApprovalStatus(m.id, 'approved')} className="py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold cursor-pointer">✔ 승인하기</button>
+                                <button onClick={() => handleUpdateApprovalStatus(m.id, 'rejected')} className="py-2.5 bg-[#EC4899]/20 hover:bg-[#EC4899]/40 text-[#EC4899] border border-[#EC4899]/40 rounded-lg text-xs font-bold cursor-pointer">✕ 거절하기</button>
+                              </div>
+                            ) : isRejected ? (
+                              <button onClick={() => handleUpdateApprovalStatus(m.id, 'approved')} className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold cursor-pointer">✔ 재승인하기</button>
+                            ) : (
+                              <div className="grid grid-cols-2 gap-2">
+                                <button onClick={() => handleUpdateApprovalStatus(m.id, 'pending')} className="py-2 bg-white/5 hover:bg-white/10 text-slate-300 rounded-lg text-[11px] font-semibold cursor-pointer">대기 전환</button>
+                                <button onClick={() => handleUpdateApprovalStatus(m.id, 'rejected')} className="py-2 bg-white/5 hover:bg-[#EC4899]/20 text-slate-400 hover:text-[#EC4899] rounded-lg text-[11px] font-semibold cursor-pointer">승인 거절</button>
+                              </div>
+                            )
                           )}
                           <select value={m.role} onChange={(e) => handleUpdateMemberRole(m.id, e.target.value)} className="w-full bg-[#0B1120] border border-white/20 text-white rounded px-3 py-2 text-xs cursor-pointer"><option value="user">일반 기사</option><option value="pro_driver">PRO 기사</option><option value="vip_driver">VIP 기사 (스카우트)</option><option value="manager">운영 직원</option><option value="super_admin">최고 관리자</option></select>
                           <div className="grid grid-cols-2 gap-2">
@@ -2105,7 +2162,14 @@ export default function App() {
 
                 <div className="hidden md:block overflow-x-auto rounded-lg border border-white/10">
                   <table className="w-full text-left text-xs whitespace-nowrap">
-                    <thead className="bg-[#0B1120] text-slate-400 border-b border-white/10"><tr><th className="p-3">이름/연락처</th><th className="p-3 text-center">단톡방 닉네임 / 추천인</th><th className="p-3 text-center">승인 상태</th><th className="p-3 text-center">당월 실적 / 앱 회수액</th><th className="p-3 text-center">권한 변경</th><th className="p-3 text-right">관리</th></tr></thead>
+                    <thead className="bg-[#0B1120] text-slate-400 border-b border-white/10"><tr><th className="p-3">이름/연락처</th><th className="p-3 text-center">단톡방 닉네임 / 추천인</th>{isSuperAdmin && <th className="p-3 text-center">승인 상태</th>}<th className="p-3 text-center">당월 실적 / 앱 회수액</th><th className="p-3 text-center">권한 변경</th><th className="p-3 text-right">관리</th></tr></thead>
+                    <tbody className="divide-y divide-white/5">
+                      {displayedMembers.length === 0 ? <tr><td colSpan={isSuperAdmin ? 6 : 5} className="p-10 text-center text-slate-500">검색 조건에 맞는 기사님이 없습니다.</td></tr> : displayedMembers.map((m) => {
+                        const isAce = (m.monthlyGross || 0) >= 1500000 || (m.recordCount || 0) >= 10;
+                        const isPending = isSuperAdmin && m.approvalStatus === 'pending';
+                        const isRejected = isSuperAdmin && m.approvalStatus === 'rejected';
+                        return (
+                          <tr key={m.id} className={`transition-all ${isPending ? 'bg-[#EC4899]/10 hover:bg-[#EC4899]/15' : isRejected ? 'bg-slate-800/40 hover:bg-slate-800/60' : isAce ? 'bg-amber-500/5 hover:bg-amber-500/10' : 'hover:bg-white/5'}`}>
                     <tbody className="divide-y divide-white/5">
                       {displayedMembers.length === 0 ? <tr><td colSpan={6} className="p-10 text-center text-slate-500">검색 조건에 맞는 기사님이 없습니다.</td></tr> : displayedMembers.map((m) => {
                         const isAce = (m.monthlyGross || 0) >= 1500000 || (m.recordCount || 0) >= 10;
@@ -2123,13 +2187,26 @@ export default function App() {
                               <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${m.joinType === 'referral' ? 'bg-[#8B5CF6]/20 text-[#8B5CF6]' : 'bg-[#38BDF8]/20 text-[#38BDF8]'}`}>{m.joinType === 'referral' ? '지인추천' : '단톡방'}</span>
                               <div className="text-white font-semibold mt-1">{m.joinType === 'referral' ? (m.referrer || '-') : (m.kakaoId || '-')}</div>
                             </td>
-                            <td className="p-3 text-center">
-                              {isPending ? (
-                                <button onClick={() => handleUpdateApprovalStatus(m.id, 'approved')} className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded text-[11px] font-bold cursor-pointer">승인하기</button>
-                              ) : (
-                                <button onClick={() => handleUpdateApprovalStatus(m.id, 'pending')} className="px-2.5 py-1 bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-[#EC4899]/20 hover:text-[#EC4899] hover:border-[#EC4899]/40 rounded text-[10px] font-bold cursor-pointer">승인완료</button>
-                              )}
-                            </td>
+                            {isSuperAdmin && (
+                              <td className="p-3 text-center">
+                                {isPending ? (
+                                  <div className="flex items-center justify-center gap-1">
+                                    <button onClick={() => handleUpdateApprovalStatus(m.id, 'approved')} className="px-2.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded text-[11px] font-bold cursor-pointer">승인</button>
+                                    <button onClick={() => handleUpdateApprovalStatus(m.id, 'rejected')} className="px-2.5 py-1.5 bg-[#EC4899]/20 hover:bg-[#EC4899]/40 text-[#EC4899] border border-[#EC4899]/40 rounded text-[11px] font-bold cursor-pointer">거절</button>
+                                  </div>
+                                ) : isRejected ? (
+                                  <div className="flex items-center justify-center gap-1">
+                                    <span className="px-2 py-1 bg-slate-700 text-slate-300 rounded text-[10px] font-bold">승인거절</span>
+                                    <button onClick={() => handleUpdateApprovalStatus(m.id, 'approved')} className="px-2 py-1 bg-emerald-500/20 hover:bg-emerald-500 text-emerald-400 hover:text-white rounded text-[10px] font-bold cursor-pointer">재승인</button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center justify-center gap-1">
+                                    <button onClick={() => handleUpdateApprovalStatus(m.id, 'pending')} className="px-2 py-1 bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-white/10 hover:text-slate-300 rounded text-[10px] font-bold cursor-pointer">승인완료</button>
+                                    <button onClick={() => handleUpdateApprovalStatus(m.id, 'rejected')} className="px-2 py-1 bg-white/5 hover:bg-[#EC4899]/20 text-slate-400 hover:text-[#EC4899] rounded text-[10px] font-bold cursor-pointer">거절</button>
+                                  </div>
+                                )}
+                              </td>
+                            )}
                             <td className="p-3 text-center">
                               <div className="font-bold text-white">{m.recordCount}건 · <span className="text-[#EC4899]">{(m.monthlyGross || 0).toLocaleString()}원</span></div>
                               {(m.recoveredAmount || 0) > 0 && <div className="text-emerald-400 font-bold text-[10px] mt-1">앱 회수 {(m.recoveredAmount || 0).toLocaleString()}원 ({m.recoveredCount}건)</div>}
