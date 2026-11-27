@@ -14,7 +14,7 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-const APP_VERSION = '1.0.18';
+const APP_VERSION = '1.0.19';
 const ADMIN_DEFAULT_EMAIL = 'beat4989@naver.com';
 const ADMIN_DEFAULT_NAME = '김탁송';
 const ADMIN_DEFAULT_PHONE = '01091417586';
@@ -2159,12 +2159,12 @@ export default function App() {
                           <span className="font-bold text-[#38BDF8]">{m.joinType === 'referral' ? (m.referrer || '-') : (m.kakaoId || '-')}</span>
                         </div>
                         <div className="flex flex-col gap-2 pt-1">
-                          {isSuperAdmin && (
-                            <div className="grid grid-cols-3 gap-1.5">
-                              <button type="button" onClick={() => handleUpdateApprovalStatus(m.id, 'approved')} className={`py-2 rounded-lg text-[11px] font-bold cursor-pointer border transition-colors ${m.approvalStatus === 'approved' || !m.approvalStatus ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-white/5 text-slate-400 border-white/10 hover:text-emerald-400'}`}>✔ 승인완료</button>
-                              <button type="button" onClick={() => handleUpdateApprovalStatus(m.id, 'pending')} className={`py-2 rounded-lg text-[11px] font-bold cursor-pointer border transition-colors ${m.approvalStatus === 'pending' ? 'bg-amber-500 text-white border-amber-500' : 'bg-white/5 text-slate-400 border-white/10 hover:text-amber-400'}`}>⏳ 승인대기</button>
-                              <button type="button" onClick={() => handleUpdateApprovalStatus(m.id, 'rejected')} className={`py-2 rounded-lg text-[11px] font-bold cursor-pointer border transition-colors ${m.approvalStatus === 'rejected' ? 'bg-[#EC4899] text-white border-[#EC4899]' : 'bg-white/5 text-slate-400 border-white/10 hover:text-[#EC4899]'}`}>✕ 승인거절</button>
-                            </div>
+                         {isSuperAdmin && (
+                            <select value={m.approvalStatus || 'approved'} onChange={(e) => handleUpdateApprovalStatus(m.id, e.target.value as any)} className="w-full rounded px-3 py-2 text-xs cursor-pointer">
+                              <option value="approved">✔ 승인완료</option>
+                              <option value="pending">⏳ 승인대기</option>
+                              <option value="rejected">✕ 승인거절</option>
+                            </select>
                           )}
                           <select value={m.role} onChange={(e) => handleUpdateMemberRole(m.id, e.target.value)} className="w-full bg-[#0B1120] border border-white/20 text-white rounded px-3 py-2 text-xs cursor-pointer"><option value="user">일반 기사</option><option value="pro_driver">PRO 기사</option><option value="vip_driver">VIP 기사 (스카우트)</option><option value="manager">운영 직원</option><option value="super_admin">최고 관리자</option></select>
                           <div className="grid grid-cols-2 gap-2">
@@ -2205,13 +2205,7 @@ export default function App() {
                               <div className="text-white font-semibold mt-1">{m.joinType === 'referral' ? (m.referrer || '-') : (m.kakaoId || '-')}</div>
                             </td>
                             {isSuperAdmin && (
-                              <td className="p-3 text-center">
-                                <div className="inline-flex items-center gap-1">
-                                  <button type="button" onClick={() => handleUpdateApprovalStatus(m.id, 'approved')} className={`px-2 py-1 rounded text-[10px] font-bold cursor-pointer border transition-colors ${m.approvalStatus === 'approved' || !m.approvalStatus ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-white/5 text-slate-400 border-white/10 hover:text-emerald-400'}`}>승인</button>
-                                  <button type="button" onClick={() => handleUpdateApprovalStatus(m.id, 'pending')} className={`px-2 py-1 rounded text-[10px] font-bold cursor-pointer border transition-colors ${m.approvalStatus === 'pending' ? 'bg-amber-500 text-white border-amber-500' : 'bg-white/5 text-slate-400 border-white/10 hover:text-amber-400'}`}>대기</button>
-                                  <button type="button" onClick={() => handleUpdateApprovalStatus(m.id, 'rejected')} className={`px-2 py-1 rounded text-[10px] font-bold cursor-pointer border transition-colors ${m.approvalStatus === 'rejected' ? 'bg-[#EC4899] text-white border-[#EC4899]' : 'bg-white/5 text-slate-400 border-white/10 hover:text-[#EC4899]'}`}>거절</button>
-                                </div>
-                              </td>
+                              <td className="p-3 text-center"><select value={m.approvalStatus || 'approved'} onChange={(e) => handleUpdateApprovalStatus(m.id, e.target.value as any)} className="rounded px-2 py-1.5 text-[11px] cursor-pointer"><option value="approved">✔ 승인완료</option><option value="pending">⏳ 승인대기</option><option value="rejected">✕ 승인거절</option></select></td>
                             )}
                             <td className="p-3 text-center">
                               <div className="font-bold text-white">{m.recordCount}건 · <span className="text-[#EC4899]">{(m.monthlyGross || 0).toLocaleString()}원</span></div>
