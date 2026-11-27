@@ -14,7 +14,7 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-const APP_VERSION = '1.0.15';
+const APP_VERSION = '1.0.16';
 const ADMIN_DEFAULT_EMAIL = 'beat4989@naver.com';
 const ADMIN_DEFAULT_NAME = '김탁송';
 const ADMIN_DEFAULT_PHONE = '01091417586';
@@ -255,6 +255,7 @@ export default function App() {
   });
   
   const [analyticsMode, setAnalyticsMode] = useState<'month' | 'year'>('month');
+  const [analyticsMonth, setAnalyticsMonth] = useState<string>(() => getTodayKST().substring(0, 7));
   const [analyticsYear, setAnalyticsYear] = useState<string>(new Date().getFullYear().toString());
   const [tradeFilter, setTradeFilter] = useState<'전체' | 'S등급' | 'A등급' | '수도권' | '충청권' | '영남권' | '호남권'>('전체');
 
@@ -997,7 +998,7 @@ export default function App() {
   
   const openAdminUserDetail = (user: MemberProfile) => { setAdminSelectedUser(user); setAdminSelectedUserRecords(adminAllRecords.filter(r => r.userId === user.id).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10)); };
 
-  const currentMonthPrefix = customDate.substring(0, 7);
+  const currentMonthPrefix = analyticsMonth;
   const prevMonthPrefix = getPrevMonthPrefix(currentMonthPrefix);
   const unpaidRecords = records.filter((r) => !r.isGrossPaid || (!r.isExpensePaid && (r.fuelAmount > 0 || r.extraExpenseAmount > 0)));
   const totalUnpaidAmount = unpaidRecords.reduce((acc, r) => acc + (!r.isGrossPaid ? r.grossAmount : 0) + (!r.isExpensePaid ? (r.fuelAmount + r.extraExpenseAmount) : 0), 0);
@@ -1716,6 +1717,52 @@ export default function App() {
 
             {analyticsMode === 'month' && (
               <div className="space-y-4 fade-in-text">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 glass-card p-4 rounded-xl border border-[#8B5CF6]/30">
+                  <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                    <CalendarDays className="w-5 h-5 text-[#8B5CF6]" />
+                    <span>{Number(analyticsMonth.split('-')[0])}년 {Number(analyticsMonth.split('-')[1])}월 상세 통계</span>
+                    {analyticsMonth === getTodayKST().substring(0, 7) && (
+                      <span className="px-2 py-0.5 rounded-full bg-[#38BDF8]/20 text-[#38BDF8] text-[10px] font-extrabold">이번 달</span>
+                    )}
+                  </h2>
+                  <div className="flex items-center justify-between sm:justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setAnalyticsMonth(getPrevMonthPrefix(analyticsMonth))}
+                      className="p-2 bg-[#0B1120] hover:bg-white/10 border border-white/15 rounded-lg text-slate-300 cursor-pointer"
+                      title="이전 달"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <input
+                      type="month"
+                      value={analyticsMonth}
+                      onChange={(e) => { if (e.target.value) setAnalyticsMonth(e.target.value); }}
+                      className="px-3 py-2 rounded-lg text-xs font-bold cursor-pointer"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const [y, m] = analyticsMonth.split('-').map(Number);
+                        const d = new Date(y, m, 1);
+                        setAnalyticsMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+                      }}
+                      className="p-2 bg-[#0B1120] hover:bg-white/10 border border-white/15 rounded-lg text-slate-300 cursor-pointer"
+                      title="다음 달"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                    {analyticsMonth !== getTodayKST().substring(0, 7) && (
+                      <button
+                        type="button"
+                        onClick={() => setAnalyticsMonth(getTodayKST().substring(0, 7))}
+                        className="px-2.5 py-2 bg-[#8B5CF6]/20 hover:bg-[#8B5CF6]/40 text-[#C4B5FD] border border-[#8B5CF6]/40 rounded-lg text-[11px] font-bold cursor-pointer shrink-0"
+                      >
+                        이번 달
+                      </button>
+                    )}
+                  </div>
+                </div>
                 <div className="glass-card rounded-2xl p-5 md:p-6 shadow-xl border-2 border-[#8B5CF6]/40 relative overflow-hidden">
                   <div className="relative z-10">
                     <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-5 gap-3">
@@ -1738,7 +1785,7 @@ export default function App() {
                 </div>
                 <section className="bg-gradient-to-r from-[#0B1120] via-indigo-950/40 to-[#0B1120] border border-[#8B5CF6]/30 rounded-2xl p-5 sm:p-6 shadow-xl">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 mb-4 border-b border-white/10 gap-2">
-                    <div className="flex items-center gap-2"><CalendarDays className="w-4 h-4 text-[#8B5CF6]" /><h2 className="text-xs font-bold text-slate-200 tracking-wide uppercase">이달의 총 누적 결산</h2></div>
+                    <div className="flex items-center gap-2"><CalendarDays className="w-4 h-4 text-[#8B5CF6]" /><div className="flex items-center gap-2"><CalendarDays className="w-4 h-4 text-[#8B5CF6]" /><h2 className="text-xs font-bold text-slate-200 tracking-wide uppercase">{Number(analyticsMonth.split('-')[0])}년 {Number(analyticsMonth.split('-')[1])}월 총 누적 결산</h2></div></div>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div className="bg-white/[0.02] p-3 rounded-xl sm:bg-transparent sm:p-0"><div className="text-[11px] text-slate-400 mb-1">총 탁송 매출</div><div className="text-xl lg:text-2xl font-extrabold text-white">{monthlyGross.toLocaleString()}원</div></div>
