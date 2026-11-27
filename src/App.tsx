@@ -1153,7 +1153,7 @@ export default function App() {
   const injectStyles = () => (
     <style dangerouslySetInnerHTML={{ __html: `
       @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
-      * * { font-family: 'Pretendard', sans-serif !important; }
+      * { font-family: 'Pretendard', sans-serif !important; }
       body { background-color: #0B1120; color: white; min-height: 100vh; overflow-y: auto; overflow-x: hidden; }
       input, select, textarea { background-color: #FFFFFF !important; color: #000000 !important; font-weight: 600 !important; border: 1px solid transparent !important; transition: all 0.3s ease !important; }
       input::placeholder, textarea::placeholder { color: #94A3B8 !important; font-weight: 400 !important; }
@@ -2269,8 +2269,6 @@ export default function App() {
                     <thead className="bg-[#0B1120] text-slate-400 border-b border-white/10"><tr><th className="p-3">이름/연락처</th><th className="p-3 text-center">단톡방 닉네임 / 추천인</th>{isSuperAdmin && <th className="p-3 text-center">승인 상태</th>}<th className="p-3 text-center">가입일 / 접속현황</th><th className="p-3 text-center">당월 실적 / 앱 회수액</th><th className="p-3 text-center">권한 변경</th><th className="p-3 text-right">관리</th></tr></thead>
                     <tbody className="divide-y divide-white/5">
                       {displayedMembers.length === 0 ? <tr><td colSpan={isSuperAdmin ? 7 : 6} className="p-10 text-center text-slate-500">검색 조건에 맞는 기사님이 없습니다.</td></tr> : displayedMembers.map((m) => {
-                    <tbody className="divide-y divide-white/5">
-                      {displayedMembers.length === 0 ? <tr><td colSpan={isSuperAdmin ? 6 : 5} className="p-10 text-center text-slate-500">검색 조건에 맞는 기사님이 없습니다.</td></tr> : displayedMembers.map((m) => {
                         const isAce = (m.monthlyGross || 0) >= 1500000 || (m.recordCount || 0) >= 10;
                         const isPending = isSuperAdmin && m.approvalStatus === 'pending';
                         const isRejected = isSuperAdmin && m.approvalStatus === 'rejected';
