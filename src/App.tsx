@@ -14,7 +14,7 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-const APP_VERSION = '1.0.14';
+const APP_VERSION = '1.0.15';
 const ADMIN_DEFAULT_EMAIL = 'beat4989@naver.com';
 const ADMIN_DEFAULT_NAME = '김탁송';
 const ADMIN_DEFAULT_PHONE = '01091417586';
@@ -30,6 +30,8 @@ const PLATFORMS = [
 ];
 
 const EXPENSE_PLATFORMS = ['공통', ...PLATFORMS.map(p => p.name)];
+const OFF_DAY_PRESETS = ['정기 휴무', '차량 정비/검사', '병원/개인용무', '가족 행사', '우천/기상악화', '컨디션 휴식'];
+const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
 
 const getTodayKST = () => {
   const now = new Date();
@@ -289,6 +291,69 @@ export default function App() {
   const [selectedRecordIds, setSelectedRecordIds] = useState<string[]>([]);
   const [lastDeletedRecords, setLastDeletedRecords] = useState<DrivingRecord[]>([]);
   const [visibleClaimCount, setVisibleClaimCount] = useState<number>(30);
+  const [offDays, setOffDays] = useState<Record<string, string>>(() => {
+    try {
+      const saved = localStorage.getItem('jundriver_off_days_v1');
+      if (saved) { const parsed = JSON.parse(saved); if (parsed && typeof parsed === 'object') return parsed; }
+    } catch (e) {}
+    return {};
+  });
+  const [offDayModalDate, setOffDayModalDate] = useState<string | null>(null);
+  const [offDayReasonInput, setOffDayReasonInput] = useState<string>('정기 휴무');
+  const [bulkOffModalOpen, setBulkOffModalOpen] = useState<boolean>(false);
+  const [bulkSelectedDays, setBulkSelectedDays] = useState<number[]>([0]);
+  const [bulkOffReason, setBulkOffReason] = useState<string>('정기 휴무');
+
+  const saveOffDaysState = (nextOffDays: Record<string, string>) => {
+    setOffDays(nextOffDays);
+    localStorage.setItem('jundriver_off_days_v1', JSON.stringify(nextOffDays));
+    if (session?.user?.id) {
+      supabase.from('profiles').update({ off_days: nextOffDays }).eq('id', session.user.id);
+    }
+  };
+
+  const handleOpenOffDayModal = (dateStr: string) => {
+    setOffDayModalDate(dateStr);
+    setOffDayReasonInput(offDays[dateStr] || '정기 휴무');
+  };
+
+  const handleSaveSingleOffDay = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!offDayModalDate) return;
+    const next = { ...offDays, [offDayModalDate]: offDayReasonInput.trim() || '휴무' };
+    saveOffDaysState(next);
+    setOffDayModalDate(null);
+  };
+
+  const handleRemoveSingleOffDay = () => {
+    if (!offDayModalDate) return;
+    const next = { ...offDays };
+    delete next[offDayModalDate];
+    saveOffDaysState(next);
+    setOffDayModalDate(null);
+  };
+
+  const handleApplyBulkOffDays = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (bulkSelectedDays.length === 0) { alert('휴무로 지정할 요일을 1개 이상 선택해 주세요.'); return; }
+    const next = { ...offDays };
+    let addedCount = 0;
+    let skippedCount = 0;
+    const reasonText = bulkOffReason.trim() || '정기 휴무';
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const dayOfWeek = new Date(calYear, calMonth, d).getDay();
+      if (bulkSelectedDays.includes(dayOfWeek)) {
+        const hasRecord = records.some(r => r.date === dateStr);
+        if (hasRecord) { skippedCount++; continue; }
+        next[dateStr] = reasonText;
+        addedCount++;
+      }
+    }
+    saveOffDaysState(next);
+    setBulkOffModalOpen(false);
+    alert(`${calMonth + 1}월 휴무 ${addedCount}일이 지정되었습니다.${skippedCount > 0 ? `\n(운행 기록이 있는 ${skippedCount}일은 자동 제외)` : ''}`);
+  };
 
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
   const [accounts, setAccounts] = useState<BankAccount[]>(() => {
@@ -407,6 +472,9 @@ export default function App() {
       }
       if (Array.isArray(profile.monthly_fixed_items)) {
         setMonthlyFixedItems(profile.monthly_fixed_items);
+      }
+        if (profile.off_days && typeof profile.off_days === 'object' && !Array.isArray(profile.off_days)) {
+        setOffDays(profile.off_days);
       }
     }
     cloudSettingsLoadedRef.current = true;
@@ -1302,6 +1370,9 @@ export default function App() {
               <div className="flex flex-col gap-3 mb-4 border-b border-white/10 pb-4 shrink-0">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-bold text-white flex items-center gap-2"><Calendar className="w-4 h-4 text-[#8B5CF6]" />운행 캘린더 및 정산 관리</h3>
+                  <button onClick={() => setBulkOffModalOpen(true)} className="px-3 py-1.5 bg-[#8B5CF6]/20 hover:bg-[#8B5CF6]/40 text-[#C4B5FD] border border-[#8B5CF6]/40 rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors">
+                    🛌 요일 휴무 설정
+                  </button>
                 </div>
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white/5 p-3 rounded-xl border border-white/10">
                   <div className="flex items-center justify-center sm:justify-start gap-2">
@@ -1346,7 +1417,20 @@ export default function App() {
                           </span>
                           {isToday && <span className="text-[10px] font-bold text-[#38BDF8]">오늘</span>}
                         </div>
-                        <span className="text-[11px] text-slate-400 flex items-center gap-1">+ 배차등록</span>
+                        <div className="flex items-center gap-2">
+                          <button type="button" onClick={(e) => { e.stopPropagation(); handleOpenOffDayModal(dateStr); }} className={`px-2 py-0.5 rounded text-[10px] font-bold border cursor-pointer ${offDays[dateStr] ? 'bg-[#8B5CF6] text-white border-[#8B5CF6]' : 'bg-white/5 text-slate-300 border-white/15 hover:border-[#8B5CF6]'}`}>
+                            {offDays[dateStr] ? '🛌 휴무수정' : '휴무지정'}
+                          </button>
+                          <span className="text-[11px] text-slate-400">+ 배차</span>
+                        </div>
+                      </div>
+                      {offDays[dateStr] && (
+                        <div onClick={(e) => { e.stopPropagation(); handleOpenOffDayModal(dateStr); }} className="mb-2 px-3 py-1.5 rounded-lg bg-[#8B5CF6]/20 border border-[#8B5CF6]/40 text-[#C4B5FD] text-xs font-bold flex items-center justify-between">
+                          <span>🛌 휴무 · {offDays[dateStr]}</span>
+                          <span className="text-[10px] text-slate-400">터치해 수정</span>
+                        </div>
+                      )}
+                      <div className="hidden">
                       </div>
 
                       {dayRecords.length === 0 ? (
@@ -1412,7 +1496,17 @@ export default function App() {
                       <div key={dateStr}
                            onClick={() => { setNewDate(dateStr); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
                            className={`border-b border-r border-white/5 p-1.5 flex flex-col min-h-[90px] transition-colors hover:bg-white/10 cursor-pointer ${isToday ? 'bg-[#8B5CF6]/10' : ''}`}>
-                        <div className={`text-[10px] font-bold mb-1.5 ${isToday ? 'text-white bg-[#8B5CF6] w-5 h-5 rounded-full flex items-center justify-center' : 'text-slate-400 ml-1'}`}>{dateNum}</div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <div className={`text-[10px] font-bold ${isToday ? 'text-white bg-[#8B5CF6] w-5 h-5 rounded-full flex items-center justify-center' : 'text-slate-400 ml-1'}`}>{dateNum}</div>
+                          <button type="button" onClick={(e) => { e.stopPropagation(); handleOpenOffDayModal(dateStr); }} className={`px-1.5 py-0.5 rounded text-[9px] font-bold cursor-pointer ${offDays[dateStr] ? 'bg-[#8B5CF6] text-white' : 'text-slate-500 hover:text-slate-200 hover:bg-white/10'}`}>
+                            {offDays[dateStr] ? '휴무' : '+휴무'}
+                          </button>
+                        </div>
+                        {offDays[dateStr] && (
+                          <div onClick={(e) => { e.stopPropagation(); handleOpenOffDayModal(dateStr); }} className="mb-1 px-1.5 py-1 rounded bg-[#8B5CF6]/20 border border-[#8B5CF6]/40 text-[#C4B5FD] text-[9px] font-bold truncate cursor-pointer" title={offDays[dateStr]}>
+                            🛌 {offDays[dateStr]}
+                          </div>
+                        )}
                         <div className="flex flex-col gap-1 overflow-y-auto scrollbar-hide pr-0.5">
                           {dayRecords.map(r => {
                             const isChecked = selectedRecordIds.includes(r.id);
@@ -2087,7 +2181,85 @@ export default function App() {
           </div>
         </div>
       )}
+      {/* 개별 날짜 휴무 설정 팝업 */}
+      {offDayModalDate && (
+        <div className="fixed inset-0 z-[75] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setOffDayModalDate(null)}>
+          <div className="w-full max-w-sm glass-card rounded-2xl p-6 shadow-2xl relative" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-sm font-bold text-[#C4B5FD] flex items-center gap-1.5">🛌 휴무 지정 및 사유 입력</h3>
+              <button onClick={() => setOffDayModalDate(null)} className="text-slate-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="text-xs font-bold text-white bg-[#0B1120] px-3.5 py-2.5 rounded-xl border border-white/10 mb-4">
+              선택 일자: <span className="text-[#38BDF8]">{offDayModalDate} ({getDayOfWeekKor(offDayModalDate)}요일)</span>
+            </div>
+            <form onSubmit={handleSaveSingleOffDay} className="space-y-3.5">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1.5">추천 사유 원터치 선택</label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {OFF_DAY_PRESETS.map(preset => (
+                    <button key={preset} type="button" onClick={() => setOffDayReasonInput(preset)} className={`py-2 px-2 rounded-lg text-[11px] font-bold border cursor-pointer transition-all ${offDayReasonInput === preset ? 'bg-[#8B5CF6] text-white border-[#8B5CF6]' : 'bg-[#0B1120] text-slate-300 border-white/15 hover:border-white/30'}`}>
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1">휴무 사유 직접 입력</label>
+                <input type="text" value={offDayReasonInput} onChange={(e) => setOffDayReasonInput(e.target.value)} placeholder="예: 정기 휴무, 치과 진료 등" required className="w-full px-3 py-2.5 rounded-lg text-xs" />
+              </div>
+              <div className="flex gap-2 pt-2">
+                {offDays[offDayModalDate] && (
+                  <button type="button" onClick={handleRemoveSingleOffDay} className="px-3.5 py-3 bg-[#EC4899]/20 hover:bg-[#EC4899]/40 text-[#EC4899] font-bold rounded-lg text-xs cursor-pointer">휴무 해제</button>
+                )}
+                <button type="submit" className="flex-1 py-3 hp-primary-btn font-bold rounded-lg text-xs cursor-pointer">휴무 저장</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
+      {/* 요일별 일괄 휴무 설정 팝업 */}
+      {bulkOffModalOpen && (
+        <div className="fixed inset-0 z-[75] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setBulkOffModalOpen(false)}>
+          <div className="w-full max-w-sm glass-card rounded-2xl p-6 shadow-2xl relative" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-sm font-bold text-[#C4B5FD] flex items-center gap-1.5">🛌 {calYear}년 {calMonth + 1}월 요일 일괄 휴무</h3>
+              <button onClick={() => setBulkOffModalOpen(false)} className="text-slate-400 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
+            </div>
+            <p className="text-[11px] text-slate-400 mb-4 leading-relaxed">선택한 요일 전체를 이번 달 휴무로 일괄 등록합니다. (이미 배차 기록이 있는 날짜는 자동 제외)</p>
+            <form onSubmit={handleApplyBulkOffDays} className="space-y-4">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1.5">휴무 요일 선택 (복수 선택 가능)</label>
+                <div className="grid grid-cols-7 gap-1.5">
+                  {WEEKDAY_LABELS.map((label, idx) => {
+                    const selected = bulkSelectedDays.includes(idx);
+                    return (
+                      <button key={label} type="button" onClick={() => setBulkSelectedDays(prev => prev.includes(idx) ? prev.filter(d => d !== idx) : [...prev, idx])} className={`py-2.5 rounded-lg text-xs font-extrabold border cursor-pointer transition-all ${selected ? 'bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-[0_0_10px_rgba(139,92,246,0.4)]' : 'bg-[#0B1120] text-slate-400 border-white/15'}`}>
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1.5">추천 사유 선택</label>
+                <div className="grid grid-cols-2 gap-1.5 mb-2">
+                  {OFF_DAY_PRESETS.slice(0, 4).map(preset => (
+                    <button key={preset} type="button" onClick={() => setBulkOffReason(preset)} className={`py-1.5 px-2 rounded-lg text-[11px] font-bold border cursor-pointer ${bulkOffReason === preset ? 'bg-[#8B5CF6] text-white border-[#8B5CF6]' : 'bg-[#0B1120] text-slate-300 border-white/15'}`}>
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+                <input type="text" value={bulkOffReason} onChange={(e) => setBulkOffReason(e.target.value)} placeholder="일괄 적용할 휴무 사유" required className="w-full px-3 py-2.5 rounded-lg text-xs" />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button type="button" onClick={() => setBulkOffModalOpen(false)} className="flex-1 py-3 bg-white/10 hover:bg-white/20 text-white font-semibold rounded-lg text-xs cursor-pointer">취소</button>
+                <button type="submit" className="flex-1 py-3 hp-primary-btn font-bold rounded-lg text-xs cursor-pointer">이번 달 일괄 적용</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       {/* 빠른 정산 팝업 모달 */}
       {actionRecordId && currentActionRecord && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setActionRecordId(null)}>
