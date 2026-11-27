@@ -2160,19 +2160,11 @@ export default function App() {
                         </div>
                         <div className="flex flex-col gap-2 pt-1">
                           {isSuperAdmin && (
-                            isPending ? (
-                              <div className="grid grid-cols-2 gap-2">
-                                <button onClick={() => handleUpdateApprovalStatus(m.id, 'approved')} className="py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold cursor-pointer">✔ 승인하기</button>
-                                <button onClick={() => handleUpdateApprovalStatus(m.id, 'rejected')} className="py-2.5 bg-[#EC4899]/20 hover:bg-[#EC4899]/40 text-[#EC4899] border border-[#EC4899]/40 rounded-lg text-xs font-bold cursor-pointer">✕ 거절하기</button>
-                              </div>
-                            ) : isRejected ? (
-                              <button onClick={() => handleUpdateApprovalStatus(m.id, 'approved')} className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold cursor-pointer">✔ 재승인하기</button>
-                            ) : (
-                              <div className="grid grid-cols-2 gap-2">
-                                <button onClick={() => handleUpdateApprovalStatus(m.id, 'pending')} className="py-2 bg-white/5 hover:bg-white/10 text-slate-300 rounded-lg text-[11px] font-semibold cursor-pointer">대기 전환</button>
-                                <button onClick={() => handleUpdateApprovalStatus(m.id, 'rejected')} className="py-2 bg-white/5 hover:bg-[#EC4899]/20 text-slate-400 hover:text-[#EC4899] rounded-lg text-[11px] font-semibold cursor-pointer">승인 거절</button>
-                              </div>
-                            )
+                            <div className="grid grid-cols-3 gap-1.5">
+                              <button type="button" onClick={() => handleUpdateApprovalStatus(m.id, 'approved')} className={`py-2 rounded-lg text-[11px] font-bold cursor-pointer border transition-colors ${m.approvalStatus === 'approved' || !m.approvalStatus ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-white/5 text-slate-400 border-white/10 hover:text-emerald-400'}`}>✔ 승인완료</button>
+                              <button type="button" onClick={() => handleUpdateApprovalStatus(m.id, 'pending')} className={`py-2 rounded-lg text-[11px] font-bold cursor-pointer border transition-colors ${m.approvalStatus === 'pending' ? 'bg-amber-500 text-white border-amber-500' : 'bg-white/5 text-slate-400 border-white/10 hover:text-amber-400'}`}>⏳ 승인대기</button>
+                              <button type="button" onClick={() => handleUpdateApprovalStatus(m.id, 'rejected')} className={`py-2 rounded-lg text-[11px] font-bold cursor-pointer border transition-colors ${m.approvalStatus === 'rejected' ? 'bg-[#EC4899] text-white border-[#EC4899]' : 'bg-white/5 text-slate-400 border-white/10 hover:text-[#EC4899]'}`}>✕ 승인거절</button>
+                            </div>
                           )}
                           <select value={m.role} onChange={(e) => handleUpdateMemberRole(m.id, e.target.value)} className="w-full bg-[#0B1120] border border-white/20 text-white rounded px-3 py-2 text-xs cursor-pointer"><option value="user">일반 기사</option><option value="pro_driver">PRO 기사</option><option value="vip_driver">VIP 기사 (스카우트)</option><option value="manager">운영 직원</option><option value="super_admin">최고 관리자</option></select>
                           <div className="grid grid-cols-2 gap-2">
@@ -2214,22 +2206,11 @@ export default function App() {
                             </td>
                             {isSuperAdmin && (
                               <td className="p-3 text-center">
-                                {isPending ? (
-                                  <div className="flex items-center justify-center gap-1">
-                                    <button onClick={() => handleUpdateApprovalStatus(m.id, 'approved')} className="px-2.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded text-[11px] font-bold cursor-pointer">승인</button>
-                                    <button onClick={() => handleUpdateApprovalStatus(m.id, 'rejected')} className="px-2.5 py-1.5 bg-[#EC4899]/20 hover:bg-[#EC4899]/40 text-[#EC4899] border border-[#EC4899]/40 rounded text-[11px] font-bold cursor-pointer">거절</button>
-                                  </div>
-                                ) : isRejected ? (
-                                  <div className="flex items-center justify-center gap-1">
-                                    <span className="px-2 py-1 bg-slate-700 text-slate-300 rounded text-[10px] font-bold">승인거절</span>
-                                    <button onClick={() => handleUpdateApprovalStatus(m.id, 'approved')} className="px-2 py-1 bg-emerald-500/20 hover:bg-emerald-500 text-emerald-400 hover:text-white rounded text-[10px] font-bold cursor-pointer">재승인</button>
-                                  </div>
-                                ) : (
-                                  <div className="flex items-center justify-center gap-1">
-                                    <button onClick={() => handleUpdateApprovalStatus(m.id, 'pending')} className="px-2 py-1 bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-white/10 hover:text-slate-300 rounded text-[10px] font-bold cursor-pointer">승인완료</button>
-                                    <button onClick={() => handleUpdateApprovalStatus(m.id, 'rejected')} className="px-2 py-1 bg-white/5 hover:bg-[#EC4899]/20 text-slate-400 hover:text-[#EC4899] rounded text-[10px] font-bold cursor-pointer">거절</button>
-                                  </div>
-                                )}
+                                <div className="inline-flex items-center gap-1">
+                                  <button type="button" onClick={() => handleUpdateApprovalStatus(m.id, 'approved')} className={`px-2 py-1 rounded text-[10px] font-bold cursor-pointer border transition-colors ${m.approvalStatus === 'approved' || !m.approvalStatus ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-white/5 text-slate-400 border-white/10 hover:text-emerald-400'}`}>승인</button>
+                                  <button type="button" onClick={() => handleUpdateApprovalStatus(m.id, 'pending')} className={`px-2 py-1 rounded text-[10px] font-bold cursor-pointer border transition-colors ${m.approvalStatus === 'pending' ? 'bg-amber-500 text-white border-amber-500' : 'bg-white/5 text-slate-400 border-white/10 hover:text-amber-400'}`}>대기</button>
+                                  <button type="button" onClick={() => handleUpdateApprovalStatus(m.id, 'rejected')} className={`px-2 py-1 rounded text-[10px] font-bold cursor-pointer border transition-colors ${m.approvalStatus === 'rejected' ? 'bg-[#EC4899] text-white border-[#EC4899]' : 'bg-white/5 text-slate-400 border-white/10 hover:text-[#EC4899]'}`}>거절</button>
+                                </div>
                               </td>
                             )}
                             <td className="p-3 text-center">
